@@ -509,24 +509,48 @@ Client → recall(question, nodeId)
 
 将当前的 `KnowledgeGraph` 上帝类拆为三个正交子系统：
 
+系统最终由**两个独立项目**组成：后端（纯知识 API）和前端（Dashboard）。
+
 ```
 ┌─────────────────────────────────────────────────────┐
-│              Project DNA Server (MCP)                │
+│         DNA Server（后端，纯知识服务）                 │
+│         不访问项目文件系统，可部署在任何地方            │
 │                                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
 │  │ GraphEngine  │  │ MemoryEngine │  │ Governance │  │
 │  │              │  │              │  │   Engine   │  │
 │  │  节点 CRUD   │  │  记忆读写     │  │  治理分析  │  │
-│  │  边 CRUD     │←─│  语义检索     │  │  鲜活度    │  │
+│  │  边 CRUD     │  │  语义检索     │  │  鲜活度    │  │
 │  │  拓扑计算    │  │  向量索引     │  │  冲突检测  │  │
 │  │  执行计划    │  │  导入导出     │  │  偏差检测  │  │
 │  └──────┬───────┘  └──────┬───────┘  └─────┬─────┘  │
 │         └─────────────────┴────────────────┘        │
 │                    StorageLayer                       │
 │         SQLite + JSON + Manifest 文件                 │
-│         {projectRoot}/.agentic-os/                   │
+│              ~/.dna/projects/{name}/                  │
+│                                                     │
+│  对外接口: MCP (stdio/SSE) + REST API                 │
 └─────────────────────────────────────────────────────┘
+        ▲ REST / MCP            ▲ REST
+        │                       │
+┌───────┴────────┐    ┌────────┴──────────────────────┐
+│  Agent Client  │    │   Dashboard（前端，独立项目）    │
+│  (Cursor/Codex)│    │                               │
+│                │    │  ┌─────────────────────────┐   │
+│  读写项目文件   │    │  │ 知识库可视化              │   │
+│  通过 MCP 读写  │    │  │  拓扑图 / 记忆列表 / 治理 │   │
+│  DNA 知识      │    │  └─────────────────────────┘   │
+└────────────────┘    │  ┌─────────────────────────┐   │
+                      │  │ 项目管理（可选）          │   │
+                      │  │  指定项目工程路径         │   │
+                      │  │  文件树浏览              │   │
+                      │  │  扫描项目 → 写入 DNA      │   │
+                      │  └─────────────────────────┘   │
+                      └────────────────────────────────┘
 ```
+
+**核心原则**：DNA Server 是纯知识服务，不访问项目文件系统。所有知识通过 API 写入。
+Dashboard 是可选的管理前端，可以连接本地项目工程辅助扫描建图。
 
 ### 6.1 GraphEngine
 
@@ -615,35 +639,47 @@ Client → recall(question, nodeId)
 
 ---
 
-## 九、Client 接入模型
+## 九、两个项目的职责划分
 
-工程 DNA 服务器对外提供统一的 MCP 协议，任何支持 MCP 的 Client 都可接入。
+### 9.1 DNA Server（后端）
 
-```
-┌───────────────────────────────────────────────────────────┐
-│                  Project DNA Server                         │
-│            MCP (stdio / SSE / HTTP)                        │
-└──────────┬──────────────┬──────────────┬─────────────────┘
-           │              │              │
-     ┌─────▼─────┐ ┌─────▼─────┐ ┌─────▼──────────────┐
-     │ Cursor IDE │ │ Codex CLI │ │ Agent Client       │
-     │            │ │           │ │ (任务编排 + Agent)  │
-     └────────────┘ └───────────┘ └────────────────────┘
-```
+纯知识服务，不访问项目文件系统。可部署在本地、内网服务器或云端。
 
-### 8.1 IDE Client（Cursor / Codex / Claude Code）
+**对外接口**：
+- MCP（stdio / SSE）— 供 Agent Client（Cursor / Codex / Claude Code）接入
+- REST API — 供 Dashboard 和其他工具调用
 
-- 通过 `AGENTS.md` 或 Rules 约束模型行为
+**职责边界**：
+- 知识 CRUD（节点、边、记忆、CrossWork）
+- 拓扑计算与查询
+- 治理分析（环路检测、鲜活度、冲突检测）
+- 知识存储管理（`~/.dna/projects/{name}/`）
+
+**不做的事**：
+- 不读写项目工程文件
+- 不扫描源码
+- 不推导代码依赖
+
+### 9.2 Dashboard（前端，独立项目）
+
+Web 前端 + 轻量 API，连接 DNA Server 展示和管理知识。
+
+**职责**：
+- 知识库可视化（拓扑图、记忆列表、治理报告）
+- 知识编辑（通过 DNA Server REST API）
+- 项目管理（可选，需指定本地项目路径）：
+  - 文件树浏览
+  - 项目扫描 → 生成节点和依赖 → 写入 DNA Server
+  - Scanner 插件运行环境
+
+### 9.3 Agent Client（IDE 内的 AI Agent）
+
+通过 MCP 协议连接 DNA Server。
+
 - 对话开始 → `get_project_identity` → `begin_task`
 - 修改代码前 → 从节点 Knowledge 获取约束
 - 完成后 → `remember` 写回知识
-
-### 8.2 Agent Client（独立进程，含任务编排）
-
-- 引用 `AgenticOs.Dna.Client` 通过 MCP 调用工程 DNA 服务器
-- 内含 `Orchestration` + `AgentRuntime`
-- 可以自主执行多步任务，每步从 DNA 服务器获取上下文
-- 任务完成后批量写回知识
+- Agent 直接读写项目文件（工作区），通过 MCP 读写知识（DNA Server）
 
 ---
 
@@ -670,14 +706,22 @@ Client → recall(question, nodeId)
 4. 记忆写入后自动刷新节点 Knowledge
 5. `begin_task` / `get_module_context` 简化为直接读节点
 
-### Phase 3：提取 Abstractions + 拆进程
+### Phase 3：Server 纯化（去除文件系统依赖）
 
-1. 抽出 `AgenticOs.Dna.Abstractions`（纯接口 + DTO）
-2. 新建 `AgenticOs.Dna.Server` 独立入口（工程 DNA 服务器）
-3. 新建 `AgenticOs.Dna.Client`（MCP 客户端）
-4. 新建 `AgenticOs.Agent.Client` 入口（编排 + Agent）
+1. `ProjectRoot` 在 Server 侧退化为标识符，不用于读文件
+2. `IProjectAdapter`、`ProjectScanner`、`ProjectTreeCache` 移到 Dashboard 项目
+3. `FileTreeEndpoints` 移到 Dashboard
+4. `FreshnessChecker` 简化为纯时效检查（不检查文件变更）
+5. Server 可在无项目路径的情况下完整工作
 
-### Phase 4：增量拓扑 + 性能优化
+### Phase 4：Dashboard 独立项目
+
+1. 新建 Dashboard 前端项目（独立仓库或 monorepo 子目录）
+2. 知识库可视化（拓扑图、记忆列表、治理报告）
+3. 项目管理功能（文件树浏览、项目扫描）
+4. Scanner 插件运行环境
+
+### Phase 5：增量拓扑 + 性能优化
 
 1. 节点变更触发增量拓扑更新
 2. 脏检查 + 延迟重算
