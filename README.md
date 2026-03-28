@@ -190,4 +190,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on creating templates, sca
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)

@@ -1,7 +1,7 @@
 # 工程 DNA 生态扩展设计
 
 > **状态**：设计稿 v1.0 — 2026-03-28
-> **作者**：李南
+> **作者**：nave
 > **前置**：阅读 [project-dna-design.md](./project-dna-design.md) 了解核心模型
 
 ---

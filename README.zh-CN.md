@@ -121,4 +121,4 @@ dotnet run --project Server -- --stdio --project /path/to/your/project
 
 ## 许可证
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)
