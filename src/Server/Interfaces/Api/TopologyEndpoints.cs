@@ -21,10 +21,6 @@ public static class TopologyEndpoints
 
         api.MapGet("/topology", (IGraphEngine graph, ProjectConfig config) =>
         {
-            if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-                return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
-
-            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             var topo = graph.BuildTopology();
 
             return Results.Json(new
@@ -64,14 +60,8 @@ public static class TopologyEndpoints
 
         api.MapGet("/plan", (
             [FromQuery] string modules,
-            ProjectConfig config,
             IGraphEngine graph) =>
         {
-            var root = config.DefaultProjectRoot;
-            if (string.IsNullOrEmpty(root))
-                return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
-
-            graph.Initialize(root, config.ResolveStore(null, root));
             graph.BuildTopology();
             var names = modules
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -86,12 +76,8 @@ public static class TopologyEndpoints
             }, JsonOpts);
         });
 
-        api.MapPost("/reload", (IGraphEngine graph, ProjectConfig config) =>
+        api.MapPost("/reload", (IGraphEngine graph) =>
         {
-            if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-                return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
-
-            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             graph.ReloadManifests();
             var topo = graph.BuildTopology();
             return Results.Json(new

@@ -26,9 +26,7 @@ internal partial class MemoryStore : IDisposable
 
     private readonly ILogger<MemoryStore> _logger;
     private SqliteConnection? _db;
-    private string _projectRoot = string.Empty;
     private string _storePath = string.Empty;
-    public string ProjectRoot => _projectRoot;
     public string StorePath => _storePath;
     private string _memoryDir = string.Empty;
 
@@ -51,11 +49,10 @@ internal partial class MemoryStore : IDisposable
         _logger.LogInformation("MemoryStore 已重载配置");
     }
 
-    public void Initialize(string projectRoot, string storePath)
+    public void Initialize(string storePath)
     {
-        if (_initialized && _projectRoot == projectRoot && _storePath == storePath) return;
+        if (_initialized && _storePath == storePath) return;
 
-        _projectRoot = projectRoot;
         _storePath = storePath;
         _memoryDir = Path.Combine(storePath, "memory");
         Directory.CreateDirectory(_memoryDir);

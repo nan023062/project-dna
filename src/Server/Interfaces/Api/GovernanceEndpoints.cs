@@ -21,11 +21,8 @@ public static class GovernanceEndpoints
 
         api.MapGet("/validate", (
             IGraphEngine graph,
-            IGovernanceEngine governance,
-            ProjectConfig config) =>
+            IGovernanceEngine governance) =>
         {
-            var root = config.Resolve(null);
-            graph.Initialize(root, config.ResolveStore(null, root));
             graph.BuildTopology();
 
             var report = governance.ValidateArchitecture();
@@ -65,12 +62,8 @@ public static class GovernanceEndpoints
         });
 
         api.MapGet("/freshness", (
-            IGovernanceEngine governance,
-            IGraphEngine graph,
-            ProjectConfig config) =>
+            IGovernanceEngine governance) =>
         {
-            var root = config.Resolve(null);
-            graph.Initialize(root, config.ResolveStore(null, root));
 
             var decayed = governance.CheckFreshness();
             return Results.Json(new

@@ -29,6 +29,15 @@ DnaApp.Create(args, new AppOptions
             ("Dashboard:   ", $"http://{host}:{port}"),
             ("知识存储:    ", dataPath)
         };
+    },
+    OnStarted = async sp =>
+    {
+        var graph = sp.GetRequiredService<IGraphEngine>();
+        var memory = sp.GetRequiredService<IMemoryEngine>();
+        graph.Initialize(dataPath);
+        memory.Initialize(dataPath);
+        try { graph.BuildTopology(); } catch { /* empty store is fine */ }
+        await Task.CompletedTask;
     }
 });
 
@@ -40,8 +49,6 @@ DnaApp.AddCliCommand(new DefaultCliCommand());
 DnaApp.ConfigureServices(services =>
 {
     services.AddSingleton<ProjectConfig>();
-    services.AddSingleton<GameProjectAdapter>();
-    services.AddSingleton<IProjectAdapter>(sp => sp.GetRequiredService<GameProjectAdapter>());
     services.AddKnowledgeGraph();
 
     var jwtService = new JwtService();
@@ -57,7 +64,7 @@ DnaApp.ConfigureServices(services =>
         .AddJwtBearer(opts => opts.TokenValidationParameters = jwtService.GetValidationParameters());
     services.AddAuthorization();
 
-    var personaName = ResolvePersonaName(services);
+    var personaName = ResolvePersonaName(dataPath);
     if (DnaApp.Mode == AppRunMode.Stdio)
     {
         services.AddMcpServer(opts =>
@@ -119,28 +126,22 @@ static string ResolveDataPath(string[] args)
     return "";
 }
 
-static string ResolvePersonaName(IServiceCollection services)
+static string ResolvePersonaName(string storePath)
 {
     try
     {
-        using var sp = services.BuildServiceProvider();
-        var config = sp.GetService<ProjectConfig>();
-        if (config is { HasProject: true })
+        var archPath = Path.Combine(storePath, "architecture.json");
+        if (File.Exists(archPath))
         {
-            var storePath = config.ResolveStore(null, config.DefaultProjectRoot);
-            var archPath = Path.Combine(storePath, "architecture.json");
-            if (File.Exists(archPath))
+            var json = File.ReadAllText(archPath);
+            var opts = new System.Text.Json.JsonSerializerOptions
             {
-                var json = File.ReadAllText(archPath);
-                var opts = new System.Text.Json.JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-                };
-                var arch = System.Text.Json.JsonSerializer.Deserialize<Dna.Knowledge.Project.Models.ArchitectureManifest>(json, opts);
-                if (!string.IsNullOrWhiteSpace(arch?.Persona?.Name))
-                    return arch.Persona.Name;
-            }
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            };
+            var arch = System.Text.Json.JsonSerializer.Deserialize<Dna.Knowledge.Project.Models.ArchitectureManifest>(json, opts);
+            if (!string.IsNullOrWhiteSpace(arch?.Persona?.Name))
+                return arch.Persona.Name;
         }
     }
     catch { /* best effort */ }

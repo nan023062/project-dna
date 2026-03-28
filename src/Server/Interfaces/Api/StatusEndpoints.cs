@@ -7,25 +7,14 @@ public static class StatusEndpoints
 {
     public static void MapStatusEndpoints(this IEndpointRouteBuilder app, DateTime startedAt)
     {
-        app.MapGet("/api/status", (ProjectConfig config, IGraphEngine graph) =>
+        app.MapGet("/api/status", (IGraphEngine graph) =>
         {
-            var root = config.DefaultProjectRoot;
-            var hasProject = !string.IsNullOrEmpty(root);
             int moduleCount = 0;
-            if (hasProject)
-            {
-                try
-                {
-                    graph.Initialize(root!, config.ResolveStore(null, root!));
-                    moduleCount = graph.BuildTopology().Nodes.Count;
-                }
-                catch { /* ignore */ }
-            }
+            try { moduleCount = graph.GetTopology().Nodes.Count; }
+            catch { /* ignore */ }
 
             return Results.Json(new
             {
-                projectRoot = root,
-                configured = hasProject,
                 moduleCount,
                 startedAt,
                 uptime = (DateTime.UtcNow - startedAt).ToString(@"d\.hh\:mm\:ss")

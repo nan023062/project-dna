@@ -20,17 +20,14 @@ public static class GraphEndpoints
     {
         var api = app.MapGroup("/api/graph");
 
-        api.MapGet("/identity", (ProjectConfig config) =>
+        api.MapGet("/identity", (IGraphEngine graph) =>
         {
-            if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-                return Results.Json(new { error = "未配置目标项目" }, statusCode: 400);
-
-            var root = config.DefaultProjectRoot;
+            var topo = graph.GetTopology();
             return Results.Json(new
             {
-                projectName = Path.GetFileName(root),
-                projectRoot = root,
-                storePath = config.ResolveStore(null, root)
+                moduleCount = topo.Nodes.Count,
+                edgeCount = topo.Edges.Count,
+                crossWorkCount = topo.CrossWorks.Count
             }, JsonOpts);
         });
 
@@ -183,8 +180,6 @@ public static class GraphEndpoints
 
     private static void EnsureGraph(IGraphEngine graph, ProjectConfig config)
     {
-        var root = config.Resolve(null);
-        graph.Initialize(root, config.ResolveStore(null, root));
     }
 
     private static double ScoreModule(KnowledgeNode module, string q)

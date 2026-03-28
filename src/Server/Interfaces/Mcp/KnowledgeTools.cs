@@ -636,9 +636,7 @@ public class KnowledgeTools(
 
     private void EnsureKnowledge(string? projectRoot)
     {
-        var root = config.Resolve(projectRoot);
-        var store = config.ResolveStore(null, root);
-        graph.Initialize(root, store);
+        // 引擎在 Server 启动时已通过 OnStarted 初始化，此处为空操作
     }
 
     private static List<string> SplitCsv(string csv) =>

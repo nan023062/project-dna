@@ -176,7 +176,5 @@ public static class MemoryEndpoints
 
     private static void EnsureReady(IMemoryEngine memory, ProjectConfig config)
     {
-        if (config.HasProject && !string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-            memory.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
     }
 }

@@ -32,9 +32,5 @@ public interface IGraphEngine
     void ReplaceModulesManifest(ModulesManifest manifest);
     void ReloadManifests();
 
-    List<ProjectFileNode> ScanProjectRoots(string projectRoot);
-    List<ProjectFileNode> ScanDirectory(string projectRoot, string relativePath);
-    void InvalidateTreeCache();
-
-    void Initialize(string projectRoot, string storePath);
+    void Initialize(string storePath);
 }

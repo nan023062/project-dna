@@ -168,36 +168,10 @@ public sealed class GraphEngine : IGraphEngine, IDnaService, IDisposable
     public void ReloadManifests() => _store.Reload();
 
     // ═══════════════════════════════════════════
-    //  工程目录扫描
-    // ═══════════════════════════════════════════
-
-    public List<ProjectFileNode> ScanProjectRoots(string projectRoot)
-    {
-        var arch = _store.GetArchitecture();
-        var manifest = _store.GetModulesManifest();
-        _treeCache.Initialize(projectRoot, arch);
-
-        return _treeCache.GetRoots((root, relPath) =>
-            ProjectScanner.ScanDirectory(root, relPath, arch, manifest));
-    }
-
-    public List<ProjectFileNode> ScanDirectory(string projectRoot, string relativePath)
-    {
-        var arch = _store.GetArchitecture();
-        var manifest = _store.GetModulesManifest();
-        _treeCache.Initialize(projectRoot, arch);
-
-        return _treeCache.GetChildren(relativePath, (root, relPath) =>
-            ProjectScanner.ScanDirectory(root, relPath, arch, manifest));
-    }
-
-    public void InvalidateTreeCache() => _treeCache.InvalidateAll();
-
-    // ═══════════════════════════════════════════
     //  初始化
     // ═══════════════════════════════════════════
 
-    public void Initialize(string projectRoot, string storePath) => _store.Initialize(projectRoot, storePath);
+    public void Initialize(string storePath) => _store.Initialize(storePath);
 
     // ═══════════════════════════════════════════
     //  治理（仅对外暴露 — GovernanceEngine 也调用同一静态方法）
