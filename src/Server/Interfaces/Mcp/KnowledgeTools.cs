@@ -266,6 +266,51 @@ public class KnowledgeTools(
         return sb.ToString();
     }
 
+    [McpServerTool, Description(
+        "按模块压缩短期记忆并提炼为模块长期知识。" +
+        "输入模块名或节点 ID，系统会聚合该模块近期记忆，生成新的 #identity 记忆摘要，" +
+        "并将已提炼的 Episodic/Working 记忆归档，降低噪声和检索成本。")]
+    public async Task<string> condense_module_knowledge(
+        [Description("模块名或节点 ID")] string nodeIdOrName,
+        [Description("最多参与提炼的源记忆数（默认 200）")] int maxSourceMemories = 200)
+    {
+        logger.LogInformation(LogEvents.Mcp, "condense_module_knowledge() node={Node}", nodeIdOrName);
+        graph.BuildTopology();
+
+        var result = await governance.CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories);
+        return $"✓ 模块知识压缩完成\n" +
+               $"- 节点: {result.NodeName ?? result.NodeId}\n" +
+               $"- 源记忆: {result.SourceCount}\n" +
+               $"- 归档: {result.ArchivedCount}\n" +
+               $"- 新摘要ID: {result.NewIdentityMemoryId ?? "无"}\n" +
+               $"- 摘要: {result.Summary ?? "无"}";
+    }
+
+    [McpServerTool, Description(
+        "批量压缩全部模块知识。会遍历所有 Module/CrossWork 节点，执行记忆提炼和归档。" +
+        "适用于定期知识维护任务。")]
+    public async Task<string> condense_all_module_knowledge(
+        [Description("每个模块最多参与提炼的源记忆数（默认 200）")] int maxSourceMemories = 200)
+    {
+        logger.LogInformation(LogEvents.Mcp, "condense_all_module_knowledge()");
+        graph.BuildTopology();
+
+        var results = await governance.CondenseAllNodesAsync(maxSourceMemories);
+        var condensed = results.Count(r => !string.IsNullOrWhiteSpace(r.NewIdentityMemoryId));
+        var archived = results.Sum(r => r.ArchivedCount);
+
+        var sb = new StringBuilder();
+        sb.AppendLine("✓ 全量模块知识压缩完成");
+        sb.AppendLine($"- 节点总数: {results.Count}");
+        sb.AppendLine($"- 产生摘要: {condensed}");
+        sb.AppendLine($"- 归档记忆: {archived}");
+        sb.AppendLine();
+        foreach (var r in results.Where(x => !string.IsNullOrWhiteSpace(x.NewIdentityMemoryId)).Take(20))
+            sb.AppendLine($"- {r.NodeName ?? r.NodeId}: source={r.SourceCount}, archived={r.ArchivedCount}, identity={r.NewIdentityMemoryId}");
+        if (condensed > 20) sb.AppendLine($"... 其余 {condensed - 20} 个节点已省略");
+        return sb.ToString();
+    }
+
     // ═══════════════════════════════════════════
     //  CrossWork
     // ═══════════════════════════════════════════
@@ -287,7 +332,7 @@ public class KnowledgeTools(
 
         if (crossWorks.Count == 0)
             return string.IsNullOrWhiteSpace(moduleName)
-                ? "当前项目没有 CrossWork 声明。请在 modules.json 的 crossWorks 节点中维护。"
+                ? "当前项目没有 CrossWork 声明。请通过 register_crosswork 维护。"
                 : $"模块 '{moduleName}' 不参与任何 CrossWork。";
 
         var sb = new StringBuilder();
@@ -426,9 +471,8 @@ public class KnowledgeTools(
         if (string.IsNullOrWhiteSpace(path))
             return "错误：路径不能为空";
 
-        var arch = graph.GetArchitecture();
-        if (!arch.Disciplines.ContainsKey(discipline.Trim()))
-            return $"错误：未知部门 '{discipline}'。请先用 register_discipline 创建，或用 list_disciplines 查看已有部门。";
+        var normalizedDiscipline = discipline.Trim().ToLowerInvariant();
+        graph.UpsertDiscipline(normalizedDiscipline, normalizedDiscipline, "coder", []);
 
         Dictionary<string, string>? metaDict = null;
         if (!string.IsNullOrWhiteSpace(metadata))
@@ -453,11 +497,11 @@ public class KnowledgeTools(
 
         try
         {
-            graph.RegisterModule(discipline.Trim(), module);
+            graph.RegisterModule(normalizedDiscipline, module);
             graph.BuildTopology();
 
             var sb = new StringBuilder();
-            sb.AppendLine($"✓ 模块 '{name}' 已注册到 {discipline}");
+            sb.AppendLine($"✓ 模块 '{name}' 已注册到 {normalizedDiscipline}");
             sb.AppendLine($"路径: {path}");
             if (!string.IsNullOrWhiteSpace(summary)) sb.AppendLine($"职责: {summary}");
             if (!string.IsNullOrWhiteSpace(boundary)) sb.AppendLine($"边界: {boundary}");

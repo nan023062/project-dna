@@ -46,7 +46,6 @@ public static class ModuleManagementEndpoints
             if (string.IsNullOrWhiteSpace(request.Module.Name) || string.IsNullOrWhiteSpace(request.Module.Path))
                 return Results.BadRequest(new { error = "module.name 与 module.path 不能为空" });
 
-            var arch = graph.GetArchitecture();
             var discipline = request.Discipline.Trim();
             var isCrossWork = request.Module.IsCrossWorkModule;
 
@@ -59,18 +58,8 @@ public static class ModuleManagementEndpoints
             }
             else
             {
-                if (!arch.Disciplines.TryGetValue(discipline, out var archDef))
-                    return Results.BadRequest(new { error = $"未知 discipline: {discipline}" });
-
-                var validLevels = archDef.Layers.Select(l => l.Level).ToHashSet();
-                if (!validLevels.Contains(request.Module.Layer))
-                {
-                    var allowed = string.Join(", ", validLevels.OrderBy(v => v));
-                    return Results.BadRequest(new
-                    {
-                        error = $"layer={request.Module.Layer} 不属于 discipline '{discipline}'，允许层级: [{allowed}]"
-                    });
-                }
+                // DB-first 设计下 discipline 可按需创建，不再依赖静态 architecture 配置。
+                graph.UpsertDiscipline(discipline, discipline, "coder", []);
             }
 
             try

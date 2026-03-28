@@ -25,7 +25,7 @@ Open an issue with:
 
 cd src
 dotnet build
-dotnet run --project Server -- --project /path/to/your/project
+dotnet run --project Server -- --db /path/to/knowledge-store
 ```
 
 ## License

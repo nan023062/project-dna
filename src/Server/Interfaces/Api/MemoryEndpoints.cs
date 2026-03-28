@@ -143,21 +143,38 @@ public static class MemoryEndpoints
         {
             EnsureReady(memory, config);
             var (imported, skipped) = memory.RebuildIndex(rewriteJson ?? false);
-            return Results.Ok(new { message = $"全量重建完成：导入 {imported} 条，跳过 {skipped} 条", imported, skipped, rewriteJson = rewriteJson ?? false });
+            return Results.Ok(new
+            {
+                message = $"搜索索引重建完成：更新 {imported} 条，异常 {skipped} 条",
+                indexed = imported,
+                skipped,
+                rewriteJson = rewriteJson ?? false
+            });
         });
 
         group.MapPost("/index/sync", (IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var (added, removed, skipped) = memory.SyncFromJson();
-            return Results.Ok(new { message = $"增量同步完成：新增 {added} 条，移除孤儿 {removed} 条，跳过 {skipped} 条", added, removed, skipped });
+            return Results.Ok(new
+            {
+                message = $"兼容接口执行完成：已重建搜索索引 {added} 条",
+                indexed = added,
+                removed,
+                skipped
+            });
         });
 
         group.MapPost("/index/export", (IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var (exported, skipped) = memory.ExportToJson();
-            return Results.Ok(new { message = $"导出完成：{exported} 条记忆已写入 JSON，跳过 {skipped} 条", exported, skipped });
+            return Results.Ok(new
+            {
+                message = "当前为纯 DB 存储，不再导出记忆 JSON。",
+                exported,
+                skipped
+            });
         });
     }
 

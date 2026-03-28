@@ -10,7 +10,7 @@ import { $ } from './utils.js';
 import { ui } from './ui/ui-manager.js';
 import { initSetup, showSetup, setProject, openProjectBrowser } from './setup.js';
 import { renderTopology } from './panels/topology.js';
-import { loadGovernanceStats, checkFreshness, detectConflicts, archiveStale } from './panels/governance.js';
+import { loadGovernanceStats, checkFreshness, detectConflicts, archiveStale, condenseNodeKnowledge, condenseAllKnowledge, configureCondenseSchedule } from './panels/governance.js';
 import { loadMemories, selectMemory, createNew, saveMemory, deleteMemory, applyTemplate, onLayerTypeChanged, addFeature, addNodeId, addTag } from './panels/memory-editor.js';
 import { loadModuleManagement, saveModule, deleteModule, saveCrosswork, deleteCrosswork, newModule, newCrosswork, onDisciplineChanged, addCrossworkParticipant, newDiscipline, saveDiscipline, deleteDiscipline, addLayerRow } from './panels/arch-config.js';
 import { loadFileTree, refreshFileTree } from './panels/file-tree.js';
@@ -21,7 +21,7 @@ import { toggleChat, newChat, sendChatMessage, handleChatKeydown, autoResizeInpu
 import { openLlmSettings, closeLlmSettings, loadProviders } from './chat/llm-settings.js';
 
 // ── Window bridges ──
-window.Governance = { checkFreshness, detectConflicts, archiveStale };
+window.Governance = { checkFreshness, detectConflicts, archiveStale, condenseNodeKnowledge, condenseAllKnowledge, configureCondenseSchedule };
 window.MemoryEditor = { loadMemories, selectMemory, createNew, saveMemory, deleteMemory, applyTemplate, onLayerTypeChanged, addFeature, addNodeId, addTag };
 window.ModuleAdmin = { loadModuleManagement, saveModule, deleteModule, saveCrosswork, deleteCrosswork, newModule, newCrosswork, onDisciplineChanged, addCrossworkParticipant, newDiscipline, saveDiscipline, deleteDiscipline, addLayerRow };
 window.FileTree = { loadFileTree, refreshFileTree };

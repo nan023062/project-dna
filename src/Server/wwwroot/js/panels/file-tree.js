@@ -63,7 +63,7 @@ function renderTree() {
   if (!container || !_roots) return;
 
   if (_roots.length === 0) {
-    container.innerHTML = '<div class="empty" style="padding:16px;">未发现目录。请在 architecture.json 中配置 scanConfig.roots。</div>';
+    container.innerHTML = '<div class="empty" style="padding:16px;">未发现目录。请先注册模块，或在设置中配置扫描根目录。</div>';
     return;
   }
 

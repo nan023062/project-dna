@@ -86,8 +86,15 @@
         <button class="btn btn-primary btn-sm" onclick="window.Governance.checkFreshness()">检查鲜活度</button>
         <button class="btn btn-primary btn-sm" onclick="window.Governance.detectConflicts()">检测冲突</button>
         <button class="btn btn-secondary btn-sm" onclick="window.Governance.archiveStale()">归档陈旧</button>
+        <button class="btn btn-primary btn-sm" onclick="window.Governance.condenseNodeKnowledge()">压缩模块知识</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.Governance.condenseAllKnowledge()">全量知识压缩</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.Governance.configureCondenseSchedule()">调度设置</button>
         <div style="flex:1;"></div>
+        <div id="govSchedule" style="font-size:12px;color:var(--text-secondary);margin-right:12px;"></div>
         <div id="govContent" style="font-size:12px;color:var(--text-secondary);"></div>
+      </div>
+      <div id="govCondenseResult" style="padding: 8px 12px; border-bottom: 1px solid var(--border); font-size:12px; color:var(--text-secondary);">
+        <div class="empty">尚未执行知识压缩。</div>
       </div>
       <!-- 记忆列表 + 编辑 -->
       <div class="memory-layout">

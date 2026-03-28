@@ -37,4 +37,16 @@ public sealed class GovernanceEngine : IGovernanceEngine
 
     public int ArchiveStaleMemories(TimeSpan staleThreshold)
         => _memoryMaintainer.ArchiveStaleMemories(staleThreshold);
+
+    public Task<KnowledgeCondenseResult> CondenseNodeKnowledgeAsync(string nodeIdOrName, int maxSourceMemories = 200)
+    {
+        var topology = _graphEngine.GetTopology();
+        return _memoryMaintainer.CondenseNodeKnowledgeAsync(topology, nodeIdOrName, maxSourceMemories);
+    }
+
+    public Task<List<KnowledgeCondenseResult>> CondenseAllNodesAsync(int maxSourceMemories = 200)
+    {
+        var topology = _graphEngine.GetTopology();
+        return _memoryMaintainer.CondenseAllNodesAsync(topology, maxSourceMemories);
+    }
 }

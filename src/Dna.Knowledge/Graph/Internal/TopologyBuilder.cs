@@ -92,6 +92,7 @@ internal static class TopologyBuilder
     {
         var nodes = new List<KnowledgeNode>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var nodeKnowledgeMap = store.LoadNodeKnowledgeMap();
 
         foreach (var (discipline, modules) in manifest.Disciplines)
         {
@@ -116,8 +117,12 @@ internal static class TopologyBuilder
                     Discipline = discipline,
                     IsCrossWorkModule = reg.IsCrossWorkModule,
                     Dependencies = reg.IsCrossWorkModule ? [] : reg.Dependencies.ToList(),
-                    ComputedDependencies = reg.IsCrossWorkModule ? [] : computed.ModuleDependencies.GetValueOrDefault(reg.Name, [])
+                    ComputedDependencies = reg.IsCrossWorkModule ? [] : computed.ModuleDependencies.GetValueOrDefault(reg.Name, []),
+                    Knowledge = nodeKnowledgeMap.GetValueOrDefault(reg.Id, new NodeKnowledge())
                 };
+
+                if (string.IsNullOrWhiteSpace(node.Summary) && !string.IsNullOrWhiteSpace(node.Knowledge.Identity))
+                    node.Summary = node.Knowledge.Identity;
 
                 var identityEntries = store.Query(new MemoryFilter
                 {
@@ -131,6 +136,8 @@ internal static class TopologyBuilder
                 {
                     node.Summary = identity.Summary;
                     TryApplyIdentityPayload(identity.Content, node);
+                    if (string.IsNullOrWhiteSpace(node.Knowledge.Identity))
+                        node.Knowledge.Identity = identity.Summary;
                 }
 
                 nodes.Add(node);

@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Dna.Knowledge.Models;
 using Dna.Memory.Models;
 using Microsoft.Data.Sqlite;
@@ -9,21 +7,11 @@ using Microsoft.Extensions.Logging;
 namespace Dna.Memory.Store;
 
 /// <summary>
-/// 记忆存储 — SQLite 索引 + JSON 文件双引擎。
-/// SQLite (index.db) 存储索引/元数据/向量/FTS，加入 .gitignore，启动时可从 JSON 重建。
-/// JSON 文件 (entries/*.json) 是 Git 友好的知识内容，按年月分目录。
+/// 记忆存储 — 纯 SQLite 存储引擎。
+/// index.db 存储索引/元数据/向量/FTS，记忆内容不再落盘为 JSON 文件。
 /// </summary>
 internal partial class MemoryStore : IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
-    };
-
     private readonly ILogger<MemoryStore> _logger;
     private SqliteConnection? _db;
     private string _storePath = string.Empty;
@@ -57,8 +45,26 @@ internal partial class MemoryStore : IDisposable
         _memoryDir = Path.Combine(storePath, "memory");
         Directory.CreateDirectory(_memoryDir);
 
+        var dbPath = Path.Combine(storePath, "index.db");
+        var legacyDbPath = Path.Combine(_memoryDir, "index.db");
+        if (!File.Exists(dbPath) && File.Exists(legacyDbPath))
+        {
+            File.Move(legacyDbPath, dbPath, overwrite: true);
+
+            var oldWal = legacyDbPath + "-wal";
+            var oldShm = legacyDbPath + "-shm";
+            var newWal = dbPath + "-wal";
+            var newShm = dbPath + "-shm";
+
+            if (File.Exists(oldWal))
+                File.Move(oldWal, newWal, overwrite: true);
+            if (File.Exists(oldShm))
+                File.Move(oldShm, newShm, overwrite: true);
+
+            _logger.LogInformation("已迁移旧索引库: {Old} -> {New}", legacyDbPath, dbPath);
+        }
+
         _db?.Dispose();
-        var dbPath = Path.Combine(_memoryDir, "index.db");
         _db = new SqliteConnection($"Data Source={dbPath}");
         _db.Open();
 
@@ -71,9 +77,9 @@ internal partial class MemoryStore : IDisposable
         EnsureSchema();
         LoadAllManifests();
 
-        var jsonCount = RebuildFromJsonIfNeeded();
         _initialized = true;
-        _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}", dbPath, storePath, jsonCount);
+        _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
+            dbPath, storePath, Count());
     }
 
     private void EnsureSchema()
@@ -184,220 +190,59 @@ internal partial class MemoryStore : IDisposable
         alter.ExecuteNonQuery();
     }
 
-    /// <summary>如果 SQLite 为空但有旧版 JSON 文件，一次性迁移到 SQLite</summary>
-    private int RebuildFromJsonIfNeeded()
-    {
-        using var countCmd = _db!.CreateCommand();
-        countCmd.CommandText = "SELECT COUNT(*) FROM memory_entries";
-        var dbCount = Convert.ToInt32(countCmd.ExecuteScalar());
-
-        if (dbCount > 0)
-            return dbCount;
-
-        var entriesDir = Path.Combine(_memoryDir, "entries");
-        var jsonFiles = Directory.Exists(entriesDir)
-            ? Directory.GetFiles(entriesDir, "*.json", SearchOption.AllDirectories)
-            : [];
-
-        if (jsonFiles.Length == 0)
-            return 0;
-
-        _logger.LogInformation("SQLite 为空，从 {Count} 个 JSON 文件迁移数据...", jsonFiles.Length);
-
-        using var transaction = _db.BeginTransaction();
-        var count = 0;
-        foreach (var file in jsonFiles)
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
-                if (entry != null)
-                {
-                    InsertIntoSqlite(entry);
-                    count++;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "跳过损坏的 JSON: {File}", file);
-            }
-        }
-        transaction.Commit();
-
-        _logger.LogInformation("从 JSON 迁移完成: {Count} 条记忆", count);
-        return count;
-    }
-
     // ═══════════════════════════════════════════
-    //  JSON 导入（运维工具，用于数据迁移/恢复）
+    //  索引维护（纯 DB）
     // ═══════════════════════════════════════════
-
-    private string EntriesDir => Path.Combine(_memoryDir, "entries");
 
     /// <summary>
-    /// 全量导入：清空 SQLite 所有表，从 entries/*.json 文件导入全部数据。
-    /// 适用于：从旧版本迁移、从备份恢复。
+    /// 重建搜索索引：重建 FTS 文本索引（不触碰业务数据）。
     /// </summary>
     public (int imported, int skipped) RebuildIndex(bool rewriteJson = false)
     {
         if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
 
-        ClearAllSqliteTables();
-
-        var jsonFiles = Directory.Exists(EntriesDir)
-            ? Directory.GetFiles(EntriesDir, "*.json", SearchOption.AllDirectories)
-            : [];
-
-        if (jsonFiles.Length == 0)
-            return (0, 0);
-
-        _logger.LogInformation("全量导入: 扫描到 {Count} 个 JSON 文件", jsonFiles.Length);
-
-        var imported = 0;
-        var skipped = 0;
         using var transaction = _db.BeginTransaction();
-        foreach (var file in jsonFiles)
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
-                if (entry != null)
-                {
-                    InsertIntoSqlite(entry);
-                    imported++;
-                }
-                else skipped++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "跳过损坏的 JSON: {File}", file);
-                skipped++;
-            }
-        }
-        transaction.Commit();
+        using var clearFts = _db.CreateCommand();
+        clearFts.Transaction = transaction;
+        clearFts.CommandText = "DELETE FROM memory_fts";
+        clearFts.ExecuteNonQuery();
 
-        _logger.LogInformation("全量导入完成: 导入 {Imported}, 跳过 {Skipped}", imported, skipped);
-        return (imported, skipped);
+        using var insertFts = _db.CreateCommand();
+        insertFts.Transaction = transaction;
+        insertFts.CommandText = """
+            INSERT INTO memory_fts (id, summary, content, tags)
+            SELECT e.id,
+                   COALESCE(e.summary, ''),
+                   COALESCE(e.content, ''),
+                   COALESCE((SELECT GROUP_CONCAT(t.tag, ' ')
+                             FROM memory_tags t
+                             WHERE t.memory_id = e.id), '')
+            FROM memory_entries e
+            """;
+        var indexed = insertFts.ExecuteNonQuery();
+
+        transaction.Commit();
+        _logger.LogInformation("已重建 memory_fts 索引：{Count} 条", indexed);
+        return (indexed, 0);
     }
 
     /// <summary>
-    /// 增量导入：将 entries/*.json 中新增的文件补入 SQLite。
-    /// 适用于：从外部导入少量 JSON 文件。
+    /// 兼容旧接口：JSON 增量同步已废弃，改为重建搜索索引。
     /// </summary>
     public (int added, int removed, int skipped) SyncFromJson()
     {
-        if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
-
-        var jsonFiles = Directory.Exists(EntriesDir)
-            ? Directory.GetFiles(EntriesDir, "*.json", SearchOption.AllDirectories)
-            : [];
-
-        var existingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using (var cmd = _db.CreateCommand())
-        {
-            cmd.CommandText = "SELECT id FROM memory_entries";
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
-                existingIds.Add(reader.GetString(0));
-        }
-
-        var jsonIdToFile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var skipped = 0;
-        foreach (var file in jsonFiles)
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
-                if (entry != null)
-                    jsonIdToFile[entry.Id] = file;
-                else
-                    skipped++;
-            }
-            catch
-            {
-                skipped++;
-            }
-        }
-
-        var toAdd = jsonIdToFile.Keys.Where(id => !existingIds.Contains(id)).ToList();
-        var toRemove = existingIds.Where(id => !jsonIdToFile.ContainsKey(id)).ToList();
-
-        _logger.LogInformation("增量导入: 新增 {Add}, 跳过 {Skip}",
-            toAdd.Count, skipped);
-
-        using var transaction = _db.BeginTransaction();
-
-        foreach (var id in toAdd)
-        {
-            try
-            {
-                var file = jsonIdToFile[id];
-                var json = File.ReadAllText(file);
-                var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
-                if (entry != null)
-                    InsertIntoSqlite(entry);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "增量导入跳过: {Id}", id);
-                skipped++;
-            }
-        }
-
-        transaction.Commit();
-
-        _logger.LogInformation("增量导入完成: 新增 {Added}", toAdd.Count);
-        return (toAdd.Count, 0, skipped);
+        var (indexed, _) = RebuildIndex();
+        return (indexed, 0, 0);
     }
 
     /// <summary>
-    /// 从 SQLite 导出为 JSON 文件：将全部记忆导出到 entries/*.json。
-    /// 适用于：数据备份、导出到其他系统。
+    /// 兼容旧接口：JSON 导出已废弃（当前为纯 DB 存储）。
     /// </summary>
     public (int exported, int skipped) ExportToJson()
     {
-        if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
-
-        using var cmd = _db.CreateCommand();
-        cmd.CommandText = SelectAllColumns;
-
-        var entries = ReadEntriesFromCommand(cmd);
-
-        if (entries.Count == 0)
-        {
-            _logger.LogInformation("ExportToJson: DB 为空，无记忆可导出");
-            return (0, 0);
-        }
-
-        _logger.LogInformation("ExportToJson: 从 DB 导出 {Count} 条记忆到 JSON", entries.Count);
-
-        var entriesDir = EntriesDir;
-        var exported = 0;
-        var skipped = 0;
-        foreach (var entry in entries)
-        {
-            try
-            {
-                var yearMonth = entry.CreatedAt.ToString("yyyy-MM");
-                var dir = Path.Combine(entriesDir, yearMonth);
-                Directory.CreateDirectory(dir);
-                var filePath = Path.Combine(dir, $"{entry.Id}.json");
-                var json = JsonSerializer.Serialize(entry, JsonOpts);
-                File.WriteAllText(filePath, json);
-                exported++;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "ExportToJson 跳过: {Id}", entry.Id);
-                skipped++;
-            }
-        }
-
-        _logger.LogInformation("ExportToJson 完成: 导出 {Exported}, 跳过 {Skipped}", exported, skipped);
-        return (exported, skipped);
+        var total = Count();
+        _logger.LogInformation("ExportToJson 已废弃：当前为纯 DB 存储，entries={Count}", total);
+        return (0, total);
     }
 
     private List<string> QueryMultiValues(string table, string column, string memoryId)
@@ -866,8 +711,19 @@ internal partial class MemoryStore : IDisposable
 
         if (!string.IsNullOrEmpty(filter.NodeId))
         {
-            conditions.Add("e.node_id = @nodeId");
-            parameters.Add(("@nodeId", filter.NodeId));
+            var nodeCandidates = ResolveNodeIdCandidates(filter.NodeId, strict: false);
+            if (nodeCandidates.Count == 1)
+            {
+                conditions.Add("e.node_id = @nodeId0");
+                parameters.Add(("@nodeId0", nodeCandidates[0]));
+            }
+            else if (nodeCandidates.Count > 1)
+            {
+                var placeholders = nodeCandidates.Select((_, i) => $"@nodeId{i}").ToList();
+                conditions.Add($"e.node_id IN ({string.Join(",", placeholders)})");
+                for (var i = 0; i < nodeCandidates.Count; i++)
+                    parameters.Add(($"@nodeId{i}", nodeCandidates[i]));
+            }
         }
 
         if (filter.Tags is { Count: > 0 })

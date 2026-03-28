@@ -5,6 +5,7 @@ using Dna.Interfaces.Api;
 using Dna.Interfaces.Cli;
 using Dna.Adapters.Game;
 using Dna.Knowledge;
+using Dna.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 // ── 解析存储路径 ──
@@ -50,6 +51,8 @@ DnaApp.ConfigureServices(services =>
 {
     services.AddSingleton<ProjectConfig>();
     services.AddKnowledgeGraph();
+    if (DnaApp.Mode != AppRunMode.Stdio)
+        services.AddHostedService<KnowledgeCondenseScheduler>();
 
     var jwtService = new JwtService();
     services.AddSingleton(jwtService);
@@ -128,23 +131,8 @@ static string ResolveDataPath(string[] args)
 
 static string ResolvePersonaName(string storePath)
 {
-    try
-    {
-        var archPath = Path.Combine(storePath, "architecture.json");
-        if (File.Exists(archPath))
-        {
-            var json = File.ReadAllText(archPath);
-            var opts = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
-            };
-            var arch = System.Text.Json.JsonSerializer.Deserialize<Dna.Knowledge.Project.Models.ArchitectureManifest>(json, opts);
-            if (!string.IsNullOrWhiteSpace(arch?.Persona?.Name))
-                return arch.Persona.Name;
-        }
-    }
-    catch { /* best effort */ }
+    // graph/memory are DB-first in the new architecture; persona name falls back to default.
+    _ = storePath;
     return "Project DNA";
 }
 

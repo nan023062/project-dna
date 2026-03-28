@@ -83,6 +83,14 @@ The server is a pure knowledge service — it does **not** access project source
 - **MemoryEngine** — Knowledge storage & retrieval (vector + FTS + tag + coordinate search)
 - **GovernanceEngine** — Architecture advisor: cycle detection, key node warnings, freshness checks
 
+### 2026-03 Sync Notes
+
+- DB-first storage is now the default and only path: graph and memory are stored in SQLite.
+- The graph no longer relies on `architecture.json` or `modules.json`.
+- Memory no longer writes `memory/entries/*.json`; all entries are persisted in DB.
+- Knowledge condensation is available: short-term memories are distilled into long-term `NodeKnowledge`.
+- Scheduled full condensation can be configured via API and Dashboard.
+
 ## Quick Start
 
 ### 1. Build
@@ -163,6 +171,8 @@ dna cli stats                           # Knowledge base statistics
 | `verify_memory` | Confirm a memory is still valid |
 | `update_memory` | Update existing memory |
 | `delete_memory` | Delete a memory |
+| `condense_module_knowledge` | Condense one module's knowledge into `NodeKnowledge` |
+| `condense_all_module_knowledge` | Run full condensation for all modules |
 
 ## Ecosystem (Planned)
 

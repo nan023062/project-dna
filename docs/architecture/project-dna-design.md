@@ -1,6 +1,6 @@
 # Project DNA: Simplicity is the Ultimate Sophistication, Unity in All Things
 
-> **Status**: Design Draft v1.3 — 2026-03-28
+> **Status**: Design Draft v1.4 (synced to implementation) — 2026-03-29
 > **Author**: nave
 > **Scope**: Core model and refactoring direction for the Agentic OS Project DNA system
 
@@ -530,7 +530,7 @@ The system ultimately consists of **two independent projects**: the backend (pur
 │  └──────┬───────┘  └──────┬───────┘  └──────┬─────────┘  │
 │         └─────────────────┴─────────────────┘            │
 │                      StorageLayer                         │
-│           SQLite + JSON + Manifest files                  │
+│           SQLite only (Graph + Memory are DB-first)       │
 │                ~/.dna/projects/{name}/                    │
 │                                                          │
 │  External interfaces: MCP (stdio/SSE) + REST API          │
@@ -570,7 +570,7 @@ Full lifecycle management of the graph. Nodes and edges are first-class citizens
 - Context building (visibility filtering + direct node Knowledge retrieval)
 
 **Storage**:
-- `graph.json` — unified node and edge data (replaces the old architecture.json + modules.json)
+- `graph.db` (SQLite) — nodes, edges, and materialized `NodeKnowledge` (replaces `architecture.json` + `modules.json`)
 
 ### 6.2 MemoryEngine
 
@@ -585,8 +585,8 @@ Storage and retrieval of knowledge entries. Purely manages MemoryEntry, no longe
 **Post-write callback**: After successful write, notify GraphEngine to refresh the target node's Knowledge summary.
 
 **Storage**:
-- `memory/index.db` — SQLite index
-- `memory/entries/*.json` — Git-friendly knowledge content
+- `memory/index.db` (SQLite) — short-term memories and retrieval indexes (FTS/vector metadata)
+- `memory/entries/*.json` is no longer used in the DB-first model
 
 ### 6.3 GovernanceEngine
 
@@ -598,6 +598,8 @@ Architecture advisor — combines data from GraphEngine + MemoryEngine to provid
 - CrossWork health (whether participants have actual interactions) → suggest splitting or dissolving
 - Freshness checks + expired memory decay/archiving
 - Conflict detection (contradictory knowledge on the same node)
+- Module knowledge condensation: aggregate short-term memories by `NodeId`, distill and upsert long-term `NodeKnowledge`
+- Scheduled governance: run full condensation periodically with configurable schedule (API / Dashboard)
 
 ---
 
@@ -607,7 +609,7 @@ Architecture advisor — combines data from GraphEngine + MemoryEngine to provid
 
 | Tool | Description |
 |------|-------------|
-| `get_project_identity` | Verify project identity |
+| `get_context` | Get module context (constraints, dependencies, CrossWork, lessons) |
 | `add_node` | Add a node (any type) |
 | `get_node` | Get a node (with embedded knowledge) |
 | `update_node` | Update node attributes |
@@ -617,8 +619,7 @@ Architecture advisor — combines data from GraphEngine + MemoryEngine to provid
 | `remove_edge` | Remove a dependency |
 | `get_topology` | Get the complete topology snapshot |
 | `get_execution_plan` | Get topologically sorted execution plan |
-| `begin_task` | Get module context (visibility-filtered) |
-| `find_modules` | Search for nodes |
+| `search_modules` | Search for nodes |
 
 ### 7.2 MemoryTools
 
@@ -633,7 +634,7 @@ Architecture advisor — combines data from GraphEngine + MemoryEngine to provid
 | `get_memory` | Get by ID |
 | `verify_memory` | Verify a memory is still valid |
 | `rebuild_index` | Rebuild index |
-| `export_to_json` | Export |
+| `export_to_json` | Compatibility placeholder (no longer a primary flow in DB-first mode) |
 
 ### 7.3 GovernanceTools
 
@@ -642,6 +643,8 @@ Architecture advisor — combines data from GraphEngine + MemoryEngine to provid
 | `validate_architecture` | Architecture compliance check |
 | `get_memory_stats` | Knowledge base statistics |
 | `check_freshness` | Freshness check |
+| `condense_module_knowledge` | Condense one module's knowledge (short-term → long-term) |
+| `condense_all_module_knowledge` | Condense all modules' knowledge |
 
 ---
 
@@ -682,7 +685,7 @@ Web frontend + lightweight API, connecting to DNA Server to display and manage k
 
 Connects to DNA Server via MCP protocol.
 
-- Conversation start → `get_project_identity` → `begin_task`
+- Conversation start → `get_context("moduleName")` (if unclear, use `search_modules` first)
 - Before modifying code → get constraints from node Knowledge
 - After completion → `remember` to write back knowledge
 - Agent directly reads/writes project files (workspace), reads/writes knowledge via MCP (DNA Server)
@@ -710,7 +713,7 @@ Connects to DNA Server via MCP protocol.
 2. Cycle detection becomes refactoring suggestion (Tarjan SCC → suggest merge/form working group)
 3. Node `Knowledge` materialized view implementation
 4. Auto-refresh node Knowledge after memory writes
-5. Simplify `begin_task` / `get_module_context` to direct node reads
+5. Simplify `get_context` / `get_module_context` to direct node reads
 
 ### Phase 3: Server Purification (Remove File System Dependencies)
 

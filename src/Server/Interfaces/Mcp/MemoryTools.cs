@@ -30,7 +30,7 @@ public class MemoryTools(
 
     [McpServerTool, Description(
         "写入一条项目记忆。完成任务或踩坑时应主动调用，确保知识沉淀不丢失。" +
-        "系统自动生成向量嵌入、写入 SQLite 索引和 JSON 文件。" +
+        "系统自动生成向量嵌入并写入 SQLite。" +
         "参数 content：知识正文（纯文本或 JSON）。" +
         "系统标签要求 JSON content — " +
         "#identity: {\"name\":\"模块名\",\"responsibility\":\"职责\",\"boundary\":\"边界\"} | " +
@@ -486,14 +486,12 @@ public class MemoryTools(
     }
 
     // ═══════════════════════════════════════════
-    //  索引重建
+    //  索引维护（纯 DB）
     // ═══════════════════════════════════════════
 
     [McpServerTool, Description(
-        "从 JSON 文件全量导入记忆：清空当前数据库，从 entries/*.json 文件重新导入全部记忆。" +
-        "适用于：从备份恢复数据、从旧版本迁移、外部批量导入 JSON 文件。" +
-        "操作会清空现有数据（包括向量和 FTS），然后逐个读取 JSON 文件导入。" +
-        "向量嵌入需后续 recall 时按需重新生成。")]
+        "重建记忆搜索索引（FTS）。" +
+        "当前系统为纯 DB 存储，不再从 JSON 导入。")]
     public string import_from_json(
         [Description("保留参数，无实际作用")] bool rewriteJson = false)
     {
@@ -502,18 +500,17 @@ public class MemoryTools(
         try
         {
             var (imported, skipped) = memory.RebuildIndex(rewriteJson);
-            return $"✓ 全量导入完成\n- 导入: {imported} 条\n- 跳过: {skipped} 条\n\n向量嵌入将在下次 recall 时按需重新生成。";
+            return $"✓ 搜索索引重建完成\n- 索引条目: {imported}\n- 异常: {skipped}";
         }
         catch (Exception ex)
         {
-            return $"错误：全量导入失败 — {ex.Message}";
+            return $"错误：索引重建失败 — {ex.Message}";
         }
     }
 
     [McpServerTool, Description(
-        "从 JSON 文件增量导入记忆：将 entries/*.json 中新增的文件补入数据库。" +
-        "适用于：外部新增了少量 JSON 文件需要导入。" +
-        "比 import_from_json 更快，不清空已有数据，只做增量补入。")]
+        "兼容旧命名：当前等价于重建搜索索引。" +
+        "系统已切换为纯 DB 存储，不再执行 JSON 增量导入。")]
     public string import_new_from_json()
     {
         logger.LogInformation(LogEvents.Mcp, "import_new_from_json()");
@@ -521,18 +518,16 @@ public class MemoryTools(
         try
         {
             var (added, removed, skipped) = memory.SyncFromJson();
-            return $"✓ 增量导入完成\n- 新增: {added} 条\n- 跳过: {skipped} 条";
+            return $"✓ 索引刷新完成\n- 索引条目: {added}\n- 跳过: {skipped}";
         }
         catch (Exception ex)
         {
-            return $"错误：增量导入失败 — {ex.Message}";
+            return $"错误：索引刷新失败 — {ex.Message}";
         }
     }
 
     [McpServerTool, Description(
-        "将数据库中的全部记忆导出为 JSON 文件（entries/*.json）。" +
-        "适用于：数据备份、导出到其他系统、生成可读的知识快照。" +
-        "已有的 JSON 文件会被覆盖。不影响数据库数据。")]
+        "兼容旧命名：纯 DB 存储下不再导出记忆 JSON。")]
     public string export_to_json()
     {
         logger.LogInformation(LogEvents.Mcp, "export_to_json()");
@@ -540,7 +535,7 @@ public class MemoryTools(
         try
         {
             var (exported, skipped) = memory.ExportToJson();
-            return $"✓ 导出完成\n- 导出: {exported} 条\n- 跳过: {skipped} 条";
+            return $"ℹ 当前为纯 DB 存储，不执行 JSON 导出。\n- exported: {exported}\n- skipped: {skipped}";
         }
         catch (Exception ex)
         {

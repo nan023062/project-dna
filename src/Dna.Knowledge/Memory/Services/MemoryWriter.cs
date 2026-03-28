@@ -33,6 +33,7 @@ internal class MemoryWriter
     public async Task<MemoryEntry> RememberAsync(RememberRequest request)
     {
         ValidateSystemTagPayload(request.Tags, request.Content);
+        var nodeId = _store.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
 
         var entry = new MemoryEntry
         {
@@ -44,7 +45,7 @@ internal class MemoryWriter
             Summary = request.Summary ?? GenerateAutoSummary(request.Content),
             Disciplines = request.Disciplines,
             Features = request.Features ?? [],
-            NodeId = request.NodeId,
+            NodeId = nodeId,
             PathPatterns = request.PathPatterns ?? [],
             Tags = request.Tags,
             ParentId = request.ParentId,
@@ -73,6 +74,7 @@ internal class MemoryWriter
     public async Task<MemoryEntry> UpdateAsync(string memoryId, RememberRequest request)
     {
         ValidateSystemTagPayload(request.Tags, request.Content);
+        var nodeId = _store.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
 
         var existing = _store.GetById(memoryId);
         if (existing == null)
@@ -88,7 +90,7 @@ internal class MemoryWriter
             Summary = request.Summary ?? GenerateAutoSummary(request.Content),
             Disciplines = request.Disciplines,
             Features = request.Features ?? [],
-            NodeId = request.NodeId,
+            NodeId = nodeId,
             PathPatterns = request.PathPatterns ?? [],
             Tags = request.Tags,
             ParentId = request.ParentId,

@@ -89,6 +89,8 @@ dna cli stats                           # 知识库统计
 | `verify_memory` | 确认知识仍有效 |
 | `update_memory` | 更新知识 |
 | `delete_memory` | 删除知识 |
+| `condense_module_knowledge` | 压缩单模块知识到 `NodeKnowledge` |
+| `condense_all_module_knowledge` | 全量压缩所有模块知识 |
 
 ## 设计哲学
 
@@ -100,6 +102,13 @@ dna cli stats                           # 知识库统计
 > 环路不是违规，而是重构信号——循环依赖的节点本质上是一个内聚体。
 
 详细设计文档：[docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
+
+## 2026-03 同步说明
+
+- 存储已切换为 DB-first：图谱与记忆统一使用 SQLite。
+- 不再依赖 `architecture.json`、`modules.json`、`memory/entries/*.json`。
+- 记忆按 `NodeId` 归属到单节点，短期记忆可提炼为节点长期知识（`NodeKnowledge`）。
+- 支持模块知识压缩（单模块 / 全量）及可配置的定时压缩调度（API / Dashboard）。
 
 ## 许可证
 

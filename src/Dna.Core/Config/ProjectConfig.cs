@@ -97,6 +97,39 @@ public class ProjectConfig
     public bool IsGovernanceFirstMode()
         => GetAgentGovernanceMode() == "governance-first";
 
+    public GovernanceCondenseScheduleConfig GetGovernanceCondenseSchedule()
+    {
+        var config = LoadPersistedConfig();
+
+        var enabledEnv = Environment.GetEnvironmentVariable("DNA_CONDENSE_SCHEDULE_ENABLED");
+        var hourEnv = Environment.GetEnvironmentVariable("DNA_CONDENSE_SCHEDULE_HOUR");
+        var maxEnv = Environment.GetEnvironmentVariable("DNA_CONDENSE_MAX_SOURCE_MEMORIES");
+
+        var enabled = config.CondenseScheduleEnabled ?? true;
+        var hour = config.CondenseScheduleHourLocal ?? 2;
+        var max = config.CondenseMaxSourceMemories ?? 200;
+
+        if (bool.TryParse(enabledEnv, out var e)) enabled = e;
+        if (int.TryParse(hourEnv, out var h)) hour = h;
+        if (int.TryParse(maxEnv, out var m)) max = m;
+
+        return new GovernanceCondenseScheduleConfig
+        {
+            Enabled = enabled,
+            HourLocal = Math.Clamp(hour, 0, 23),
+            MaxSourceMemories = Math.Clamp(max, 20, 2000)
+        };
+    }
+
+    public void SetGovernanceCondenseSchedule(GovernanceCondenseScheduleConfig schedule)
+    {
+        var config = LoadPersistedConfig();
+        config.CondenseScheduleEnabled = schedule.Enabled;
+        config.CondenseScheduleHourLocal = Math.Clamp(schedule.HourLocal, 0, 23);
+        config.CondenseMaxSourceMemories = Math.Clamp(schedule.MaxSourceMemories, 20, 2000);
+        SavePersistedConfig(config);
+    }
+
     private static string NormalizeGovernanceMode(string? raw)
     {
         var normalized = (raw ?? string.Empty).Trim().ToLowerInvariant();
@@ -314,6 +347,9 @@ public class PersistedConfig
     public string? ActiveLlmProviderId { get; set; }
     public int? AgentToolThrottleMs { get; set; }
     public string? AgentGovernanceMode { get; set; }
+    public bool? CondenseScheduleEnabled { get; set; }
+    public int? CondenseScheduleHourLocal { get; set; }
+    public int? CondenseMaxSourceMemories { get; set; }
 }
 
 /// <summary>
@@ -330,5 +366,12 @@ public class LlmProviderConfig
 
     public string EmbeddingBaseUrl { get; set; } = "";
     public string EmbeddingModel { get; set; } = "";
+}
+
+public class GovernanceCondenseScheduleConfig
+{
+    public bool Enabled { get; set; } = true;
+    public int HourLocal { get; set; } = 2;
+    public int MaxSourceMemories { get; set; } = 200;
 }
 

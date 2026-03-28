@@ -58,12 +58,14 @@
 | CLI 命令补全（validate / search / recall / stats / export / import） | ✅ |
 | Auth 认证（JWT + UserStore + 角色 admin/editor/viewer） | ✅ |
 | Dashboard 精简（拓扑浏览 + 记忆管理 + LLM 对话，去掉项目选择和架构配置） | ✅ |
-| 启动强制 `--project` 参数（一个 Server = 一个项目） | ✅ |
+| 启动统一 `--db` 参数（一个 Server = 一个知识库目录） | ✅ |
+| 模块知识压缩（短期记忆→长期 `NodeKnowledge`） | ✅ |
+| 知识压缩调度（可配置启用/时间/样本上限） | ✅ |
 
 **运行模型**：
 
 ```
-dna --project /path/to/project --port 5051
+dna --db /path/to/knowledge-store --port 5051
 
 IDE ──MCP──→ Server ──→ SQLite
 CLI ──HTTP──→    ↑
@@ -91,7 +93,7 @@ Dashboard ──→    │
 | 任务 | 说明 |
 |------|------|
 | 记忆写入后自动刷新节点 Knowledge | `MemoryEngine.Remember` → 回调 `GraphEngine.RefreshKnowledge(nodeId)` |
-| `begin_task` 简化 | 直接读节点 Knowledge，一次调用返回 80% 上下文 |
+| `get_context` 简化 | 直接读节点 Knowledge，一次调用返回 80% 上下文 |
 | Knowledge 摘要自动生成 | 从归属记忆中提炼 Identity / Lessons / Facts / ActiveTasks |
 
 ### M2.3 增量拓扑 + 性能优化

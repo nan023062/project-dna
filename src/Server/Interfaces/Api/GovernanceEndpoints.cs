@@ -74,5 +74,52 @@ public static class GovernanceEndpoints
                     : "所有记忆鲜活度正常"
             }, JsonOpts);
         });
+
+        api.MapPost("/condense/node", async (
+            CondenseNodeRequest request,
+            IGraphEngine graph,
+            IGovernanceEngine governance) =>
+        {
+            graph.BuildTopology();
+
+            if (string.IsNullOrWhiteSpace(request.NodeIdOrName))
+                return Results.BadRequest(new { error = "nodeIdOrName 不能为空" });
+
+            var result = await governance.CondenseNodeKnowledgeAsync(
+                request.NodeIdOrName,
+                request.MaxSourceMemories is > 0 ? request.MaxSourceMemories.Value : 200);
+
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapPost("/condense/all", async (
+            CondenseAllRequest request,
+            IGraphEngine graph,
+            IGovernanceEngine governance) =>
+        {
+            graph.BuildTopology();
+
+            var results = await governance.CondenseAllNodesAsync(
+                request.MaxSourceMemories is > 0 ? request.MaxSourceMemories.Value : 200);
+
+            return Results.Json(new
+            {
+                total = results.Count,
+                condensed = results.Count(r => r.NewIdentityMemoryId != null),
+                archived = results.Sum(r => r.ArchivedCount),
+                results
+            }, JsonOpts);
+        });
+    }
+
+    public sealed class CondenseNodeRequest
+    {
+        public string NodeIdOrName { get; set; } = string.Empty;
+        public int? MaxSourceMemories { get; set; }
+    }
+
+    public sealed class CondenseAllRequest
+    {
+        public int? MaxSourceMemories { get; set; }
     }
 }

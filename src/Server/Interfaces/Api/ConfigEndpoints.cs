@@ -21,16 +21,50 @@ public static class ConfigEndpoints
 
         api.MapGet("/config", (ProjectConfig config) =>
         {
+            var schedule = config.GetGovernanceCondenseSchedule();
             return Results.Json(new
             {
                 projectRoot = config.DefaultProjectRoot,
                 configured = config.HasProject,
+                governance = new
+                {
+                    condenseSchedule = new
+                    {
+                        enabled = schedule.Enabled,
+                        hourLocal = schedule.HourLocal,
+                        maxSourceMemories = schedule.MaxSourceMemories
+                    }
+                },
                 recentProjects = config.GetRecentProjects().Select(p => new
                 {
                     p.Path,
                     p.Name,
                     p.LastOpened
                 })
+            }, JsonOpts);
+        });
+
+        api.MapPost("/config/governance/condense-schedule", (
+            SetCondenseScheduleRequest req,
+            ProjectConfig config) =>
+        {
+            var schedule = new GovernanceCondenseScheduleConfig
+            {
+                Enabled = req.Enabled ?? true,
+                HourLocal = req.HourLocal ?? 2,
+                MaxSourceMemories = req.MaxSourceMemories ?? 200
+            };
+            config.SetGovernanceCondenseSchedule(schedule);
+            var updated = config.GetGovernanceCondenseSchedule();
+            return Results.Json(new
+            {
+                success = true,
+                condenseSchedule = new
+                {
+                    enabled = updated.Enabled,
+                    hourLocal = updated.HourLocal,
+                    maxSourceMemories = updated.MaxSourceMemories
+                }
             }, JsonOpts);
         });
 
@@ -113,3 +147,4 @@ public static class ConfigEndpoints
 }
 
 public record SetProjectRequest(string ProjectRoot, string? StorePath = null);
+public record SetCondenseScheduleRequest(bool? Enabled, int? HourLocal, int? MaxSourceMemories);
