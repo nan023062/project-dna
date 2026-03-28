@@ -12,7 +12,7 @@ using ModelContextProtocol.Server;
 namespace Dna.Interfaces.Mcp;
 
 /// <summary>
-/// 项目记忆系统 MCP 工具集 — remember / recall / verify_memory / get_feature_knowledge
+/// 项目记忆系统 MCP 工具集 — remember / recall / verify_memory / get_feature_summary
 /// </summary>
 [McpServerToolType]
 public class MemoryTools(
@@ -157,10 +157,10 @@ public class MemoryTools(
         "获取业务系统（Feature）的全职能知识汇总。" +
         "返回该系统在所有职能域（程序/策划/美术/TA/音频/DevOps/QA）的知识，以及跨职能协议。" +
         "参数 featureId：业务系统 ID，如 character、building、fishing。")]
-    public string get_feature_knowledge(
+    public string get_feature_summary(
         [Description("业务系统 ID，如 character、building、fishing")] string featureId)
     {
-        logger.LogInformation(LogEvents.Mcp, "get_feature_knowledge() feature={Feature}", featureId);
+        logger.LogInformation(LogEvents.Mcp, "get_feature_summary() feature={Feature}", featureId);
         var summary = memory.GetFeatureSummary(featureId);
         return FormatFeatureSummary(summary);
     }
@@ -494,10 +494,10 @@ public class MemoryTools(
         "适用于：从备份恢复数据、从旧版本迁移、外部批量导入 JSON 文件。" +
         "操作会清空现有数据（包括向量和 FTS），然后逐个读取 JSON 文件导入。" +
         "向量嵌入需后续 recall 时按需重新生成。")]
-    public string rebuild_index(
+    public string import_from_json(
         [Description("保留参数，无实际作用")] bool rewriteJson = false)
     {
-        logger.LogInformation(LogEvents.Mcp, "rebuild_index()");
+        logger.LogInformation(LogEvents.Mcp, "import_from_json()");
 
         try
         {
@@ -513,10 +513,10 @@ public class MemoryTools(
     [McpServerTool, Description(
         "从 JSON 文件增量导入记忆：将 entries/*.json 中新增的文件补入数据库。" +
         "适用于：外部新增了少量 JSON 文件需要导入。" +
-        "比 rebuild_index 更快，不清空已有数据，只做增量补入。")]
-    public string sync_index()
+        "比 import_from_json 更快，不清空已有数据，只做增量补入。")]
+    public string import_new_from_json()
     {
-        logger.LogInformation(LogEvents.Mcp, "sync_index()");
+        logger.LogInformation(LogEvents.Mcp, "import_new_from_json()");
 
         try
         {

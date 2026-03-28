@@ -27,7 +27,7 @@ public class KnowledgeTools(
         "查看项目的模块拓扑全貌：所有模块按部门分组展示，包含依赖关系和 CrossWork 统计。" +
         "适用于：首次了解项目整体结构、查看模块间依赖关系。" +
         "返回内容包含部门→模块的树状结构。" +
-        "如果只需要查看单个模块的详细信息，请用 get_module_context 或 begin_task。")]
+        "如果只需要查看单个模块的详细信息，请用 get_context。")]
     public string get_topology()
     {
         logger.LogInformation(LogEvents.Mcp, "get_topology()");
@@ -57,13 +57,13 @@ public class KnowledgeTools(
     }
 
     [McpServerTool, Description(
-        "对一组模块生成拓扑排序的执行计划：被依赖的模块排在前面。" +
-        "适用于：需要按正确顺序修改多个有依赖关系的模块时（如重构涉及多模块），确定先改哪个后改哪个。" +
+        "对一组模块按依赖关系排序：被依赖的模块排在前面。" +
+        "适用于需要按正确顺序修改多个模块时。" +
         "如果检测到循环依赖会在结果中标注。")]
-    public string get_execution_plan(
+    public string get_dependency_order(
         [Description("模块名列表，逗号分隔。示例: 'Combat,Character,UI'")] string moduleNames)
     {
-        logger.LogInformation(LogEvents.Mcp, "get_execution_plan() modules={Modules}", moduleNames);
+        logger.LogInformation(LogEvents.Mcp, "get_dependency_order() modules={Modules}", moduleNames);
         graph.BuildTopology();
 
         var names = SplitCsv(moduleNames);
@@ -71,7 +71,7 @@ public class KnowledgeTools(
 
         var plan = graph.GetExecutionPlan(names);
         var sb = new StringBuilder();
-        sb.AppendLine("## 执行计划");
+        sb.AppendLine("## 依赖排序");
         sb.AppendLine();
         if (plan.HasCycle)
             sb.AppendLine($"- 检测到循环依赖: {plan.CycleDescription}");
@@ -86,12 +86,12 @@ public class KnowledgeTools(
     [McpServerTool, Description(
         "按关键词模糊搜索模块。匹配模块名、路径、摘要、关键词和依赖名。" +
         "适用于：不确定模块的准确名称时，通过关键词定位。" +
-        "与 recall 的区别：find_modules 搜索模块注册信息，recall 搜索记忆内容。")]
-    public string find_modules(
+        "与 recall 的区别：search_modules 搜索模块注册信息，recall 搜索记忆内容。")]
+    public string search_modules(
         [Description("搜索关键词，至少 2 个字符。示例: 'combat'、'UI'、'network'")] string query,
         [Description("最多返回条数（默认 8，上限 20）")] int maxResults = 8)
     {
-        logger.LogInformation(LogEvents.Mcp, "find_modules() query={Query}", query);
+        logger.LogInformation(LogEvents.Mcp, "search_modules() query={Query}", query);
         graph.BuildTopology();
 
         var q = query.Trim().ToLowerInvariant();
@@ -126,32 +126,8 @@ public class KnowledgeTools(
     // ═══════════════════════════════════════════
 
     [McpServerTool, Description(
-        "获取单个模块的详细上下文信息，包括：模块身份、边界模式、依赖关系、协作规则、相关记忆。" +
-        "系统会根据模块所属部门的工种（程序/策划/美术/TA 等）自动选择对应的解释器来格式化输出。" +
-        "适用于：只需查看某个模块的信息而不开始正式工作时。" +
-        "与 begin_task 的区别：get_module_context 是只读查看，begin_task 是正式开始一项开发任务（会额外返回约束链和 CrossWork）。")]
-    public string get_module_context(
-        [Description("目标模块名")] string targetModule,
-        [Description("当前所在模块名（影响协作规则判断，留空则默认与 target 相同）")] string? currentModule = null,
-        [Description("当前工作涉及的其他模块，逗号分隔（影响协作规则展示）")] string? activeModules = null)
-    {
-        logger.LogInformation(LogEvents.Mcp, "get_module_context() target={Target}", targetModule);
-        graph.BuildTopology();
-
-        var active = string.IsNullOrWhiteSpace(activeModules) ? null : SplitCsv(activeModules);
-        var current = string.IsNullOrWhiteSpace(currentModule) ? targetModule : currentModule;
-        var ctx = graph.GetModuleContext(targetModule, current, active);
-        return FormatModuleContext(ctx);
-    }
-
-    [McpServerTool, Description(
-        "MANDATORY pre-flight for any project work. 修改项目文件（代码、配置、文档、资源、策划数据等）前必须调用的第一个工具，不得跳过。" +
-        "不指定模块时：返回项目所有模块的速查列表（名称/职能），帮你快速定位目标模块。" +
-        "指定模块时：返回完整工作上下文，包括：模块身份与边界、依赖关系、约束链、" +
-        "相关 CrossWork（业务交叉工作声明）、历史教训。" +
-        "支持同时指定多个模块（逗号分隔），适用于跨模块修改场景。" +
-        "When to call: ALWAYS before modifying any project files (code, config, docs, assets, design data). If unsure which module, call with no arguments first to get the module list.")]
-    public string begin_task(
+        "获取模块上下文：不指定模块时返回所有模块速查列表，指定模块时返回详细上下文（依赖、约束、CrossWork、历史教训）。支持逗号分隔多个模块。")]
+    public string get_context(
         [Description("要开始工作的模块名，支持逗号分隔多个。留空返回模块速查列表。示例: 'Combat' 或 'Combat,Character'")] string? moduleNames = null)
     {
         var topo = graph.BuildTopology();
@@ -166,7 +142,7 @@ public class KnowledgeTools(
             foreach (var n in topo.Nodes.OrderBy(n => n.Discipline ?? "generic").ThenBy(n => n.Name))
                 sb.AppendLine($"- {n.Name} ({n.Discipline ?? "generic"})");
             sb.AppendLine();
-            sb.AppendLine("提示：调用 begin_task(\"模块名\") 获取详细上下文。");
+            sb.AppendLine("提示：调用 get_context(\"模块名\") 获取详细上下文。");
             return sb.ToString();
         }
 
@@ -427,7 +403,7 @@ public class KnowledgeTools(
         "必填：所属部门(discipline)、路径(path)。" +
         "可选：依赖(dependencies)、职责摘要(summary)、边界模式(boundary)、对外接口(publicApi)、约束规则(constraints)、自定义属性(metadata)。" +
         "如果模块已存在（按 name 匹配）则更新，不存在则创建。注册后系统自动重建拓扑图。" +
-        "结构化属性（boundary/publicApi/constraints）是模块的权威描述，begin_task 时优先展示。" +
+        "结构化属性（boundary/publicApi/constraints）是模块的权威描述，get_context 时优先展示。" +
         "metadata 是自定义扩展字段（如 performanceBudget、gcPolicy），项目可自由定义。")]
     public string register_module(
         [Description("模块名（唯一标识）。示例: 'Combat', 'CharacterSystem', 'UIFramework'")] string name,
