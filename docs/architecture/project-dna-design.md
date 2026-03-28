@@ -1,3 +1,5 @@
+[English Version](./project-dna-design.en.md)
+
 # 工程 DNA 系统（Project DNA）：大道至简，万物归一
 
 > **状态**：设计稿 v1.3 — 2026-03-28
