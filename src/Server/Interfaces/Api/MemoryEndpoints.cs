@@ -37,7 +37,7 @@ public static class MemoryEndpoints
         group.MapGet("/query", (
             string? layers, string? disciplines, string? features,
             string? types, string? tags, string? nodeId, string? freshness,
-            int limit, int offset,
+            int? limit, int? offset,
             IMemoryEngine memory,
             ProjectConfig config) =>
         {
@@ -51,8 +51,8 @@ public static class MemoryEndpoints
                 Tags = SplitOrNull(tags),
                 NodeId = nodeId,
                 Freshness = ParseEnum<FreshnessFilter>(freshness) ?? FreshnessFilter.FreshAndAging,
-                Limit = Math.Clamp(limit > 0 ? limit : 50, 1, 200),
-                Offset = Math.Max(offset, 0)
+                Limit = Math.Clamp(limit is > 0 ? limit.Value : 50, 1, 200),
+                Offset = Math.Max(offset ?? 0, 0)
             };
             return Results.Ok(memory.QueryMemories(filter));
         });
