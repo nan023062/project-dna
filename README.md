@@ -1,6 +1,6 @@
 # Project DNA
 
-**The cognitive engine for your project.**
+**The knowledge engine for AI agents.**
 
 Mem0 remembers conversations. GitNexus reads code syntax. CLAUDE.md stores personal notes.
 **Project DNA understands your entire project** — structure, knowledge, dependencies, constraints, and cross-team collaboration — so AI agents can modify files with full context.
@@ -22,21 +22,21 @@ AI agents are getting better at writing code. But they still lack **project-leve
 
 ## The Solution
 
-Project DNA extracts the **structure, knowledge, and relationships** from your project's file system into a queryable knowledge graph. Agents read the DNA before touching any file.
+Project DNA is a **knowledge server** that stores structure, knowledge, and relationships as a queryable graph. Agents query the server before touching any file.
 
 ```
-File System (thousands of files)
-        ↓ extract
-Project DNA (dozens of knowledge nodes)
-        ↓ serve via MCP
-AI Agent (precise, context-aware file modifications)
+Clients (IDE / CLI / Dashboard)
+        ↓ MCP / HTTP API
+Project DNA Server (knowledge graph + memory)
+        ↓
+AI Agent makes context-aware modifications
 ```
 
 ## Key Concepts
 
 ### One Node Type, All Organizational Forms
 
-Every entity — module, team, department, workspace, cross-functional task force — is the same `KnowledgeNode` with a `NodeType`:
+Every entity — module, team, department, cross-functional task force — is the same `KnowledgeNode` with a `NodeType`:
 
 | NodeType | Software Analogy | Organization Analogy |
 |----------|-----------------|---------------------|
@@ -55,7 +55,7 @@ Every entity — module, team, department, workspace, cross-functional task forc
 
 ### Every Node Carries Knowledge
 
-Each node has a materialized `Knowledge` view — identity, constraints, lessons learned, active tasks. One MCP call returns the full context. No need for multiple queries.
+Each node has a materialized `Knowledge` view — identity, constraints, lessons learned, active tasks. One MCP call returns the full context.
 
 ### Cycles = Merge Signal
 
@@ -63,29 +63,25 @@ Circular dependencies are not violations — they're **restructuring suggestions
 
 ## Architecture
 
-One server per project. Multiple access layers on top of three independent engines:
+The server is a pure knowledge service — it does **not** access project source code. Clients write knowledge via MCP or HTTP API.
 
 ```
 ┌──────────────────────────────────────────────────┐
 │                DNA Server                          │
 │                                                    │
-│  HTTP API   MCP Server   CLI        Dashboard     │
-│  /api/*     /mcp         dna cli    http://host   │
+│  HTTP API    MCP Server    CLI        Dashboard   │
+│  /api/*      /mcp          dna cli    browser     │
 │                                                    │
 │  GraphEngine    MemoryEngine    GovernanceEngine   │
-│  (nodes, edges, (remember,      (cycle detection, │
-│   topology,      recall,         key node warns,  │
-│   context)       query)          freshness)       │
 │                                                    │
 │  Storage: SQLite (single source of truth)          │
 │  Auth: JWT + roles (admin/editor/viewer)           │
-│  Default data: ~/.dna/projects/{projectName}/      │
 └──────────────────────────────────────────────────┘
 ```
 
-- **GraphEngine** — Node/edge CRUD, topology, execution plans, module context
+- **GraphEngine** — Node CRUD, topology, dependency ordering, module context
 - **MemoryEngine** — Knowledge storage & retrieval (vector + FTS + tag + coordinate search)
-- **GovernanceEngine** — Architecture advisor (not rule police): cycle detection, key node warnings, freshness checks
+- **GovernanceEngine** — Architecture advisor: cycle detection, key node warnings, freshness checks
 
 ## Quick Start
 
@@ -99,27 +95,17 @@ dotnet build
 ### 2. Run
 
 ```bash
-# Use current directory as knowledge store
-cd /path/to/dna-store && dna --db
-
-# Specify knowledge store path
-dna --db /path/to/dna-store
-
-# Custom port
-dna --db /path/to/dna-store --port 5052
-
-# Current directory + custom port
-dna --db --port 5051
-
-# stdio mode (launched by IDE)
-dna --stdio --db /path/to/dna-store
+cd /path/to/knowledge-store && dna --db       # current dir as store
+dna --db /path/to/knowledge-store             # specify store path
+dna --db /path/to/store --port 5052           # custom port
+dna --stdio --db /path/to/store               # stdio mode for IDE
 ```
 
-`--db` is required. It specifies where the SQLite database and knowledge data are stored. The server does not access project source code — clients write knowledge via MCP/API.
+`--db` is required. The server stores all data (SQLite) in this directory.
 
-### 3. Connect from Cursor
+### 3. Connect from Cursor / Codex
 
-Create `.cursor/mcp.json` in your project root:
+`.cursor/mcp.json` or `.codex/mcp.json`:
 
 ```json
 {
@@ -131,23 +117,13 @@ Create `.cursor/mcp.json` in your project root:
 }
 ```
 
-For remote servers, use the server's IP and port:
+The server prints its LAN IP on startup — use that for remote connections.
 
-```json
-{
-  "mcpServers": {
-    "project-dna": {
-      "url": "http://192.168.1.100:5051/mcp"
-    }
-  }
-}
-```
+### 4. Dashboard
 
-### 4. Access Dashboard
-
-Open `http://localhost:5051` in your browser. The dashboard provides:
-- Architecture topology visualization (read-only)
-- Memory CRUD (create, search, edit, delete knowledge)
+Open `http://localhost:5051` in your browser:
+- Topology visualization (read-only)
+- Memory CRUD (create, search, edit, delete)
 - LLM configuration and AI chat
 
 ### 5. CLI
@@ -166,11 +142,10 @@ dna cli stats                           # Knowledge base statistics
 
 | Tool | Description |
 |------|-------------|
-| `get_project_identity` | Verify project binding (mandatory first call) |
-| `get_topology` | Full project structure overview |
-| `begin_task` | Get module context before modifying files |
-| `find_modules` | Search nodes by keyword |
-| `get_execution_plan` | Topological sort for multi-module changes |
+| `get_topology` | Full knowledge graph overview |
+| `get_context` | Get module context (constraints, dependencies, CrossWork, lessons) |
+| `search_modules` | Search nodes by keyword |
+| `get_dependency_order` | Topological sort for multi-module changes |
 | `register_module` | Add a knowledge node |
 | `register_crosswork` | Declare cross-team collaboration |
 | `validate_architecture` | Architecture health check |
@@ -183,10 +158,13 @@ dna cli stats                           # Knowledge base statistics
 | `recall` | Semantic search across knowledge base |
 | `batch_remember` | Bulk knowledge ingestion |
 | `query_memories` | Structured query with filters |
+| `get_memory` | Get full memory entry by ID |
+| `get_memory_stats` | Knowledge base statistics |
+| `verify_memory` | Confirm a memory is still valid |
+| `update_memory` | Update existing memory |
+| `delete_memory` | Delete a memory |
 
 ## Ecosystem (Planned)
-
-Project DNA is designed as an extensible platform:
 
 | Extension Type | What community contributes |
 |---------------|---------------------------|
@@ -219,7 +197,7 @@ Read the full design document: [docs/architecture/project-dna-design.md](docs/ar
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on creating templates, scanners, and governance rules.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
