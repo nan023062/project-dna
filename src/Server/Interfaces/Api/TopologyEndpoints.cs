@@ -19,13 +19,12 @@ public static class TopologyEndpoints
     {
         var api = app.MapGroup("/api");
 
-        api.MapGet("/topology", (IGraphEngine graph, ProjectConfig config) =>
+        api.MapGet("/topology", (IGraphEngine graph) =>
         {
             var topo = graph.BuildTopology();
 
             return Results.Json(new
             {
-                projectRoot = config.DefaultProjectRoot,
                 modules = topo.Nodes.Select(m =>
                 {
                     var nameCount = topo.Nodes.Count(o =>

@@ -1,6 +1,6 @@
 /**
- * 启动模块 — 直接进入主界面，不需要项目选择。
- * 每个 Server 实例绑定一个固定项目。
+ * 启动模块 — 直接进入主界面。
+ * Server 是纯知识服务，无需项目配置。
  */
 
 import { $, api } from './utils.js';
@@ -8,25 +8,13 @@ import { enterApp } from './app.js';
 
 export async function initSetup() {
   try {
-    const config = await api('/config');
-    if (config.configured) {
-      enterApp(config.projectRoot);
-    } else {
-      $('statusText').textContent = '服务器未配置项目，请通过命令行 --project 参数启动。';
-    }
+    const status = await api('/status');
+    enterApp(`知识库 · ${status.moduleCount} 个模块`);
   } catch (e) {
     $('statusText').textContent = '连接失败: ' + e.message;
   }
 }
 
-export function showSetup() {
-  // no-op: 不再有项目选择页
-}
-
-export async function setProject() {
-  // no-op
-}
-
-export function openProjectBrowser() {
-  // no-op
-}
+export function showSetup() {}
+export async function setProject() {}
+export function openProjectBrowser() {}
