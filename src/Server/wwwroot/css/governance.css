@@ -1,0 +1,19 @@
+.gov-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.gov-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.gov-section .desc {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+}

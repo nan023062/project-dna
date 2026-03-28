@@ -1,0 +1,18 @@
+namespace Dna.Interfaces.Api;
+
+/// <summary>
+/// 统一 REST API 路由注册入口
+/// 各领域 Endpoint 分文件实现，此处仅负责组装
+/// </summary>
+public static class ApiEndpoints
+{
+    public static void MapApiEndpoints(this WebApplication app, DateTime startedAt)
+    {
+        app.MapStatusEndpoints(startedAt);
+        app.MapTopologyEndpoints();
+        app.MapConfigEndpoints();
+        app.MapMemoryEndpoints();
+        app.MapModuleManagementEndpoints();
+        app.MapFileTreeEndpoints();
+    }
+}

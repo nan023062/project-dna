@@ -1,0 +1,26 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vs/
+.vscode/
+.cursor/
+
+# Build outputs
+bin/
+obj/
+publish/
+
+# Node
+node_modules/
+
+# DNA runtime data (user-specific, not versioned)
+.dna/memory/
+.dna/project.json
+*.db
+
+# Secrets
+.env
+*.pfx

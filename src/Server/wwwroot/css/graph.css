@@ -1,0 +1,222 @@
+/* ═══════════════════════════════════════
+   图形拓扑视图样式
+   ═══════════════════════════════════════ */
+
+/* 拓扑面板：图形铺满，统计悬浮在左上角 */
+#panelTopology.active {
+  display: flex !important;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+#panelTopology .summary-bar {
+  position: absolute;
+  top: 8px; left: 12px;
+  z-index: 10;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+}
+#panelTopology .summary-bar .stat {
+  pointer-events: auto;
+  background: #12122acc;
+  backdrop-filter: blur(6px);
+  padding: 6px 12px;
+  min-width: 80px;
+  border: 1px solid #1e1e3a;
+}
+#panelTopology .summary-bar .stat .val {
+  font-size: 18px;
+  line-height: 1.1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#panelTopology .summary-bar .stat .lbl { font-size: 11px; }
+#panelTopology .arch-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.graph-container {
+  flex: 1;
+  min-height: 0;
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 50%, #0e0e1f 0%, #08081a 100%);
+}
+
+.graph-container::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right,  #ffffff06 1px, transparent 1px),
+    linear-gradient(to bottom, #ffffff06 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+.graph-container::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(to right,  #ffffff0a 1px, transparent 1px),
+    linear-gradient(to bottom, #ffffff0a 1px, transparent 1px);
+  background-size: 200px 200px;
+  pointer-events: none;
+}
+
+.graph-svg {
+  display: block; width: 100%; height: 100%;
+  cursor: grab;
+}
+.graph-svg:active { cursor: grabbing; }
+
+.graph-loading, .graph-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: #64748b; font-size: 14px;
+}
+
+/* ── 部门子图 ── */
+.graph-group-bg {
+  fill: #12122a80;
+  stroke: #1e1e3a;
+  stroke-width: 1.5;
+}
+
+.graph-group-label {
+  fill: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── 模块节点 ── */
+.graph-node { cursor: pointer; }
+
+.graph-node-rect {
+  fill: #1a1a38;
+  stroke: #2a2a4e;
+  stroke-width: 1.5;
+  transition: fill .15s, stroke .15s, filter .15s;
+}
+
+.graph-node:hover .graph-node-rect {
+  fill: #222248;
+  stroke: #4ade80;
+  filter: drop-shadow(0 0 8px #4ade8040);
+}
+.graph-node.selected .graph-node-rect {
+  stroke: #4ade80;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 12px #4ade8060);
+}
+.graph-node.connected .graph-node-rect {
+  stroke: #60a5fa;
+  filter: drop-shadow(0 0 6px #60a5fa40);
+}
+.graph-node.dimmed .graph-node-rect {
+  fill: #0e0e1f;
+  stroke: #1a1a30;
+  opacity: 0.4;
+}
+.graph-node.dimmed .graph-node-text,
+.graph-node.dimmed .graph-layer-badge {
+  opacity: 0.3;
+}
+
+/* 层级色编码 */
+.graph-node-rect.layer-0 { stroke-color: #4ade80; fill: #1a2a22; }
+.graph-node-rect.layer-1 { fill: #1a2035; }
+.graph-node-rect.layer-2 { fill: #1f1a30; }
+.graph-node-rect.layer-3 { fill: #25192a; }
+.graph-node-rect.layer-4 { fill: #2a1925; }
+
+.graph-node-text {
+  fill: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.graph-layer-badge {
+  fill: #4a4a6a;
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: end;
+  pointer-events: none;
+}
+
+/* ── 依赖边 ── */
+.graph-edge {
+  fill: none;
+  stroke-width: 1.5;
+  transition: opacity .15s;
+}
+.graph-edge-cycle {
+  stroke-dasharray: 8, 4;
+  animation: dash-flow 1s linear infinite;
+}
+@keyframes dash-flow {
+  to { stroke-dashoffset: -12; }
+}
+.graph-edge.dimmed-edge { opacity: 0.12; }
+.graph-edge.highlight-edge { opacity: 1; stroke-width: 2.5; }
+
+/* ── 视图切换工具栏 ── */
+.topo-view-toggle {
+  display: inline-flex; gap: 2px;
+  background: #12122a;
+  border: 1px solid #1e1e3a;
+  border-radius: 6px;
+  padding: 2px;
+  margin-left: 12px;
+}
+.topo-view-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+}
+.topo-view-btn:hover { color: #e2e8f0; background: #1e1e3a; }
+.topo-view-btn.active {
+  background: #2a2a4e;
+  color: #4ade80;
+}
+
+/* ── 图例 ── */
+.graph-legend {
+  position: absolute;
+  bottom: 12px; left: 12px;
+  display: flex; gap: 12px;
+  padding: 6px 12px;
+  background: #0e0e1fcc;
+  border: 1px solid #1e1e3a;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #64748b;
+  pointer-events: none;
+}
+.graph-legend-item {
+  display: flex; align-items: center; gap: 4px;
+}
+.graph-legend-line {
+  width: 20px; height: 2px;
+  border-radius: 1px;
+}
+.graph-legend-line.normal { background: #4ade80; }
+.graph-legend-line.cross { background: #60a5fa; }
+.graph-legend-line.cycle { background: #f87171; }

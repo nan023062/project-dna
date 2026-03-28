@@ -1,0 +1,9 @@
+.toolbar { padding: 10px 16px; background: #12122a; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #1e1e3a; }
+.toolbar .brand { font-weight: 700; font-size: 15px; color: #4ade80; letter-spacing: 0.5px; white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 20px; background: #2a2a4e; }
+.toolbar .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 2s infinite; flex-shrink: 0; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.toolbar .path { color: #94a3b8; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 400px; cursor: pointer; }
+.toolbar .path:hover { color: #e2e8f0; }
+.toolbar .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.toolbar .tag { font-size: 11px; color: #64748b; background: #0a0a14; padding: 3px 8px; border-radius: 4px; font-family: monospace; }

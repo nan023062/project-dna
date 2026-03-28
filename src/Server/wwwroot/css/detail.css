@@ -1,0 +1,149 @@
+.detail-panel { background: #12122a; border-radius: 6px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.detail-header { padding: 14px 16px 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.detail-header h2 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; }
+.detail-maintainer { color: #64748b; font-size: 13px; }
+.detail-deps { color: #64748b; font-size: 12px; margin-left: auto; }
+
+.memory-tabs { display: flex; gap: 0; padding: 10px 16px 0; border-bottom: 1px solid #1e1e3a; }
+.memory-tab { padding: 8px 14px; font-size: 13px; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap; user-select: none; position: relative; }
+.memory-tab:hover { color: #e2e8f0; }
+.memory-tab.active { color: #4ade80; border-bottom-color: #4ade80; }
+.memory-tab.missing { opacity: .4; }
+.memory-tab.dirty::after { content: '●'; position: absolute; top: 4px; right: 2px; font-size: 8px; color: #fbbf24; }
+
+.memory-editor-wrap { flex: 1; padding: 0 16px; overflow: hidden; display: flex; min-height: 0; }
+.memory-editor-wrap textarea {
+  flex: 1; width: 100%; resize: none; border: none; outline: none;
+  background: #0a0a14; color: #e2e8f0; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px; line-height: 1.6; padding: 12px; border-radius: 6px; margin: 8px 0;
+  tab-size: 2;
+}
+.memory-editor-wrap textarea::placeholder { color: #4a4a6a; }
+
+/* identity.md 结构化表单 */
+.memory-form { flex: 1; overflow: hidden; padding: 12px 16px; min-height: 0; display: flex; flex-direction: column; }
+.memory-form .form-group { margin-bottom: 10px; flex-shrink: 0; }
+.memory-form .form-group.flex-fill { flex: 1; display: flex; flex-direction: column; min-height: 60px; margin-bottom: 8px; }
+.memory-form .form-group.flex-fill textarea.form-input { flex: 1; height: 0; min-height: 0; resize: none; overflow-y: auto; }
+.memory-form .form-label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; }
+.memory-form .form-input {
+  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #2a2a4e;
+  background: #0a0a14; color: #e2e8f0; font-size: 13px; outline: none; box-sizing: border-box;
+}
+.memory-form .form-input:focus { border-color: #4ade80; }
+.memory-form select.form-input { cursor: pointer; appearance: auto; }
+.memory-form textarea.form-input {
+  resize: vertical; min-height: 80px; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  line-height: 1.6; tab-size: 2;
+}
+.memory-form .form-row { display: flex; gap: 12px; }
+.memory-form .form-row .form-group { flex: 1; }
+
+/* links.md tag 输入 */
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tag-item {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px;
+  background: #1e1e3a; border-radius: 14px; font-size: 13px; color: #e2e8f0;
+}
+.tag-item.tag-invalid { border: 1px dashed #ef4444; opacity: .7; }
+.tag-item.tag-inherited {
+  background: #6b728020; color: #9ca3af; cursor: pointer;
+  border: 1px dashed #6b728040;
+}
+.tag-item.tag-inherited:hover { background: #6b728030; color: #d1d5db; }
+.tag-item .tag-remove {
+  cursor: pointer; color: #64748b; font-size: 14px; line-height: 1;
+  border: none; background: none; padding: 0 2px;
+}
+.tag-item .tag-remove:hover { color: #ef4444; }
+.tag-input-wrap { position: relative; }
+
+/* 模块搜索下拉 */
+.dep-select-wrap { position: relative; }
+.dep-dropdown {
+  display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 20;
+  background: #12122a; border: 1px solid #2a2a4e; border-radius: 6px;
+  max-height: 200px; overflow-y: auto; margin-top: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.dep-dropdown.open { display: block; }
+.dep-dropdown-item {
+  padding: 8px 12px; font-size: 13px; color: #e2e8f0; cursor: pointer;
+  transition: background .1s;
+}
+.dep-dropdown-item:hover { background: #1e1e3a; }
+.dep-dropdown-empty { padding: 10px 12px; font-size: 12px; color: #4a4a6a; text-align: center; }
+
+/* 依赖面板 */
+.dep-section-label { font-size: 13px !important; font-weight: 500; }
+.dep-section-out { color: #4ade80 !important; }
+.dep-section-in { color: #60a5fa !important; }
+.dep-divider { border-top: 1px solid #1e1e3a; margin: 8px 0 12px; }
+
+.dep-empty { font-size: 12px; color: #4a4a6a; padding: 8px 0; }
+.dep-list { display: flex; flex-direction: column; gap: 4px; }
+.dep-list-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 6px; cursor: pointer; transition: background .1s;
+}
+.dep-list-item:hover { background: #1a1a35; }
+.dep-item-target { border-left: 3px solid #4ade80; }
+.dep-item-source { border-left: 3px solid #60a5fa; }
+.dep-item-reverse { border-left-color: #ef4444; }
+.dep-list-icon { font-size: 14px; flex-shrink: 0; }
+.dep-list-name { font-size: 13px; color: #e2e8f0; font-weight: 500; }
+.dep-list-type { font-size: 11px; color: #4a4a6a; margin-left: auto; }
+
+.memory-save-bar { padding: 10px 16px; border-top: 1px solid #1e1e3a; display: flex; align-items: center; gap: 10px; }
+.memory-status { font-size: 12px; flex: 1; }
+.memory-status.unsaved { color: #fbbf24; }
+.memory-status.saving { color: #60a5fa; }
+.memory-status.saved { color: #4ade80; }
+.memory-status.error { color: #ef4444; }
+
+.app { display: none; height: 100%; flex: 1; min-width: 0; }
+.app.active { display: flex; flex-direction: column; }
+
+.tabs { display: flex; gap: 0; background: #12122a; border-bottom: 1px solid #1e1e3a; padding: 0 16px; }
+.tab { padding: 10px 20px; font-size: 13px; color: #64748b; cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+.tab:hover { color: #e2e8f0; }
+.tab.active { color: #4ade80; border-bottom-color: #4ade80; }
+
+.panels { flex: 1; overflow: hidden; }
+.panel { display: none; height: 100%; overflow: auto; padding: 16px; }
+.panel.active { display: block; }
+#panelDetail.active { display: flex; flex-direction: column; }
+#panelDetail #detailContent { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* delete modal */
+.delete-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
+.delete-modal-overlay.open { display: flex; }
+.delete-modal { background: #12122a; border: 1px solid #1e1e3a; border-radius: 12px; width: 440px; padding: 20px; }
+.delete-modal h3 { font-size: 15px; margin: 0 0 14px; }
+.delete-modal .delete-info { font-size: 13px; color: #94a3b8; margin-bottom: 16px; line-height: 1.6; }
+.delete-modal .delete-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.delete-modal .delete-option { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 8px; cursor: pointer; border: 1px solid #2a2a4e; transition: all .15s; }
+.delete-modal .delete-option:hover { border-color: #4a4a6a; }
+.delete-modal .delete-option.selected { border-color: #ef4444; background: #ef444410; }
+.delete-modal .delete-option input[type="radio"] { margin-top: 2px; accent-color: #ef4444; }
+.delete-modal .delete-option-label { font-size: 13px; color: #e2e8f0; }
+.delete-modal .delete-option-desc { font-size: 12px; color: #64748b; }
+.delete-modal .delete-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.delete-modal .btn-danger { background: #ef4444; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.delete-modal .btn-danger:hover { background: #dc2626; }
+
+/* ── 只读 DNA 展示（raw fallback） ── */
+.memory-readonly {
+  flex: 1; margin: 12px 0; padding: 16px;
+  background: #0d0d1a; border-radius: 6px; border: 1px solid #1e1e3a;
+  color: #e2e8f0; font-family: 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 13px; line-height: 1.6;
+  overflow: auto; white-space: pre-wrap; word-break: break-word;
+}
+
+/* ── Markdown 渲染展示（布局容器，排版由 github-markdown-dark.css 控制） ── */
+.memory-rendered {
+  flex: 1; margin: 12px 0; padding: 20px 24px;
+  background: #0d0d1a; border-radius: 6px; border: 1px solid #1e1e3a;
+  overflow: auto; text-align: left;
+}
