@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Dna.Core.Config;
 using Dna.Knowledge;
 using Microsoft.AspNetCore.Mvc;
 
@@ -34,13 +33,11 @@ public static class GraphEndpoints
         api.MapGet("/search", (
             [FromQuery] string q,
             [FromQuery] int maxResults,
-            IGraphEngine graph,
-            ProjectConfig config) =>
+            IGraphEngine graph) =>
         {
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
                 return Results.Json(new { error = "query 至少 2 个字符" }, statusCode: 400);
 
-            EnsureGraph(graph, config);
             graph.BuildTopology();
 
             var query = q.Trim().ToLowerInvariant();
@@ -70,14 +67,11 @@ public static class GraphEndpoints
             [FromQuery] string target,
             [FromQuery] string? current,
             [FromQuery] string? activeModules,
-            IGraphEngine graph,
-            IProjectAdapter adapter,
-            ProjectConfig config) =>
+            IGraphEngine graph) =>
         {
             if (string.IsNullOrWhiteSpace(target))
                 return Results.Json(new { error = "target 不能为空" }, statusCode: 400);
 
-            EnsureGraph(graph, config);
             graph.BuildTopology();
 
             var active = string.IsNullOrWhiteSpace(activeModules) ? null
@@ -85,9 +79,6 @@ public static class GraphEndpoints
             var cur = string.IsNullOrWhiteSpace(current) ? target : current;
 
             var context = graph.GetModuleContext(target, cur, active);
-            var roleId = graph.GetDisciplineRoleId(target) ?? "coder";
-            var formatted = adapter.GetInterpreter(roleId).InterpretContext(context);
-
             var crossWorks = graph.GetCrossWorksForModule(target);
 
             return Results.Json(new
@@ -106,18 +97,14 @@ public static class GraphEndpoints
                         p.Contract,
                         p.Deliverable
                     })
-                }),
-                formatted
+                })
             }, JsonOpts);
         });
 
         api.MapPost("/begin-task", (
             [FromBody] BeginTaskRequest request,
-            IGraphEngine graph,
-            IProjectAdapter adapter,
-            ProjectConfig config) =>
+            IGraphEngine graph) =>
         {
-            EnsureGraph(graph, config);
             var topo = graph.BuildTopology();
 
             if (request.ModuleNames == null || request.ModuleNames.Count == 0)
@@ -147,13 +134,7 @@ public static class GraphEndpoints
             var contexts = request.ModuleNames.Select(name =>
             {
                 var ctx = graph.GetModuleContext(name, current, request.ModuleNames);
-                var roleId = graph.GetDisciplineRoleId(name) ?? "coder";
-                return new
-                {
-                    module = name,
-                    context = ctx,
-                    formatted = adapter.GetInterpreter(roleId).InterpretContext(ctx)
-                };
+                return new { module = name, context = ctx };
             }).ToList();
 
             var crossWorks = request.ModuleNames
@@ -176,10 +157,6 @@ public static class GraphEndpoints
 
             return Results.Json(new { contexts, crossWorks }, JsonOpts);
         });
-    }
-
-    private static void EnsureGraph(IGraphEngine graph, ProjectConfig config)
-    {
     }
 
     private static double ScoreModule(KnowledgeNode module, string q)
