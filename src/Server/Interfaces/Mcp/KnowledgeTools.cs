@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Dna.Core.Config;
 using Dna.Core.Logging;
 using Dna.Knowledge;
 using Dna.Knowledge.Models;
@@ -18,32 +17,8 @@ namespace Dna.Interfaces.Mcp;
 public class KnowledgeTools(
     IGraphEngine graph,
     IGovernanceEngine governance,
-    IProjectAdapter adapter,
-    ProjectConfig config,
     ILogger<KnowledgeTools> logger)
 {
-    // ═══════════════════════════════════════════
-    //  项目身份
-    // ═══════════════════════════════════════════
-
-    [McpServerTool, Description(
-        "MANDATORY first call — 返回当前服务端绑定的目标项目信息（项目名、根路径）。" +
-        "你 MUST 在使用任何其他知识图谱工具之前先调用此工具，将返回的 projectRoot 与你当前工作区路径进行比对。" +
-        "如果你的工作区路径不在返回的 projectRoot 之下，说明你连接的不是本项目的知识库，MUST 停止使用所有知识工具（begin_task/recall/remember 等），" +
-        "并告知用户：当前工作区与知识库所属项目不匹配，知识读写已阻断。" +
-        "When to call: ALWAYS as the very first tool call in any conversation, before begin_task or recall.")]
-    public string get_project_identity()
-    {
-        logger.LogInformation(LogEvents.Mcp, "get_project_identity()");
-        if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-            return "⚠ 服务端尚未配置目标项目。请在 Dashboard 中选择项目后再试。";
-
-        var root = config.DefaultProjectRoot;
-        var name = Path.GetFileName(root);
-        return $"## 项目身份\n- 项目名: {name}\n- 项目根路径: {root}\n\n" +
-               "请确认你的工作区路径在此项目根路径之下。如果不匹配，请停止使用所有知识工具。";
-    }
-
     // ═══════════════════════════════════════════
     //  拓扑 & 查询
     // ═══════════════════════════════════════════
@@ -53,11 +28,9 @@ public class KnowledgeTools(
         "适用于：首次了解项目整体结构、查看模块间依赖关系。" +
         "返回内容包含部门→模块的树状结构。" +
         "如果只需要查看单个模块的详细信息，请用 get_module_context 或 begin_task。")]
-    public string get_topology(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string get_topology()
     {
         logger.LogInformation(LogEvents.Mcp, "get_topology()");
-        EnsureKnowledge(projectRoot);
         var topo = graph.BuildTopology();
 
         var sb = new StringBuilder();
@@ -88,11 +61,9 @@ public class KnowledgeTools(
         "适用于：需要按正确顺序修改多个有依赖关系的模块时（如重构涉及多模块），确定先改哪个后改哪个。" +
         "如果检测到循环依赖会在结果中标注。")]
     public string get_execution_plan(
-        [Description("模块名列表，逗号分隔。示例: 'Combat,Character,UI'")] string moduleNames,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("模块名列表，逗号分隔。示例: 'Combat,Character,UI'")] string moduleNames)
     {
         logger.LogInformation(LogEvents.Mcp, "get_execution_plan() modules={Modules}", moduleNames);
-        EnsureKnowledge(projectRoot);
         graph.BuildTopology();
 
         var names = SplitCsv(moduleNames);
@@ -118,11 +89,9 @@ public class KnowledgeTools(
         "与 recall 的区别：find_modules 搜索模块注册信息，recall 搜索记忆内容。")]
     public string find_modules(
         [Description("搜索关键词，至少 2 个字符。示例: 'combat'、'UI'、'network'")] string query,
-        [Description("最多返回条数（默认 8，上限 20）")] int maxResults = 8,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("最多返回条数（默认 8，上限 20）")] int maxResults = 8)
     {
         logger.LogInformation(LogEvents.Mcp, "find_modules() query={Query}", query);
-        EnsureKnowledge(projectRoot);
         graph.BuildTopology();
 
         var q = query.Trim().ToLowerInvariant();
@@ -164,18 +133,15 @@ public class KnowledgeTools(
     public string get_module_context(
         [Description("目标模块名")] string targetModule,
         [Description("当前所在模块名（影响协作规则判断，留空则默认与 target 相同）")] string? currentModule = null,
-        [Description("当前工作涉及的其他模块，逗号分隔（影响协作规则展示）")] string? activeModules = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("当前工作涉及的其他模块，逗号分隔（影响协作规则展示）")] string? activeModules = null)
     {
         logger.LogInformation(LogEvents.Mcp, "get_module_context() target={Target}", targetModule);
-        EnsureKnowledge(projectRoot);
         graph.BuildTopology();
 
         var active = string.IsNullOrWhiteSpace(activeModules) ? null : SplitCsv(activeModules);
         var current = string.IsNullOrWhiteSpace(currentModule) ? targetModule : currentModule;
-        var context = graph.GetModuleContext(targetModule, current, active);
-        var roleId = graph.GetDisciplineRoleId(targetModule) ?? "coder";
-        return adapter.GetInterpreter(roleId).InterpretContext(context);
+        var ctx = graph.GetModuleContext(targetModule, current, active);
+        return FormatModuleContext(ctx);
     }
 
     [McpServerTool, Description(
@@ -186,10 +152,8 @@ public class KnowledgeTools(
         "支持同时指定多个模块（逗号分隔），适用于跨模块修改场景。" +
         "When to call: ALWAYS before modifying any project files (code, config, docs, assets, design data). If unsure which module, call with no arguments first to get the module list.")]
     public string begin_task(
-        [Description("要开始工作的模块名，支持逗号分隔多个。留空返回模块速查列表。示例: 'Combat' 或 'Combat,Character'")] string? moduleNames = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("要开始工作的模块名，支持逗号分隔多个。留空返回模块速查列表。示例: 'Combat' 或 'Combat,Character'")] string? moduleNames = null)
     {
-        EnsureKnowledge(projectRoot);
         var topo = graph.BuildTopology();
 
         if (string.IsNullOrWhiteSpace(moduleNames))
@@ -215,8 +179,7 @@ public class KnowledgeTools(
         foreach (var name in names)
         {
             var ctx = graph.GetModuleContext(name, current, names);
-            var roleId = graph.GetDisciplineRoleId(name) ?? "coder";
-            result.AppendLine(adapter.GetInterpreter(roleId).InterpretContext(ctx));
+            result.AppendLine(FormatModuleContext(ctx));
             result.AppendLine("\n---\n");
         }
 
@@ -254,11 +217,9 @@ public class KnowledgeTools(
         "孤儿节点（无连接的模块）、CrossWork 声明问题、依赖偏差、关键节点预警。" +
         "适用于：重构前评估架构健康度、定期架构巡检、提交前检查是否引入新问题。" +
         "返回详细的问题清单和修复建议。如果架构健康则返回通过提示。")]
-    public string validate_architecture(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string validate_architecture()
     {
         logger.LogInformation(LogEvents.Mcp, "validate_architecture()");
-        EnsureKnowledge(projectRoot);
         graph.BuildTopology();
 
         var report = governance.ValidateArchitecture();
@@ -339,11 +300,9 @@ public class KnowledgeTools(
         "适用于：了解某个模块参与了哪些跨模块协作、查看协作接口契约。" +
         "可按模块名过滤，留空返回全部 CrossWork。")]
     public string list_crossworks(
-        [Description("按模块名过滤，只返回该模块参与的 CrossWork。留空返回全部")] string? moduleName = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("按模块名过滤，只返回该模块参与的 CrossWork。留空返回全部")] string? moduleName = null)
     {
         logger.LogInformation(LogEvents.Mcp, "list_crossworks() module={Module}", moduleName ?? "(all)");
-        EnsureKnowledge(projectRoot);
         graph.BuildTopology();
 
         var crossWorks = string.IsNullOrWhiteSpace(moduleName)
@@ -398,11 +357,9 @@ public class KnowledgeTools(
         "查看项目的完整架构清单：所有部门、已注册模块、CrossWork 声明。" +
         "这是了解项目架构骨架的入口。返回 JSON 格式的完整 manifest。" +
         "适用于：首次了解项目有哪些部门和模块、检查架构是否已配置、灌入架构前查看现状。")]
-    public string get_manifest(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string get_manifest()
     {
         logger.LogInformation(LogEvents.Mcp, "get_manifest()");
-        EnsureKnowledge(projectRoot);
         var arch = graph.GetArchitecture();
         var manifest = graph.GetModulesManifest();
 
@@ -426,11 +383,9 @@ public class KnowledgeTools(
     [McpServerTool, Description(
         "查看所有已定义的部门。返回部门 ID、显示名、角色 ID 和模块数量。" +
         "适用于：注册模块前确认目标部门。")]
-    public string list_disciplines(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string list_disciplines()
     {
         logger.LogInformation(LogEvents.Mcp, "list_disciplines()");
-        EnsureKnowledge(projectRoot);
         var arch = graph.GetArchitecture();
         var manifest = graph.GetModulesManifest();
 
@@ -455,11 +410,9 @@ public class KnowledgeTools(
     public string register_discipline(
         [Description("部门 ID（小写英文）。示例: 'gameplay', 'ui', 'network'")] string id,
         [Description("部门显示名。示例: '游戏逻辑', 'UI框架', '网络层'")] string displayName,
-        [Description("角色 ID，决定使用哪个上下文解释器（默认 coder）。可选: coder/designer/artist/ta")] string roleId = "coder",
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("角色 ID，决定使用哪个上下文解释器（默认 coder）。可选: coder/designer/artist/ta")] string roleId = "coder")
     {
         logger.LogInformation(LogEvents.Mcp, "register_discipline() id={Id}", id);
-        EnsureKnowledge(projectRoot);
 
         var trimmedId = id.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(trimmedId))
@@ -486,11 +439,9 @@ public class KnowledgeTools(
         [Description("对外接口列表，逗号分隔。示例: 'IDamageCalculator,ICombatEvents'")] string? publicApi = null,
         [Description("约束规则列表，逗号分隔。示例: '禁止外部直接修改伤害公式,所有调用走 EventSystem'")] string? constraints = null,
         [Description("自定义扩展属性 JSON: {\"performanceBudget\":\"2ms\",\"gcPolicy\":\"zero-alloc\"}")] string? metadata = null,
-        [Description("维护者（可选）")] string? maintainer = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("维护者（可选）")] string? maintainer = null)
     {
         logger.LogInformation(LogEvents.Mcp, "register_module() name={Name} disc={Disc}", name, discipline);
-        EnsureKnowledge(projectRoot);
 
         if (string.IsNullOrWhiteSpace(name))
             return "错误：模块名不能为空";
@@ -550,11 +501,9 @@ public class KnowledgeTools(
         "删除一个已注册的模块。删除后自动重建拓扑图。" +
         "注意：如果其他模块依赖此模块，删除后这些依赖会变为悬空引用（validate_architecture 会检测到）。")]
     public string delete_module(
-        [Description("要删除的模块名")] string name,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("要删除的模块名")] string name)
     {
         logger.LogInformation(LogEvents.Mcp, "delete_module() name={Name}", name);
-        EnsureKnowledge(projectRoot);
 
         if (string.IsNullOrWhiteSpace(name))
             return "错误：模块名不能为空";
@@ -577,11 +526,9 @@ public class KnowledgeTools(
         [Description("CrossWork 名称。示例: '角色换装', '战斗结算'")] string name,
         [Description("参与者 JSON 数组: [{\"moduleName\":\"模块名\",\"role\":\"职责\",\"contract\":\"接口\",\"deliverable\":\"交付物\"}]")] string participants,
         [Description("描述（可选）")] string? description = null,
-        [Description("关联的业务系统 Feature（可选）。示例: 'character'")] string? feature = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("关联的业务系统 Feature（可选）。示例: 'character'")] string? feature = null)
     {
         logger.LogInformation(LogEvents.Mcp, "register_crosswork() name={Name}", name);
-        EnsureKnowledge(projectRoot);
 
         if (string.IsNullOrWhiteSpace(name))
             return "错误：CrossWork 名称不能为空";
@@ -613,11 +560,9 @@ public class KnowledgeTools(
     [McpServerTool, Description(
         "删除一个 CrossWork 声明。删除后自动重建拓扑图。")]
     public string delete_crosswork(
-        [Description("CrossWork 的 ID 或名称")] string id,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("CrossWork 的 ID 或名称")] string id)
     {
         logger.LogInformation(LogEvents.Mcp, "delete_crosswork() id={Id}", id);
-        EnsureKnowledge(projectRoot);
 
         if (string.IsNullOrWhiteSpace(id))
             return "错误：CrossWork ID 不能为空";
@@ -634,9 +579,16 @@ public class KnowledgeTools(
     //  内部
     // ═══════════════════════════════════════════
 
-    private void EnsureKnowledge(string? projectRoot)
+    private static string FormatModuleContext(ModuleContext ctx)
     {
-        // 引擎在 Server 启动时已通过 OnStarted 初始化，此处为空操作
+        var sb = new StringBuilder();
+        sb.AppendLine($"## {ctx.ModuleName} ({ctx.Discipline ?? "generic"})");
+        if (!string.IsNullOrWhiteSpace(ctx.Summary)) sb.AppendLine($"职责: {ctx.Summary}");
+        if (!string.IsNullOrWhiteSpace(ctx.Boundary)) sb.AppendLine($"边界: {ctx.Boundary}");
+        if (ctx.Constraints is { Count: > 0 }) sb.AppendLine($"约束: {string.Join("; ", ctx.Constraints)}");
+        if (!string.IsNullOrWhiteSpace(ctx.IdentityContent)) sb.AppendLine($"\n{ctx.IdentityContent}");
+        if (!string.IsNullOrWhiteSpace(ctx.LessonsContent)) sb.AppendLine($"\n{ctx.LessonsContent}");
+        return sb.ToString();
     }
 
     private static List<string> SplitCsv(string csv) =>

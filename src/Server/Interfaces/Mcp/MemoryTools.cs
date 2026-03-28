@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Dna.Core.Config;
 using Dna.Core.Logging;
 using Dna.Knowledge;
 using Dna.Knowledge.Models;
@@ -18,7 +17,6 @@ namespace Dna.Interfaces.Mcp;
 [McpServerToolType]
 public class MemoryTools(
     IMemoryEngine memory,
-    ProjectConfig config,
     ILogger<MemoryTools> logger)
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -58,11 +56,9 @@ public class MemoryTools(
         [Description("关联业务系统，逗号分隔: 如 character,building")] string? features = null,
         [Description("所属节点 ID")] string? nodeId = null,
         [Description("上层约束记忆 ID（用于约束链）")] string? parentId = null,
-        [Description("重要度 0.0-1.0")] double importance = 0.5,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("重要度 0.0-1.0")] double importance = 0.5)
     {
         logger.LogInformation(LogEvents.Mcp, "remember() type={Type} layer={Layer}", type, layer);
-        EnsureKnowledge(projectRoot);
 
         if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
             return $"错误：无效的记忆类型 '{type}'。可选值: Structural, Semantic, Episodic, Working, Procedural";
@@ -109,11 +105,9 @@ public class MemoryTools(
         [Description("精确匹配标签，逗号分隔")] string? tags = null,
         [Description("限定知识层级，逗号分隔: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string? layers = null,
         [Description("是否展开约束链")] bool expandChain = true,
-        [Description("最多返回条数")] int maxResults = 10,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("最多返回条数")] int maxResults = 10)
     {
         logger.LogInformation(LogEvents.Mcp, "recall() q=\"{Question}\"", question);
-        EnsureKnowledge(projectRoot);
 
         try
         {
@@ -148,11 +142,9 @@ public class MemoryTools(
         "确认一条记忆仍然有效，重置其鲜活度为 Fresh。" +
         "AI 在使用某条记忆并确认其仍正确时调用，使有效知识保持新鲜。")]
     public string verify_memory(
-        [Description("记忆 ID")] string memoryId,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("记忆 ID")] string memoryId)
     {
         logger.LogInformation(LogEvents.Mcp, "verify_memory() id={Id}", memoryId);
-        EnsureKnowledge(projectRoot);
         var entry = memory.GetMemoryById(memoryId);
         if (entry == null)
             return $"错误：记忆不存在 [{memoryId}]";
@@ -166,11 +158,9 @@ public class MemoryTools(
         "返回该系统在所有职能域（程序/策划/美术/TA/音频/DevOps/QA）的知识，以及跨职能协议。" +
         "参数 featureId：业务系统 ID，如 character、building、fishing。")]
     public string get_feature_knowledge(
-        [Description("业务系统 ID，如 character、building、fishing")] string featureId,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("业务系统 ID，如 character、building、fishing")] string featureId)
     {
         logger.LogInformation(LogEvents.Mcp, "get_feature_knowledge() feature={Feature}", featureId);
-        EnsureKnowledge(projectRoot);
         var summary = memory.GetFeatureSummary(featureId);
         return FormatFeatureSummary(summary);
     }
@@ -181,11 +171,9 @@ public class MemoryTools(
         "tags, summary, features, nodeId, parentId, importance。" +
         "单次上限 50 条。返回成功/失败计数和写入的 ID 列表。")]
     public async Task<string> batch_remember(
-        [Description("JSON 数组，每个元素包含 content/type/layer/disciplines 等字段")] string entries,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("JSON 数组，每个元素包含 content/type/layer/disciplines 等字段")] string entries)
     {
         logger.LogInformation(LogEvents.Mcp, "batch_remember()");
-        EnsureKnowledge(projectRoot);
 
         List<BatchEntry>? items;
         try
@@ -259,11 +247,9 @@ public class MemoryTools(
         [Description("新的知识层级: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation（不修改则留空）")] string? layer = null,
         [Description("新的标签，逗号分隔（会替换原有标签；不修改则留空）")] string? tags = null,
         [Description("新的关联职能域，逗号分隔（不修改则留空）")] string? disciplines = null,
-        [Description("新的重要度 0.0-1.0（不修改则留空）")] double? importance = null,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("新的重要度 0.0-1.0（不修改则留空）")] double? importance = null)
     {
         logger.LogInformation(LogEvents.Mcp, "update_memory() id={Id}", id);
-        EnsureKnowledge(projectRoot);
 
         var existing = memory.GetMemoryById(id);
         if (existing == null)
@@ -299,11 +285,9 @@ public class MemoryTools(
         "删除一条项目记忆。用于：错误知识、重复条目、已完全过时不再需要归档的记忆。" +
         "删除后同步清理全文索引和向量索引。此操作不可恢复。")]
     public string delete_memory(
-        [Description("要删除的记忆 ID")] string id,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("要删除的记忆 ID")] string id)
     {
         logger.LogInformation(LogEvents.Mcp, "delete_memory() id={Id}", id);
-        EnsureKnowledge(projectRoot);
 
         var existing = memory.GetMemoryById(id);
         if (existing == null)
@@ -327,11 +311,9 @@ public class MemoryTools(
         [Description("节点 ID 过滤")] string? nodeId = null,
         [Description("标签过滤，逗号分隔")] string? tags = null,
         [Description("鲜活度过滤: FreshOnly/FreshAndAging/IncludeStale/IncludeArchived/All（默认 FreshAndAging）")] string? freshness = null,
-        [Description("最多返回条数（默认 20，上限 100）")] int limit = 20,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("最多返回条数（默认 20，上限 100）")] int limit = 20)
     {
         logger.LogInformation(LogEvents.Mcp, "query_memories()");
-        EnsureKnowledge(projectRoot);
 
         if (!Enum.TryParse<FreshnessFilter>(freshness ?? "FreshAndAging", true, out var ff))
             ff = FreshnessFilter.FreshAndAging;
@@ -369,11 +351,9 @@ public class MemoryTools(
         "按 ID 获取一条记忆的完整内容。返回记忆的所有字段：正文、摘要、类型、层级、标签、关联模块、鲜活度等。" +
         "适用于：查看 recall/query 返回的某条记忆的完整正文、检查记忆详情后决定是否 update 或 delete。")]
     public string get_memory(
-        [Description("记忆 ID")] string id,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("记忆 ID")] string id)
     {
         logger.LogInformation(LogEvents.Mcp, "get_memory() id={Id}", id);
-        EnsureKnowledge(projectRoot);
 
         var entry = memory.GetMemoryById(id);
         if (entry == null)
@@ -385,11 +365,9 @@ public class MemoryTools(
     [McpServerTool, Description(
         "获取知识库整体统计信息。返回各维度的条目计数：按知识层级、按记忆类型、按职能域、按业务系统、按鲜活度。" +
         "适用于：灌入知识后确认效果、评估知识库完整度和健康状况、发现哪些层级/职能的知识缺失。")]
-    public string get_memory_stats(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string get_memory_stats()
     {
         logger.LogInformation(LogEvents.Mcp, "get_memory_stats()");
-        EnsureKnowledge(projectRoot);
         var stats = memory.GetMemoryStats();
         return JsonSerializer.Serialize(stats, JsonOpts);
     }
@@ -517,11 +495,9 @@ public class MemoryTools(
         "操作会清空现有数据（包括向量和 FTS），然后逐个读取 JSON 文件导入。" +
         "向量嵌入需后续 recall 时按需重新生成。")]
     public string rebuild_index(
-        [Description("保留参数，无实际作用")] bool rewriteJson = false,
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+        [Description("保留参数，无实际作用")] bool rewriteJson = false)
     {
         logger.LogInformation(LogEvents.Mcp, "rebuild_index()");
-        EnsureKnowledge(projectRoot);
 
         try
         {
@@ -538,11 +514,9 @@ public class MemoryTools(
         "从 JSON 文件增量导入记忆：将 entries/*.json 中新增的文件补入数据库。" +
         "适用于：外部新增了少量 JSON 文件需要导入。" +
         "比 rebuild_index 更快，不清空已有数据，只做增量补入。")]
-    public string sync_index(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string sync_index()
     {
         logger.LogInformation(LogEvents.Mcp, "sync_index()");
-        EnsureKnowledge(projectRoot);
 
         try
         {
@@ -559,11 +533,9 @@ public class MemoryTools(
         "将数据库中的全部记忆导出为 JSON 文件（entries/*.json）。" +
         "适用于：数据备份、导出到其他系统、生成可读的知识快照。" +
         "已有的 JSON 文件会被覆盖。不影响数据库数据。")]
-    public string export_to_json(
-        [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
+    public string export_to_json()
     {
         logger.LogInformation(LogEvents.Mcp, "export_to_json()");
-        EnsureKnowledge(projectRoot);
 
         try
         {
@@ -584,11 +556,6 @@ public class MemoryTools(
     {
         var clean = content.Replace('\n', ' ').Replace('\r', ' ');
         return clean.Length <= maxLen ? clean : clean[..maxLen] + "…";
-    }
-
-    private void EnsureKnowledge(string? projectRoot)
-    {
-        // 引擎在 Server 启动时已通过 OnStarted 初始化，此处为空操作
     }
 
     private sealed class BatchEntry
