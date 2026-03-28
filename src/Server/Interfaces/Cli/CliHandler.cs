@@ -21,6 +21,12 @@ public static class CliHandler
             {
                 "status" => await RunStatus(),
                 "topology" or "topo" => await RunTopology(),
+                "validate" => await RunValidate(),
+                "search" => await RunSearch(filtered),
+                "recall" => await RunRecall(filtered),
+                "stats" => await RunStats(),
+                "export" => await RunExport(),
+                "import" => await RunImport(),
                 "help" or "--help" or "-h" => RunHelp(),
                 _ => RunUnknown(subCommand)
             };
@@ -121,6 +127,167 @@ public static class CliHandler
         return 0;
     }
 
+    private static async Task<int> RunValidate()
+    {
+        var json = await GetJson("/api/governance/validate");
+        if (HasError(json)) return 1;
+
+        var healthy = json.GetProperty("healthy").GetBoolean();
+        var total = json.GetProperty("totalIssues").GetInt32();
+
+        WriteHeader("架构治理报告");
+
+        if (healthy)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("  架构健康，未发现问题。");
+            Console.ResetColor();
+            return 0;
+        }
+
+        Console.WriteLine($"  发现 {total} 个问题：");
+        Console.WriteLine();
+
+        foreach (var prop in new[] { "cycleSuggestions", "orphanNodes", "crossWorkIssues", "dependencyDrifts", "keyNodeWarnings" })
+        {
+            if (!json.TryGetProperty(prop, out var arr)) continue;
+            foreach (var item in arr.EnumerateArray())
+            {
+                var msg = GetStringOrNull(item, "message") ?? GetStringOrNull(item, "name") ?? item.ToString();
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write("  ! ");
+                Console.ResetColor();
+                Console.WriteLine(msg);
+            }
+        }
+        return 0;
+    }
+
+    private static async Task<int> RunSearch(List<string> args)
+    {
+        var query = args.Count > 2 ? string.Join(" ", args.Skip(2)) : null;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            WriteError("用法: dna cli search <关键词>");
+            return 1;
+        }
+
+        var json = await GetJson($"/api/graph/search?q={Uri.EscapeDataString(query)}&maxResults=10");
+        if (HasError(json)) return 1;
+
+        var count = json.GetProperty("count").GetInt32();
+        WriteHeader($"模块搜索 — \"{query}\" ({count} 条结果)");
+
+        foreach (var r in json.GetProperty("results").EnumerateArray())
+        {
+            var name = r.GetProperty("name").GetString();
+            var disc = GetStringOrNull(r, "discipline") ?? "generic";
+            var summary = GetStringOrNull(r, "summary");
+
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.Write($"  {name}");
+            Console.ResetColor();
+            Console.Write($" ({disc})");
+            if (!string.IsNullOrEmpty(summary))
+                Console.Write($"  {summary}");
+            Console.WriteLine();
+        }
+
+        if (count == 0)
+            Console.WriteLine($"  未找到与 \"{query}\" 相关的模块。");
+        return 0;
+    }
+
+    private static async Task<int> RunRecall(List<string> args)
+    {
+        var question = args.Count > 2 ? string.Join(" ", args.Skip(2)) : null;
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            WriteError("用法: dna cli recall <问题>");
+            return 1;
+        }
+
+        var body = new { question, maxResults = 5 };
+        var content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
+        var response = await Http.PostAsync($"{_baseUrl}/api/memory/recall", content);
+        var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var json = doc.RootElement;
+        if (HasError(json)) return 1;
+
+        WriteHeader($"记忆检索 — \"{question}\"");
+
+        if (json.TryGetProperty("memories", out var memories))
+        {
+            var i = 0;
+            foreach (var m in memories.EnumerateArray())
+            {
+                i++;
+                var summary = GetStringOrNull(m, "summary") ?? "(无摘要)";
+                var score = m.TryGetProperty("score", out var s) ? s.GetDouble() : 0;
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.Write($"  {i}. ");
+                Console.ResetColor();
+                Console.WriteLine($"{summary}  (score: {score:F3})");
+            }
+            if (i == 0)
+                Console.WriteLine("  未找到相关记忆。");
+        }
+        return 0;
+    }
+
+    private static async Task<int> RunStats()
+    {
+        var json = await GetJson("/api/memory/stats");
+        if (HasError(json)) return 1;
+
+        WriteHeader("知识库统计");
+
+        if (json.TryGetProperty("total", out var total))
+            Console.WriteLine($"  总记忆数: {total.GetInt32()}");
+
+        foreach (var prop in new[] { "byLayer", "byType", "byDiscipline", "byFreshness" })
+        {
+            if (!json.TryGetProperty(prop, out var obj) || obj.ValueKind != JsonValueKind.Object) continue;
+            Console.WriteLine();
+            WriteSection(prop);
+            foreach (var kv in obj.EnumerateObject())
+                Console.WriteLine($"  {kv.Name,-30} {kv.Value.GetInt32()}");
+        }
+        return 0;
+    }
+
+    private static async Task<int> RunExport()
+    {
+        WriteHeader("导出记忆到 JSON");
+        var response = await Http.PostAsync($"{_baseUrl}/api/memory/index/export", null);
+        var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var json = doc.RootElement;
+        if (HasError(json)) return 1;
+
+        var exported = json.GetProperty("exported").GetInt32();
+        var skipped = json.GetProperty("skipped").GetInt32();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"  导出: {exported} 条，跳过: {skipped} 条");
+        Console.ResetColor();
+        return 0;
+    }
+
+    private static async Task<int> RunImport()
+    {
+        WriteHeader("从 JSON 全量导入记忆");
+        var response = await Http.PostAsync($"{_baseUrl}/api/memory/index/rebuild", null);
+        var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var json = doc.RootElement;
+        if (HasError(json)) return 1;
+
+        var imported = json.GetProperty("imported").GetInt32();
+        var skipped = json.GetProperty("skipped").GetInt32();
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"  导入: {imported} 条，跳过: {skipped} 条");
+        Console.ResetColor();
+        return 0;
+    }
+
     private static int RunHelp()
     {
         Console.WriteLine();
@@ -132,12 +299,21 @@ public static class CliHandler
         Console.WriteLine();
 
         WriteSection("查询命令");
-        var queries = new[]
-        {
+        PrintCommandList([
             ("status", "查看服务运行状态"),
             ("topology", "扫描并显示模块拓扑图"),
-        };
-        PrintCommandList(queries);
+            ("validate", "运行架构健康检查"),
+            ("search <关键词>", "搜索模块"),
+            ("recall <问题>", "语义检索记忆"),
+            ("stats", "知识库统计"),
+        ]);
+
+        Console.WriteLine();
+        WriteSection("运维命令");
+        PrintCommandList([
+            ("export", "导出记忆为 JSON 文件"),
+            ("import", "从 JSON 文件全量导入记忆"),
+        ]);
 
         Console.WriteLine();
         WriteSection("全局选项");
@@ -148,8 +324,10 @@ public static class CliHandler
         WriteSection("示例");
         Console.ForegroundColor = ConsoleColor.DarkGray;
         Console.WriteLine("  dna cli status");
-        Console.WriteLine("  dna cli topology");
-        Console.WriteLine("  dna cli --url http://192.168.1.10:5051 status");
+        Console.WriteLine("  dna cli validate");
+        Console.WriteLine("  dna cli search combat");
+        Console.WriteLine("  dna cli recall \"战斗模块有什么约束\"");
+        Console.WriteLine("  dna cli --url http://192.168.1.10:5051 stats");
         Console.ResetColor();
         Console.WriteLine();
         return 0;

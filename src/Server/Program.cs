@@ -1,41 +1,34 @@
+using Dna.Auth;
 using Dna.Core.Config;
 using Dna.Core.Framework;
 using Dna.Interfaces.Api;
 using Dna.Interfaces.Cli;
 using Dna.Adapters.Game;
 using Dna.Knowledge;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+
+// ── 解析存储路径 ──
+var dataPath = ResolveDataPath(args);
+Environment.SetEnvironmentVariable("DNA_STORE_PATH", dataPath);
 
 // ── 创建应用 ──
 DnaApp.Create(args, new AppOptions
 {
     AppName = "Project DNA",
-    AppDescription = "工作区引擎",
+    AppDescription = "项目认知引擎",
     DefaultPort = 5051,
-    LockScopeProvider = sp =>
+    LockScopeProvider = _ => dataPath,
+    LogDirectoryProvider = _ => dataPath,
+    BannerExtras = (_, port) =>
     {
-        var config = sp.GetRequiredService<ProjectConfig>();
-        return config.HasProject ? config.DefaultProjectRoot : Directory.GetCurrentDirectory();
-    },
-    LogDirectoryProvider = sp =>
-    {
-        var config = sp.GetRequiredService<ProjectConfig>();
-        return config.HasProject ? config.ResolveStore(null, config.DefaultProjectRoot) : null;
-    },
-    BannerExtras = (sp, port) =>
-    {
-        var config = sp.GetRequiredService<ProjectConfig>();
-        var lines = new List<(string, string)>
+        var host = GetLocalIp();
+        return new List<(string, string)>
         {
-            ("REST API:    ", $"http://localhost:{port}/api/"),
-            ("MCP Server:  ", $"http://localhost:{port}/mcp")
+            ("REST API:    ", $"http://{host}:{port}/api/"),
+            ("MCP Server:  ", $"http://{host}:{port}/mcp"),
+            ("Dashboard:   ", $"http://{host}:{port}"),
+            ("知识存储:    ", dataPath)
         };
-        if (config.HasProject)
-        {
-            lines.Add(("项目根目录:  ", config.DefaultProjectRoot));
-            var store = config.ResolveStore(null, config.DefaultProjectRoot);
-            lines.Add(("知识存储:    ", store));
-        }
-        return lines;
     }
 });
 
@@ -50,6 +43,19 @@ DnaApp.ConfigureServices(services =>
     services.AddSingleton<GameProjectAdapter>();
     services.AddSingleton<IProjectAdapter>(sp => sp.GetRequiredService<GameProjectAdapter>());
     services.AddKnowledgeGraph();
+
+    var jwtService = new JwtService();
+    services.AddSingleton(jwtService);
+    services.AddSingleton<UserStore>(sp =>
+    {
+        var store = new UserStore();
+        store.Initialize(dataPath);
+        return store;
+    });
+
+    services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(opts => opts.TokenValidationParameters = jwtService.GetValidationParameters());
+    services.AddAuthorization();
 
     var personaName = ResolvePersonaName(services);
     if (DnaApp.Mode == AppRunMode.Stdio)
@@ -72,11 +78,46 @@ DnaApp.ConfigureServices(services =>
 DnaApp.ConfigureWebApp(web =>
 {
     web.UseMiddleware<RequestLoggingMiddleware>();
+    web.UseAuthentication();
+    web.UseAuthorization();
+    web.MapAuthEndpoints();
     web.MapApiEndpoints(DateTime.UtcNow);
     web.MapMcp("/mcp");
 });
 
 return await DnaApp.RunAsync();
+
+static string ResolveDataPath(string[] args)
+{
+    for (var i = 0; i < args.Length; i++)
+    {
+        if (!string.Equals(args[i], "--db", StringComparison.OrdinalIgnoreCase)) continue;
+
+        // --db <路径> 或 --db（无参数，用当前目录）
+        if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
+            return Path.GetFullPath(args[i + 1]);
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    var envStore = Environment.GetEnvironmentVariable("DNA_STORE_PATH");
+    if (!string.IsNullOrEmpty(envStore))
+        return Path.GetFullPath(envStore);
+
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.WriteLine("错误：必须指定知识库路径。");
+    Console.ResetColor();
+    Console.WriteLine();
+    Console.WriteLine("用法：");
+    Console.WriteLine("  dna --db                          # 用当前目录作为知识库");
+    Console.WriteLine("  dna --db <知识库目录>");
+    Console.WriteLine("  dna --db --port 5051              # 当前目录 + 指定端口");
+    Console.WriteLine("  dna --db ~/.dna/my-game --port 5051");
+    Console.WriteLine();
+    Console.WriteLine("或设置环境变量 DNA_STORE_PATH。");
+    Environment.Exit(1);
+    return "";
+}
 
 static string ResolvePersonaName(IServiceCollection services)
 {
@@ -104,4 +145,19 @@ static string ResolvePersonaName(IServiceCollection services)
     }
     catch { /* best effort */ }
     return "Project DNA";
+}
+
+static string GetLocalIp()
+{
+    try
+    {
+        using var socket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.InterNetwork,
+            System.Net.Sockets.SocketType.Dgram, 0);
+        socket.Connect("8.8.8.8", 80);
+        if (socket.LocalEndPoint is System.Net.IPEndPoint ep)
+            return ep.Address.ToString();
+    }
+    catch { /* fallback */ }
+    return "localhost";
 }

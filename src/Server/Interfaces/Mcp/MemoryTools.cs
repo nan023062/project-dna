@@ -512,33 +512,32 @@ public class MemoryTools(
     // ═══════════════════════════════════════════
 
     [McpServerTool, Description(
-        "全量重建记忆索引：清空 SQLite 索引库，从 entries/*.json 文件重新导入全部记忆。" +
-        "适用于：git pull 后 JSON 大量变更、索引疑似损坏、手动编辑了 JSON 文件后需要刷新索引。" +
-        "操作会清空现有索引（包括向量和 FTS），然后逐个读取 JSON 文件重建。向量嵌入需后续 recall 时按需重新生成。" +
-        "设置 rewriteJson=true 时会同时用当前格式重写每个 JSON 文件（修复 Unicode 转义为明文中文等格式问题）。")]
+        "从 JSON 文件全量导入记忆：清空当前数据库，从 entries/*.json 文件重新导入全部记忆。" +
+        "适用于：从备份恢复数据、从旧版本迁移、外部批量导入 JSON 文件。" +
+        "操作会清空现有数据（包括向量和 FTS），然后逐个读取 JSON 文件导入。" +
+        "向量嵌入需后续 recall 时按需重新生成。")]
     public string rebuild_index(
-        [Description("是否同时重写 JSON 文件（修复 Unicode 转义等格式问题）")] bool rewriteJson = false,
+        [Description("保留参数，无实际作用")] bool rewriteJson = false,
         [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
     {
-        logger.LogInformation(LogEvents.Mcp, "rebuild_index(rewriteJson={Rewrite})", rewriteJson);
+        logger.LogInformation(LogEvents.Mcp, "rebuild_index()");
         EnsureKnowledge(projectRoot);
 
         try
         {
             var (imported, skipped) = memory.RebuildIndex(rewriteJson);
-            var extra = rewriteJson ? "\nJSON 文件已重写为明文格式。" : "";
-            return $"✓ 全量重建完成\n- 导入: {imported} 条\n- 跳过: {skipped} 条{extra}\n\n索引已刷新，向量嵌入将在下次 recall 时按需重新生成。";
+            return $"✓ 全量导入完成\n- 导入: {imported} 条\n- 跳过: {skipped} 条\n\n向量嵌入将在下次 recall 时按需重新生成。";
         }
         catch (Exception ex)
         {
-            return $"错误：重建索引失败 — {ex.Message}";
+            return $"错误：全量导入失败 — {ex.Message}";
         }
     }
 
     [McpServerTool, Description(
-        "增量同步记忆索引：将 entries/*.json 中新增的文件补入索引，同时清理索引中指向已删除 JSON 的孤儿记录。" +
-        "适用于：git pull 后有少量新增或删除的 JSON 文件，不想全量重建时使用。" +
-        "比 rebuild_index 更快，不清空已有索引，只做差异补齐。")]
+        "从 JSON 文件增量导入记忆：将 entries/*.json 中新增的文件补入数据库。" +
+        "适用于：外部新增了少量 JSON 文件需要导入。" +
+        "比 rebuild_index 更快，不清空已有数据，只做增量补入。")]
     public string sync_index(
         [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
     {
@@ -548,18 +547,18 @@ public class MemoryTools(
         try
         {
             var (added, removed, skipped) = memory.SyncFromJson();
-            return $"✓ 增量同步完成\n- 新增: {added} 条\n- 移除孤儿: {removed} 条\n- 跳过: {skipped} 条";
+            return $"✓ 增量导入完成\n- 新增: {added} 条\n- 跳过: {skipped} 条";
         }
         catch (Exception ex)
         {
-            return $"错误：增量同步失败 — {ex.Message}";
+            return $"错误：增量导入失败 — {ex.Message}";
         }
     }
 
     [McpServerTool, Description(
-        "从索引反写 JSON：将 SQLite 中的全部记忆导出为 entries/*.json 文件。" +
-        "适用于：JSON 文件损坏或丢失后从索引恢复、修复 Unicode 转义为明文中文。" +
-        "已有的 JSON 文件会被覆盖为当前格式（明文中文）。不影响索引数据。")]
+        "将数据库中的全部记忆导出为 JSON 文件（entries/*.json）。" +
+        "适用于：数据备份、导出到其他系统、生成可读的知识快照。" +
+        "已有的 JSON 文件会被覆盖。不影响数据库数据。")]
     public string export_to_json(
         [Description("项目根目录（留空自动使用当前项目）")] string? projectRoot = null)
     {
@@ -569,7 +568,7 @@ public class MemoryTools(
         try
         {
             var (exported, skipped) = memory.ExportToJson();
-            return $"✓ 导出完成\n- 导出: {exported} 条\n- 跳过: {skipped} 条\n\nJSON 文件已重写为明文格式。";
+            return $"✓ 导出完成\n- 导出: {exported} 条\n- 跳过: {skipped} 条";
         }
         catch (Exception ex)
         {

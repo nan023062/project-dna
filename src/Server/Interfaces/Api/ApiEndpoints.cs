@@ -10,6 +10,8 @@ public static class ApiEndpoints
     {
         app.MapStatusEndpoints(startedAt);
         app.MapTopologyEndpoints();
+        app.MapGraphEndpoints();
+        app.MapGovernanceEndpoints();
         app.MapConfigEndpoints();
         app.MapMemoryEndpoints();
         app.MapModuleManagementEndpoints();

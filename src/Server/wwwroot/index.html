@@ -26,11 +26,8 @@
   <span class="brand">Project DNA</span>
   <div class="sep"></div>
   <div class="dot" id="statusDot"></div>
-  <span id="projectPath" class="path" title="点击切换项目" onclick="showSetup()">（未连接）</span>
+  <span id="projectPath" class="path">（加载中…）</span>
   <div class="right">
-    <span class="tag">MCP: /mcp</span>
-    <span class="tag">API: /api</span>
-    <button class="btn btn-secondary btn-sm" onclick="window.openArchConfig()" title="组织架构配置">架构配置</button>
     <div class="ai-actions">
       <button class="ai-btn ai-settings-btn" onclick="openLlmSettings()" title="大模型配置">⚙ 模型配置</button>
     </div>
@@ -38,30 +35,14 @@
   </div>
 </div>
 
-<!-- ═══════════════════ 项目选择页 ═══════════════════ -->
-<div id="setupPage" class="setup-page">
-  <div class="setup-card">
-    <h1>Project DNA</h1>
-    <p>选择一个项目文件夹开始使用。项目记忆和模块信息集中存储在 <code>.dna/memory/</code> 下，不侵入项目目录。</p>
-    <div class="input-group">
-      <input type="text" id="projectInput" placeholder="输入项目根目录路径，例如 C:\MyProject" onkeydown="if(event.key==='Enter')setProject()" />
-      <button class="btn btn-secondary" onclick="openProjectBrowser()">浏览…</button>
-      <button class="btn btn-primary" onclick="setProject()">打开</button>
-    </div>
-    <div id="setupError" class="error-msg"></div>
-    <div id="recentList" class="recent-list" style="display:none">
-      <h3>最近打开</h3>
-      <div id="recentItems"></div>
-    </div>
-  </div>
-</div>
+<!-- setupPage 保留为空壳，兼容 JS 引用 -->
+<div id="setupPage" class="setup-page" style="display:none"></div>
 
 <!-- ═══════════════════ 主界面 ═══════════════════ -->
 <div class="app-wrapper" id="appWrapper">
 <div id="mainApp" class="app">
   <div class="tabs">
     <div class="tab active" data-tab="topology" onclick="switchTab('topology')">架构总览</div>
-    <div class="tab" data-tab="fileTree" onclick="switchTab('fileTree')">工程文件树</div>
     <div class="tab" data-tab="memoryMgmt" onclick="switchTab('memoryMgmt')">记忆管理</div>
   </div>
   <div class="panels">

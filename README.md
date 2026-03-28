@@ -63,21 +63,24 @@ Circular dependencies are not violations — they're **restructuring suggestions
 
 ## Architecture
 
-Three independent engines:
+One server per project. Multiple access layers on top of three independent engines:
 
 ```
-┌─────────────────────────────────────────┐
-│          Project DNA Server (MCP)       │
-│                                         │
-│  GraphEngine    MemoryEngine  Governance│
-│  (nodes, edges, (remember,    (cycle    │
-│   topology,      recall,      detection,│
-│   context)       query)       freshness)│
-│                                         │
-│            Storage Layer                │
-│     SQLite + JSON + Manifests           │
-│         {project}/.dna/                 │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│                DNA Server                          │
+│                                                    │
+│  HTTP API   MCP Server   CLI        Dashboard     │
+│  /api/*     /mcp         dna cli    http://host   │
+│                                                    │
+│  GraphEngine    MemoryEngine    GovernanceEngine   │
+│  (nodes, edges, (remember,      (cycle detection, │
+│   topology,      recall,         key node warns,  │
+│   context)       query)          freshness)       │
+│                                                    │
+│  Storage: SQLite (single source of truth)          │
+│  Auth: JWT + roles (admin/editor/viewer)           │
+│  Default data: ~/.dna/projects/{projectName}/      │
+└──────────────────────────────────────────────────┘
 ```
 
 - **GraphEngine** — Node/edge CRUD, topology, execution plans, module context
@@ -96,12 +99,23 @@ dotnet build
 ### 2. Run
 
 ```bash
-# HTTP mode (team sharing via dashboard)
-dotnet run --project Server -- --project /path/to/your/project
+# Use current directory as knowledge store
+cd /path/to/dna-store && dna --db
 
-# stdio mode (single user, launched by IDE)
-dotnet run --project Server -- --stdio --project /path/to/your/project
+# Specify knowledge store path
+dna --db /path/to/dna-store
+
+# Custom port
+dna --db /path/to/dna-store --port 5052
+
+# Current directory + custom port
+dna --db --port 5051
+
+# stdio mode (launched by IDE)
+dna --stdio --db /path/to/dna-store
 ```
+
+`--db` is required. It specifies where the SQLite database and knowledge data are stored. The server does not access project source code — clients write knowledge via MCP/API.
 
 ### 3. Connect from Cursor
 
@@ -117,15 +131,34 @@ Create `.cursor/mcp.json` in your project root:
 }
 ```
 
-### 4. Verify
+For remote servers, use the server's IP and port:
 
-In Cursor Agent, say:
-
+```json
+{
+  "mcpServers": {
+    "project-dna": {
+      "url": "http://192.168.1.100:5051/mcp"
+    }
+  }
+}
 ```
-Show me the project knowledge graph status
-```
 
-If the agent calls `get_project_identity` and returns project info, you're connected.
+### 4. Access Dashboard
+
+Open `http://localhost:5051` in your browser. The dashboard provides:
+- Architecture topology visualization (read-only)
+- Memory CRUD (create, search, edit, delete knowledge)
+- LLM configuration and AI chat
+
+### 5. CLI
+
+```bash
+dna cli status                          # Server status
+dna cli validate                        # Architecture health check
+dna cli search combat                   # Search modules
+dna cli recall "what constraints apply" # Semantic memory search
+dna cli stats                           # Knowledge base statistics
+```
 
 ## MCP Tools
 

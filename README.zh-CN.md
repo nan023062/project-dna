@@ -73,12 +73,23 @@ dotnet build
 ### 2. 运行
 
 ```bash
-# HTTP 模式（团队共享 + Dashboard）
-dotnet run --project Server -- --project /path/to/your/project
+# 进入知识库目录直接启动
+cd /data/dna/my-game && dna --db
 
-# stdio 模式（单人使用，由 IDE 启动）
-dotnet run --project Server -- --stdio --project /path/to/your/project
+# 指定知识库路径
+dna --db /data/dna/my-game
+
+# 指定端口
+dna --db /data/dna/my-game --port 5052
+
+# 当前目录 + 指定端口
+dna --db --port 5051
+
+# stdio 模式（由 IDE 启动）
+dna --stdio --db /data/dna/my-game
 ```
+
+`--db` 必须指定，指向知识库存储目录。Server 不访问项目源码，客户端通过 MCP/API 写入知识。
 
 ### 3. 接入 Cursor
 
@@ -94,15 +105,34 @@ dotnet run --project Server -- --stdio --project /path/to/your/project
 }
 ```
 
-### 4. 验证
+远程服务器使用对应 IP 和端口：
 
-在 Cursor Agent 中说：
-
+```json
+{
+  "mcpServers": {
+    "project-dna": {
+      "url": "http://192.168.1.100:5051/mcp"
+    }
+  }
+}
 ```
-帮我查看当前项目的知识库状态
-```
 
-如果 Agent 调用了 `get_project_identity` 并返回项目信息，说明连接成功。
+### 4. Dashboard
+
+浏览器打开 `http://localhost:5051`，可以：
+- 浏览架构拓扑图（只读）
+- 增删查改记忆
+- 配置 LLM + AI 对话
+
+### 5. CLI
+
+```bash
+dna cli status                          # 服务状态
+dna cli validate                        # 架构健康检查
+dna cli search combat                   # 搜索模块
+dna cli recall "有什么约束"              # 语义检索记忆
+dna cli stats                           # 知识库统计
+```
 
 ## 设计哲学
 

@@ -31,11 +31,11 @@ public class ProjectConfig
         if (string.IsNullOrEmpty(_projectRoot))
         {
             var saved = LoadPersistedConfig();
-            if (!string.IsNullOrEmpty(saved.LastProject) && Directory.Exists(saved.LastProject))
+            if (!string.IsNullOrEmpty(saved.EffectiveProject) && Directory.Exists(saved.EffectiveProject))
             {
-                _projectRoot = saved.LastProject;
-                if (string.IsNullOrEmpty(_storePath) && !string.IsNullOrEmpty(saved.LastStorePath))
-                    _storePath = saved.LastStorePath;
+                _projectRoot = saved.EffectiveProject;
+                if (string.IsNullOrEmpty(_storePath) && !string.IsNullOrEmpty(saved.EffectiveStorePath))
+                    _storePath = saved.EffectiveStorePath;
             }
         }
     }
@@ -211,8 +211,8 @@ public class ProjectConfig
     private void AddToRecent(string projectRoot, string storePath)
     {
         var config = LoadPersistedConfig();
-        config.LastProject = projectRoot;
-        config.LastStorePath = storePath;
+        config.Project = projectRoot;
+        config.StorePath = storePath;
 
         config.RecentProjects.RemoveAll(p =>
             string.Equals(p.Path, projectRoot, StringComparison.OrdinalIgnoreCase));
@@ -297,8 +297,18 @@ public class RecentProject
 
 public class PersistedConfig
 {
-    public string? LastProject { get; set; }
-    public string? LastStorePath { get; set; }
+    public string? Project { get; set; }
+    public string? StorePath { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("LastProject")]
+    public string? LegacyLastProject { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("LastStorePath")]
+    public string? LegacyLastStorePath { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? EffectiveProject => Project ?? LegacyLastProject;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? EffectiveStorePath => StorePath ?? LegacyLastStorePath;
     public List<RecentProject> RecentProjects { get; set; } = [];
     public List<LlmProviderConfig> LlmProviders { get; set; } = [];
     public string? ActiveLlmProviderId { get; set; }

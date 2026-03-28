@@ -31,7 +31,6 @@ internal partial class MemoryStore : IDisposable
     public string ProjectRoot => _projectRoot;
     public string StorePath => _storePath;
     private string _memoryDir = string.Empty;
-    private string _entriesDir = string.Empty;
 
     public MemoryStore(IServiceProvider provider)
     {
@@ -59,8 +58,7 @@ internal partial class MemoryStore : IDisposable
         _projectRoot = projectRoot;
         _storePath = storePath;
         _memoryDir = Path.Combine(storePath, "memory");
-        _entriesDir = Path.Combine(_memoryDir, "entries");
-        Directory.CreateDirectory(_entriesDir);
+        Directory.CreateDirectory(_memoryDir);
 
         _db?.Dispose();
         var dbPath = Path.Combine(_memoryDir, "index.db");
@@ -74,7 +72,6 @@ internal partial class MemoryStore : IDisposable
         }
 
         EnsureSchema();
-        EnsureGitIgnore();
         LoadAllManifests();
 
         var jsonCount = RebuildFromJsonIfNeeded();
@@ -91,6 +88,7 @@ internal partial class MemoryStore : IDisposable
                 type            TEXT NOT NULL,
                 layer           TEXT NOT NULL,
                 source          TEXT NOT NULL,
+                content         TEXT NOT NULL DEFAULT '',
                 summary         TEXT,
                 importance      REAL DEFAULT 0.5,
                 freshness       TEXT DEFAULT 'Fresh',
@@ -101,7 +99,7 @@ internal partial class MemoryStore : IDisposable
                 parent_id       TEXT,
                 node_id         TEXT,
                 version         INTEGER DEFAULT 1,
-                file_path       TEXT NOT NULL,
+                file_path       TEXT,
                 embedding       BLOB,
                 ext_source_url  TEXT,
                 ext_source_id   TEXT,
@@ -160,16 +158,36 @@ internal partial class MemoryStore : IDisposable
             );
             """;
         ftsCmd.ExecuteNonQuery();
+
+        MigrateSchemaIfNeeded();
     }
 
-    private void EnsureGitIgnore()
+    private void MigrateSchemaIfNeeded()
     {
-        var gitignorePath = Path.Combine(_memoryDir, ".gitignore");
-        if (!File.Exists(gitignorePath))
-            File.WriteAllText(gitignorePath, "index.db\nindex.db-wal\nindex.db-shm\n");
+        var hasContent = false;
+        using (var pragma = _db!.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA table_info(memory_entries)";
+            using var reader = pragma.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "content", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasContent = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasContent) return;
+
+        _logger.LogInformation("迁移 Schema: memory_entries 表添加 content 列");
+        using var alter = _db.CreateCommand();
+        alter.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
+        alter.ExecuteNonQuery();
     }
 
-    /// <summary>如果 SQLite 为空但有 JSON 文件，从 JSON 重建索引</summary>
+    /// <summary>如果 SQLite 为空但有旧版 JSON 文件，一次性迁移到 SQLite</summary>
     private int RebuildFromJsonIfNeeded()
     {
         using var countCmd = _db!.CreateCommand();
@@ -179,14 +197,15 @@ internal partial class MemoryStore : IDisposable
         if (dbCount > 0)
             return dbCount;
 
-        var jsonFiles = Directory.Exists(_entriesDir)
-            ? Directory.GetFiles(_entriesDir, "*.json", SearchOption.AllDirectories)
+        var entriesDir = Path.Combine(_memoryDir, "entries");
+        var jsonFiles = Directory.Exists(entriesDir)
+            ? Directory.GetFiles(entriesDir, "*.json", SearchOption.AllDirectories)
             : [];
 
         if (jsonFiles.Length == 0)
             return 0;
 
-        _logger.LogInformation("SQLite 为空，从 {Count} 个 JSON 文件重建索引...", jsonFiles.Length);
+        _logger.LogInformation("SQLite 为空，从 {Count} 个 JSON 文件迁移数据...", jsonFiles.Length);
 
         using var transaction = _db.BeginTransaction();
         var count = 0;
@@ -198,7 +217,7 @@ internal partial class MemoryStore : IDisposable
                 var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
                 if (entry != null)
                 {
-                    InsertIntoSqlite(entry, file);
+                    InsertIntoSqlite(entry);
                     count++;
                 }
             }
@@ -209,18 +228,19 @@ internal partial class MemoryStore : IDisposable
         }
         transaction.Commit();
 
-        _logger.LogInformation("从 JSON 重建完成: {Count} 条记忆", count);
+        _logger.LogInformation("从 JSON 迁移完成: {Count} 条记忆", count);
         return count;
     }
 
     // ═══════════════════════════════════════════
-    //  索引重建（全量 / 增量）
+    //  JSON 导入（运维工具，用于数据迁移/恢复）
     // ═══════════════════════════════════════════
 
+    private string EntriesDir => Path.Combine(_memoryDir, "entries");
+
     /// <summary>
-    /// 全量重建：清空 SQLite 所有表，从 entries/*.json 重新导入。
-    /// 适用于：git pull 后大量 JSON 变更、DB 疑似损坏、手动修改了 JSON 文件。
-    /// rewriteJson=true 时会用当前序列化选项重写每个 JSON 文件（修复 Unicode 转义等格式问题）。
+    /// 全量导入：清空 SQLite 所有表，从 entries/*.json 文件导入全部数据。
+    /// 适用于：从旧版本迁移、从备份恢复。
     /// </summary>
     public (int imported, int skipped) RebuildIndex(bool rewriteJson = false)
     {
@@ -228,14 +248,14 @@ internal partial class MemoryStore : IDisposable
 
         ClearAllSqliteTables();
 
-        var jsonFiles = Directory.Exists(_entriesDir)
-            ? Directory.GetFiles(_entriesDir, "*.json", SearchOption.AllDirectories)
+        var jsonFiles = Directory.Exists(EntriesDir)
+            ? Directory.GetFiles(EntriesDir, "*.json", SearchOption.AllDirectories)
             : [];
 
         if (jsonFiles.Length == 0)
             return (0, 0);
 
-        _logger.LogInformation("全量重建索引: 扫描到 {Count} 个 JSON 文件, rewriteJson={Rewrite}", jsonFiles.Length, rewriteJson);
+        _logger.LogInformation("全量导入: 扫描到 {Count} 个 JSON 文件", jsonFiles.Length);
 
         var imported = 0;
         var skipped = 0;
@@ -248,10 +268,7 @@ internal partial class MemoryStore : IDisposable
                 var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
                 if (entry != null)
                 {
-                    if (rewriteJson)
-                        WriteJsonFile(entry);
-
-                    InsertIntoSqlite(entry, file);
+                    InsertIntoSqlite(entry);
                     imported++;
                 }
                 else skipped++;
@@ -264,21 +281,20 @@ internal partial class MemoryStore : IDisposable
         }
         transaction.Commit();
 
-        _logger.LogInformation("全量重建完成: 导入 {Imported}, 跳过 {Skipped}", imported, skipped);
+        _logger.LogInformation("全量导入完成: 导入 {Imported}, 跳过 {Skipped}", imported, skipped);
         return (imported, skipped);
     }
 
     /// <summary>
-    /// 增量同步：只把 DB 中缺失的 JSON 文件补入索引，不清空已有数据。
-    /// 适用于：git pull 后有少量新增 JSON、团队成员新写入了知识。
-    /// 同时清理 DB 中指向已删除 JSON 的孤儿记录。
+    /// 增量导入：将 entries/*.json 中新增的文件补入 SQLite。
+    /// 适用于：从外部导入少量 JSON 文件。
     /// </summary>
     public (int added, int removed, int skipped) SyncFromJson()
     {
         if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
 
-        var jsonFiles = Directory.Exists(_entriesDir)
-            ? Directory.GetFiles(_entriesDir, "*.json", SearchOption.AllDirectories)
+        var jsonFiles = Directory.Exists(EntriesDir)
+            ? Directory.GetFiles(EntriesDir, "*.json", SearchOption.AllDirectories)
             : [];
 
         var existingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -312,8 +328,8 @@ internal partial class MemoryStore : IDisposable
         var toAdd = jsonIdToFile.Keys.Where(id => !existingIds.Contains(id)).ToList();
         var toRemove = existingIds.Where(id => !jsonIdToFile.ContainsKey(id)).ToList();
 
-        _logger.LogInformation("增量同步: 新增 {Add}, 移除孤儿 {Remove}, 跳过 {Skip}",
-            toAdd.Count, toRemove.Count, skipped);
+        _logger.LogInformation("增量导入: 新增 {Add}, 跳过 {Skip}",
+            toAdd.Count, skipped);
 
         using var transaction = _db.BeginTransaction();
 
@@ -325,120 +341,60 @@ internal partial class MemoryStore : IDisposable
                 var json = File.ReadAllText(file);
                 var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
                 if (entry != null)
-                    InsertIntoSqlite(entry, file);
+                    InsertIntoSqlite(entry);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "增量同步跳过: {Id}", id);
+                _logger.LogWarning(ex, "增量导入跳过: {Id}", id);
                 skipped++;
             }
         }
 
-        foreach (var id in toRemove)
-            DeleteFromSqlite(id);
-
         transaction.Commit();
 
-        _logger.LogInformation("增量同步完成: 新增 {Added}, 移除 {Removed}", toAdd.Count, toRemove.Count);
-        return (toAdd.Count, toRemove.Count, skipped);
+        _logger.LogInformation("增量导入完成: 新增 {Added}", toAdd.Count);
+        return (toAdd.Count, 0, skipped);
     }
 
     /// <summary>
-    /// 从 SQLite 反写 JSON：将 DB 中的全部记忆导出为 entries/*.json 文件。
-    /// 适用于：JSON 文件损坏/丢失后从索引恢复、修复 Unicode 转义为明文中文。
-    /// 已有的 JSON 文件会被覆盖。
+    /// 从 SQLite 导出为 JSON 文件：将全部记忆导出到 entries/*.json。
+    /// 适用于：数据备份、导出到其他系统。
     /// </summary>
     public (int exported, int skipped) ExportToJson()
     {
         if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
 
         using var cmd = _db.CreateCommand();
-        cmd.CommandText = @"
-            SELECT e.id, e.type, e.layer, e.source, e.summary, e.importance, e.freshness,
-                   e.created_at, e.last_verified_at, e.stale_after, e.superseded_by,
-                   e.parent_id, e.version, e.file_path, e.ext_source_url, e.ext_source_id,
-                   f.content, e.node_id
-            FROM memory_entries e
-            LEFT JOIN memory_fts f ON e.id = f.id";
+        cmd.CommandText = SelectAllColumns;
 
-        var rows = new List<(string id, string type, string layer, string source,
-            string? summary, double importance, string freshness,
-            string createdAt, string? lastVerifiedAt, string? staleAfter, string? supersededBy,
-            string? parentId, int version, string filePath, string? extSourceUrl, string? extSourceId,
-            string content, string? nodeId)>();
+        var entries = ReadEntriesFromCommand(cmd);
 
-        using (var reader = cmd.ExecuteReader())
-        {
-            while (reader.Read())
-            {
-                rows.Add((
-                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
-                    reader.IsDBNull(4) ? null : reader.GetString(4),
-                    reader.GetDouble(5), reader.GetString(6), reader.GetString(7),
-                    reader.IsDBNull(8) ? null : reader.GetString(8),
-                    reader.IsDBNull(9) ? null : reader.GetString(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10),
-                    reader.IsDBNull(11) ? null : reader.GetString(11),
-                    reader.GetInt32(12), reader.GetString(13),
-                    reader.IsDBNull(14) ? null : reader.GetString(14),
-                    reader.IsDBNull(15) ? null : reader.GetString(15),
-                    reader.IsDBNull(16) ? "" : reader.GetString(16),
-                    reader.IsDBNull(17) ? null : reader.GetString(17)
-                ));
-            }
-        }
-
-        if (rows.Count == 0)
+        if (entries.Count == 0)
         {
             _logger.LogInformation("ExportToJson: DB 为空，无记忆可导出");
             return (0, 0);
         }
 
-        _logger.LogInformation("ExportToJson: 从 DB 导出 {Count} 条记忆到 JSON", rows.Count);
+        _logger.LogInformation("ExportToJson: 从 DB 导出 {Count} 条记忆到 JSON", entries.Count);
 
+        var entriesDir = EntriesDir;
         var exported = 0;
         var skipped = 0;
-        foreach (var r in rows)
+        foreach (var entry in entries)
         {
             try
             {
-                if (!Enum.TryParse<MemoryType>(r.type, true, out var memType)) { skipped++; continue; }
-                if (!Enum.TryParse<KnowledgeLayer>(r.layer, true, out var kLayer)) { skipped++; continue; }
-                if (!Enum.TryParse<MemorySource>(r.source, true, out var memSource)) { skipped++; continue; }
-                if (!Enum.TryParse<FreshnessStatus>(r.freshness, true, out var fresh)) fresh = FreshnessStatus.Fresh;
-
-                var entry = new MemoryEntry
-                {
-                    Id = r.id,
-                    Type = memType,
-                    Layer = kLayer,
-                    Source = memSource,
-                    Summary = r.summary,
-                    Content = r.content,
-                    Importance = r.importance,
-                    Freshness = fresh,
-                    CreatedAt = DateTime.TryParse(r.createdAt, out var ca) ? ca : DateTime.UtcNow,
-                    LastVerifiedAt = r.lastVerifiedAt != null && DateTime.TryParse(r.lastVerifiedAt, out var lv) ? lv : null,
-                    StaleAfter = r.staleAfter != null && DateTime.TryParse(r.staleAfter, out var sa) ? sa : null,
-                    SupersededBy = r.supersededBy,
-                    ParentId = r.parentId,
-                    Version = r.version,
-                    ExternalSourceUrl = r.extSourceUrl,
-                    ExternalSourceId = r.extSourceId,
-                    Disciplines = QueryMultiValues("memory_disciplines", "discipline", r.id),
-                    Features = QueryMultiValues("memory_features", "feature", r.id),
-                    NodeId = r.nodeId,
-                    Tags = QueryMultiValues("memory_tags", "tag", r.id),
-                    PathPatterns = QueryMultiValues("memory_paths", "path_pattern", r.id),
-                    RelatedIds = QueryMultiValues("memory_relations_export", "to_id", r.id),
-                };
-
-                WriteJsonFile(entry);
+                var yearMonth = entry.CreatedAt.ToString("yyyy-MM");
+                var dir = Path.Combine(entriesDir, yearMonth);
+                Directory.CreateDirectory(dir);
+                var filePath = Path.Combine(dir, $"{entry.Id}.json");
+                var json = JsonSerializer.Serialize(entry, JsonOpts);
+                File.WriteAllText(filePath, json);
                 exported++;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "ExportToJson 跳过: {Id}", r.id);
+                _logger.LogWarning(ex, "ExportToJson 跳过: {Id}", entry.Id);
                 skipped++;
             }
         }
@@ -482,30 +438,29 @@ internal partial class MemoryStore : IDisposable
     //  写入
     // ═══════════════════════════════════════════
 
-    /// <summary>写入一条记忆（同时写 JSON 文件 + SQLite 索引 + FTS）</summary>
+    /// <summary>写入一条记忆到 SQLite</summary>
     public MemoryEntry Insert(MemoryEntry entry)
     {
-        var filePath = WriteJsonFile(entry);
-        InsertIntoSqlite(entry, filePath);
+        InsertIntoSqlite(entry);
         return entry;
     }
 
     /// <summary>更新一条记忆</summary>
     public MemoryEntry Update(MemoryEntry entry)
     {
-        var filePath = WriteJsonFile(entry);
         DeleteFromSqlite(entry.Id);
-        InsertIntoSqlite(entry, filePath);
+        InsertIntoSqlite(entry);
         return entry;
     }
 
     /// <summary>删除一条记忆</summary>
     public bool Delete(string id)
     {
-        var entry = GetById(id);
-        if (entry == null) return false;
+        using var check = _db!.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM memory_entries WHERE id = @id";
+        check.Parameters.AddWithValue("@id", id);
+        if (Convert.ToInt32(check.ExecuteScalar()) == 0) return false;
 
-        DeleteJsonFile(id);
         DeleteFromSqlite(id);
         return true;
     }
@@ -515,10 +470,7 @@ internal partial class MemoryStore : IDisposable
     {
         using var transaction = _db!.BeginTransaction();
         foreach (var entry in entries)
-        {
-            var filePath = WriteJsonFile(entry);
-            InsertIntoSqlite(entry, filePath);
-        }
+            InsertIntoSqlite(entry);
         transaction.Commit();
         return entries;
     }
@@ -531,8 +483,6 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@freshness", freshness.ToString());
         cmd.ExecuteNonQuery();
-
-        UpdateJsonFieldIfExists(id, e => e.Freshness = freshness);
     }
 
     public void UpdateTags(string id, List<string> tags)
@@ -542,12 +492,6 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@tags", string.Join(",", tags));
         cmd.ExecuteNonQuery();
-
-        UpdateJsonFieldIfExists(id, e =>
-        {
-            e.Tags.Clear();
-            e.Tags.AddRange(tags);
-        });
     }
 
     /// <summary>扫描并自动降级过期的记忆</summary>
@@ -591,7 +535,6 @@ internal partial class MemoryStore : IDisposable
             {
                 idParam.Value = id;
                 updateCmd.ExecuteNonQuery();
-                UpdateJsonFieldIfExists(id, e => e.Freshness = FreshnessStatus.Aging);
             }
             
             transaction.Commit();
@@ -617,12 +560,6 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@now", now.ToString("O"));
         cmd.ExecuteNonQuery();
-
-        UpdateJsonFieldIfExists(id, e =>
-        {
-            e.Freshness = FreshnessStatus.Fresh;
-            e.LastVerifiedAt = now;
-        });
     }
 
     /// <summary>更新向量</summary>
@@ -639,19 +576,15 @@ internal partial class MemoryStore : IDisposable
     //  读取
     // ═══════════════════════════════════════════
 
-    /// <summary>按 ID 获取完整记忆（从 JSON 读取）</summary>
+    /// <summary>按 ID 获取完整记忆</summary>
     public MemoryEntry? GetById(string id)
     {
         using var cmd = _db!.CreateCommand();
-        cmd.CommandText = "SELECT file_path FROM memory_entries WHERE id = @id";
+        cmd.CommandText = SelectAllColumns + " WHERE e.id = @id";
         cmd.Parameters.AddWithValue("@id", id);
 
-        var filePath = cmd.ExecuteScalar() as string;
-        if (filePath == null || !File.Exists(filePath))
-            return null;
-
-        var json = File.ReadAllText(filePath);
-        return JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadEntryFromRow(reader) : null;
     }
 
     /// <summary>结构化查询</summary>
@@ -659,7 +592,11 @@ internal partial class MemoryStore : IDisposable
     {
         var (whereClause, parameters) = BuildWhereClause(filter);
         var sql = $"""
-            SELECT DISTINCT e.file_path FROM memory_entries e
+            SELECT DISTINCT e.id, e.type, e.layer, e.source, e.content, e.summary,
+                   e.importance, e.freshness, e.created_at, e.last_verified_at,
+                   e.stale_after, e.superseded_by, e.parent_id, e.node_id,
+                   e.version, e.ext_source_url, e.ext_source_id
+            FROM memory_entries e
             LEFT JOIN memory_disciplines d ON e.id = d.memory_id
             LEFT JOIN memory_features f ON e.id = f.memory_id
             LEFT JOIN memory_tags t ON e.id = t.memory_id
@@ -774,62 +711,28 @@ internal partial class MemoryStore : IDisposable
     }
 
     // ═══════════════════════════════════════════
-    //  内部：JSON 文件操作
-    // ═══════════════════════════════════════════
-
-    private string WriteJsonFile(MemoryEntry entry)
-    {
-        var yearMonth = entry.CreatedAt.ToString("yyyy-MM");
-        var dir = Path.Combine(_entriesDir, yearMonth);
-        Directory.CreateDirectory(dir);
-
-        var filePath = Path.Combine(dir, $"{entry.Id}.json");
-        var json = JsonSerializer.Serialize(entry, JsonOpts);
-        File.WriteAllText(filePath, json);
-        return filePath;
-    }
-
-    private void DeleteJsonFile(string id)
-    {
-        using var cmd = _db!.CreateCommand();
-        cmd.CommandText = "SELECT file_path FROM memory_entries WHERE id = @id";
-        cmd.Parameters.AddWithValue("@id", id);
-
-        var filePath = cmd.ExecuteScalar() as string;
-        if (filePath != null && File.Exists(filePath))
-            File.Delete(filePath);
-    }
-
-    private void UpdateJsonFieldIfExists(string id, Action<MemoryEntry> mutate)
-    {
-        var entry = GetById(id);
-        if (entry == null) return;
-        mutate(entry);
-        WriteJsonFile(entry);
-    }
-
-    // ═══════════════════════════════════════════
     //  内部：SQLite 操作
     // ═══════════════════════════════════════════
 
-    private void InsertIntoSqlite(MemoryEntry entry, string filePath)
+    private void InsertIntoSqlite(MemoryEntry entry)
     {
         using var cmd = _db!.CreateCommand();
         cmd.CommandText = """
             INSERT OR REPLACE INTO memory_entries
-                (id, type, layer, source, summary, importance, freshness,
+                (id, type, layer, source, content, summary, importance, freshness,
                  created_at, last_verified_at, stale_after, superseded_by,
-                 parent_id, node_id, version, file_path, embedding, ext_source_url, ext_source_id)
+                 parent_id, node_id, version, embedding, ext_source_url, ext_source_id)
             VALUES
-                (@id, @type, @layer, @source, @summary, @importance, @freshness,
+                (@id, @type, @layer, @source, @content, @summary, @importance, @freshness,
                  @created_at, @last_verified_at, @stale_after, @superseded_by,
-                 @parent_id, @node_id, @version, @file_path, @embedding, @ext_source_url, @ext_source_id)
+                 @parent_id, @node_id, @version, @embedding, @ext_source_url, @ext_source_id)
             """;
 
         cmd.Parameters.AddWithValue("@id", entry.Id);
         cmd.Parameters.AddWithValue("@type", entry.Type.ToString());
         cmd.Parameters.AddWithValue("@layer", entry.Layer.ToString());
         cmd.Parameters.AddWithValue("@source", entry.Source.ToString());
+        cmd.Parameters.AddWithValue("@content", entry.Content);
         cmd.Parameters.AddWithValue("@summary", (object?)entry.Summary ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@importance", entry.Importance);
         cmd.Parameters.AddWithValue("@freshness", entry.Freshness.ToString());
@@ -842,7 +745,6 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@parent_id", (object?)entry.ParentId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@node_id", (object?)entry.NodeId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@version", entry.Version);
-        cmd.Parameters.AddWithValue("@file_path", filePath);
         cmd.Parameters.AddWithValue("@embedding",
             entry.Embedding != null ? FloatsToBytes(entry.Embedding) : DBNull.Value);
         cmd.Parameters.AddWithValue("@ext_source_url", (object?)entry.ExternalSourceUrl ?? DBNull.Value);
@@ -1008,24 +910,62 @@ internal partial class MemoryStore : IDisposable
         }
     }
 
+    private const string SelectAllColumns = """
+        SELECT e.id, e.type, e.layer, e.source, e.content, e.summary,
+               e.importance, e.freshness, e.created_at, e.last_verified_at,
+               e.stale_after, e.superseded_by, e.parent_id, e.node_id,
+               e.version, e.ext_source_url, e.ext_source_id
+        FROM memory_entries e
+        """;
+
     private List<MemoryEntry> ReadEntriesFromCommand(SqliteCommand cmd)
     {
         var entries = new List<MemoryEntry>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
-            var filePath = reader.GetString(0);
-            if (!File.Exists(filePath)) continue;
-
             try
             {
-                var json = File.ReadAllText(filePath);
-                var entry = JsonSerializer.Deserialize<MemoryEntry>(json, JsonOpts);
-                if (entry != null) entries.Add(entry);
+                entries.Add(ReadEntryFromRow(reader));
             }
-            catch { /* skip corrupted */ }
+            catch { /* skip corrupted rows */ }
         }
         return entries;
+    }
+
+    private MemoryEntry ReadEntryFromRow(SqliteDataReader reader)
+    {
+        var id = reader.GetString(0);
+        Enum.TryParse<MemoryType>(reader.GetString(1), true, out var memType);
+        Enum.TryParse<KnowledgeLayer>(reader.GetString(2), true, out var layer);
+        Enum.TryParse<MemorySource>(reader.GetString(3), true, out var source);
+        Enum.TryParse<FreshnessStatus>(reader.GetString(7), true, out var freshness);
+
+        return new MemoryEntry
+        {
+            Id = id,
+            Type = memType,
+            Layer = layer,
+            Source = source,
+            Content = reader.IsDBNull(4) ? "" : reader.GetString(4),
+            Summary = reader.IsDBNull(5) ? null : reader.GetString(5),
+            Importance = reader.GetDouble(6),
+            Freshness = freshness,
+            CreatedAt = DateTime.TryParse(reader.GetString(8), out var ca) ? ca : DateTime.UtcNow,
+            LastVerifiedAt = reader.IsDBNull(9) ? null : DateTime.TryParse(reader.GetString(9), out var lv) ? lv : null,
+            StaleAfter = reader.IsDBNull(10) ? null : DateTime.TryParse(reader.GetString(10), out var sa) ? sa : null,
+            SupersededBy = reader.IsDBNull(11) ? null : reader.GetString(11),
+            ParentId = reader.IsDBNull(12) ? null : reader.GetString(12),
+            NodeId = reader.IsDBNull(13) ? null : reader.GetString(13),
+            Version = reader.GetInt32(14),
+            ExternalSourceUrl = reader.IsDBNull(15) ? null : reader.GetString(15),
+            ExternalSourceId = reader.IsDBNull(16) ? null : reader.GetString(16),
+            Disciplines = QueryMultiValues("memory_disciplines", "discipline", id),
+            Features = QueryMultiValues("memory_features", "feature", id),
+            Tags = QueryMultiValues("memory_tags", "tag", id),
+            PathPatterns = QueryMultiValues("memory_paths", "path_pattern", id),
+            RelatedIds = QueryMultiValues("memory_relations_export", "to_id", id),
+        };
     }
 
     private Dictionary<string, int> CountGroupBy(string table, string column)
