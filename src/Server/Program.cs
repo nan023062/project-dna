@@ -19,7 +19,7 @@ DnaApp.Create(args, new AppOptions
     LogDirectoryProvider = sp =>
     {
         var config = sp.GetRequiredService<ProjectConfig>();
-        return config.HasProject ? config.DefaultProjectRoot : null;
+        return config.HasProject ? config.ResolveStore(null, config.DefaultProjectRoot) : null;
     },
     BannerExtras = (sp, port) =>
     {
@@ -30,7 +30,11 @@ DnaApp.Create(args, new AppOptions
             ("MCP Server:  ", $"http://localhost:{port}/mcp")
         };
         if (config.HasProject)
+        {
             lines.Add(("项目根目录:  ", config.DefaultProjectRoot));
+            var store = config.ResolveStore(null, config.DefaultProjectRoot);
+            lines.Add(("知识存储:    ", store));
+        }
         return lines;
     }
 });
@@ -82,7 +86,8 @@ static string ResolvePersonaName(IServiceCollection services)
         var config = sp.GetService<ProjectConfig>();
         if (config is { HasProject: true })
         {
-            var archPath = Path.Combine(config.DefaultProjectRoot, ".dna", "architecture.json");
+            var storePath = config.ResolveStore(null, config.DefaultProjectRoot);
+            var archPath = Path.Combine(storePath, "architecture.json");
             if (File.Exists(archPath))
             {
                 var json = File.ReadAllText(archPath);

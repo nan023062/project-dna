@@ -56,5 +56,5 @@ public sealed class MemoryEngine : IMemoryEngine
     public (int exported, int skipped) ExportToJson() => _store.ExportToJson();
     public int DecayStaleMemories() => _store.DecayStaleMemories();
 
-    public void Initialize(string projectRoot) => _store.Initialize(projectRoot);
+    public void Initialize(string projectRoot, string storePath) => _store.Initialize(projectRoot, storePath);
 }

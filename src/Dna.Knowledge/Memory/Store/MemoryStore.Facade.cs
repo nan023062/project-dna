@@ -292,7 +292,7 @@ internal partial class MemoryStore
 
     internal void LoadAllManifests()
     {
-        var baseDir = Path.Combine(_projectRoot, ".dna");
+        var baseDir = _storePath;
         var archPath = Path.Combine(baseDir, "architecture.json");
         var modulesPath = Path.Combine(baseDir, "modules.json");
         var computedPath = Path.Combine(baseDir, "modules.computed.json");
@@ -395,21 +395,21 @@ internal partial class MemoryStore
 
     private void SaveArchitectureLocked()
     {
-        var path = Path.Combine(_projectRoot, ".dna", "architecture.json");
+        var path = Path.Combine(_storePath, "architecture.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(_architecture, ModuleManifestJsonOpts));
     }
 
     private void SaveModulesManifestLocked()
     {
-        var path = Path.Combine(_projectRoot, ".dna", "modules.json");
+        var path = Path.Combine(_storePath, "modules.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(_manifest, ModuleManifestJsonOpts));
     }
 
     private void SaveComputedManifestLocked()
     {
-        var path = Path.Combine(_projectRoot, ".dna", "modules.computed.json");
+        var path = Path.Combine(_storePath, "modules.computed.json");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(_computed, ModuleManifestJsonOpts));
     }

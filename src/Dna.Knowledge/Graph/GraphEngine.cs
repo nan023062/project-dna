@@ -197,7 +197,7 @@ public sealed class GraphEngine : IGraphEngine, IDnaService, IDisposable
     //  初始化
     // ═══════════════════════════════════════════
 
-    public void Initialize(string projectRoot) => _store.Initialize(projectRoot);
+    public void Initialize(string projectRoot, string storePath) => _store.Initialize(projectRoot, storePath);
 
     // ═══════════════════════════════════════════
     //  治理（仅对外暴露 — GovernanceEngine 也调用同一静态方法）

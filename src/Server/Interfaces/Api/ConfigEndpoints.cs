@@ -39,16 +39,18 @@ public static class ConfigEndpoints
             ProjectConfig config,
             FileLogWriter fileWriter) =>
         {
-            var result = config.SetProject(req.ProjectRoot);
+            var result = config.SetProject(req.ProjectRoot, req.StorePath);
             if (result.Success)
             {
-                fileWriter.SetLogDirectory(config.DefaultProjectRoot);
+                var store = config.ResolveStore(req.StorePath, config.DefaultProjectRoot);
+                fileWriter.SetLogDirectory(store);
             }
             return Results.Json(new
             {
                 success = result.Success,
                 message = result.Message,
-                projectRoot = config.DefaultProjectRoot
+                projectRoot = config.DefaultProjectRoot,
+                storePath = config.DnaStorePath
             }, JsonOpts);
         });
 
@@ -110,4 +112,4 @@ public static class ConfigEndpoints
     }
 }
 
-public record SetProjectRequest(string ProjectRoot);
+public record SetProjectRequest(string ProjectRoot, string? StorePath = null);

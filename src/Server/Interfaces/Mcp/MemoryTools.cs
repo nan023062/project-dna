@@ -590,7 +590,8 @@ public class MemoryTools(
     private void EnsureKnowledge(string? projectRoot)
     {
         var root = config.Resolve(projectRoot);
-        memory.Initialize(root);
+        var store = config.ResolveStore(null, root);
+        memory.Initialize(root, store);
     }
 
     private sealed class BatchEntry

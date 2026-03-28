@@ -14,8 +14,11 @@ public class ProjectConfig
     private static readonly string ConfigFile = Path.Combine(ConfigDir, "config.json");
 
     private string _projectRoot;
+    private string _storePath = string.Empty;
 
     public string DefaultProjectRoot => _projectRoot;
+    public string DnaStorePath => _storePath;
+    public bool HasStore => !string.IsNullOrEmpty(_storePath);
 
     public ProjectConfig()
     {
@@ -23,11 +26,17 @@ public class ProjectConfig
                        ?? Environment.GetEnvironmentVariable("DNA_MCP_PROJECT_ROOT")
                        ?? string.Empty;
 
+        _storePath = Environment.GetEnvironmentVariable("DNA_STORE_PATH") ?? string.Empty;
+
         if (string.IsNullOrEmpty(_projectRoot))
         {
             var saved = LoadPersistedConfig();
             if (!string.IsNullOrEmpty(saved.LastProject) && Directory.Exists(saved.LastProject))
+            {
                 _projectRoot = saved.LastProject;
+                if (string.IsNullOrEmpty(_storePath) && !string.IsNullOrEmpty(saved.LastStorePath))
+                    _storePath = saved.LastStorePath;
+            }
         }
     }
 
@@ -44,6 +53,16 @@ public class ProjectConfig
     }
 
     public bool HasProject => !string.IsNullOrEmpty(_projectRoot);
+
+    public string ResolveStore(string? providedStore, string projectRoot)
+    {
+        if (!string.IsNullOrWhiteSpace(providedStore))
+            return Path.GetFullPath(providedStore);
+        if (!string.IsNullOrWhiteSpace(_storePath))
+            return Path.GetFullPath(_storePath);
+        var projectName = Path.GetFileName(projectRoot);
+        return Path.Combine(ConfigDir, "projects", projectName);
+    }
 
     /// <summary>
     /// 任务级节流间隔（毫秒）。用于 Agent 每次工具调用后主动等待，降低 LLM 429 风险。
@@ -92,7 +111,7 @@ public class ProjectConfig
     /// <summary>
     /// 运行时切换项目根目录，同时持久化到配置文件
     /// </summary>
-    public SetProjectResult SetProject(string projectRoot)
+    public SetProjectResult SetProject(string projectRoot, string? storePath = null)
     {
         var requested = Path.GetFullPath(projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         var normalized = NormalizeProjectRootCandidate(requested);
@@ -103,19 +122,16 @@ public class ProjectConfig
         _projectRoot = normalized;
         Environment.SetEnvironmentVariable("DNA_PROJECT_ROOT", normalized);
 
-        AddToRecent(normalized);
+        var resolvedStore = ResolveStore(storePath, normalized);
+        _storePath = resolvedStore;
+        Environment.SetEnvironmentVariable("DNA_STORE_PATH", resolvedStore);
+
+        AddToRecent(normalized, resolvedStore);
         if (!string.Equals(requested, normalized, StringComparison.OrdinalIgnoreCase))
         {
-            var nestedDna = Path.Combine(requested, ".dna");
-            if (Directory.Exists(nestedDna))
-            {
-                return new SetProjectResult(
-                    true,
-                    $"检测到你选择的是子目录，已自动修正项目根目录：{normalized}。同时发现子目录下存在误创建的 .dna：{nestedDna}（确认无用后可删除）。");
-            }
             return new SetProjectResult(true, $"检测到你选择的是子目录，已自动修正项目根目录：{normalized}");
         }
-        return new SetProjectResult(true, $"项目已切换到：{normalized}");
+        return new SetProjectResult(true, $"项目已切换到：{normalized}（存储路径：{resolvedStore}）");
     }
 
     /// <summary>
@@ -192,10 +208,11 @@ public class ProjectConfig
         return removed > 0;
     }
 
-    private void AddToRecent(string projectRoot)
+    private void AddToRecent(string projectRoot, string storePath)
     {
         var config = LoadPersistedConfig();
         config.LastProject = projectRoot;
+        config.LastStorePath = storePath;
 
         config.RecentProjects.RemoveAll(p =>
             string.Equals(p.Path, projectRoot, StringComparison.OrdinalIgnoreCase));
@@ -204,6 +221,7 @@ public class ProjectConfig
         {
             Path = projectRoot,
             Name = Path.GetFileName(projectRoot),
+            StorePath = storePath,
             LastOpened = DateTime.UtcNow
         });
 
@@ -242,32 +260,19 @@ public class ProjectConfig
     {
         var normalized = Path.GetFullPath(inputPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
-        var marker = $"{Path.DirectorySeparatorChar}.dna{Path.DirectorySeparatorChar}";
-        var markerIndex = normalized.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-        if (markerIndex >= 0)
-        {
-            var beforeMarker = normalized[..markerIndex];
-            if (!string.IsNullOrWhiteSpace(beforeMarker))
-                return beforeMarker.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        }
-
-        if (normalized.EndsWith($"{Path.DirectorySeparatorChar}.dna", StringComparison.OrdinalIgnoreCase))
-        {
-            var parent = Path.GetDirectoryName(normalized);
-            if (!string.IsNullOrWhiteSpace(parent))
-                return parent;
-        }
-
         var cursor = normalized;
         while (!string.IsNullOrWhiteSpace(cursor))
         {
-            var dnaRoot = Path.Combine(cursor, ".dna", "dna");
-            var projectJson = Path.Combine(cursor, ".dna", "project.json");
-            if (Directory.Exists(dnaRoot) || File.Exists(projectJson))
+            if (Directory.Exists(Path.Combine(cursor, ".git")))
                 return cursor;
 
-            // 对新项目初始化前场景，优先回退到最近的 git 根目录，避免把 src/engine 误选为项目根。
-            if (Directory.Exists(Path.Combine(cursor, ".git")))
+            if (Directory.EnumerateFiles(cursor, "*.sln", SearchOption.TopDirectoryOnly).Any())
+                return cursor;
+
+            if (Directory.EnumerateFiles(cursor, "*.csproj", SearchOption.TopDirectoryOnly).Any())
+                return cursor;
+
+            if (File.Exists(Path.Combine(cursor, "package.json")))
                 return cursor;
 
             var parent = Path.GetDirectoryName(cursor);
@@ -286,12 +291,14 @@ public class RecentProject
 {
     public string Path { get; set; } = "";
     public string Name { get; set; } = "";
+    public string? StorePath { get; set; }
     public DateTime LastOpened { get; set; }
 }
 
 public class PersistedConfig
 {
     public string? LastProject { get; set; }
+    public string? LastStorePath { get; set; }
     public List<RecentProject> RecentProjects { get; set; } = [];
     public List<LlmProviderConfig> LlmProviders { get; set; } = [];
     public string? ActiveLlmProviderId { get; set; }

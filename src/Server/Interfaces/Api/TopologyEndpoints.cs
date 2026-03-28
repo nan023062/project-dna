@@ -24,7 +24,7 @@ public static class TopologyEndpoints
             if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
                 return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
 
-            graph.Initialize(config.DefaultProjectRoot);
+            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             var topo = graph.BuildTopology();
 
             return Results.Json(new
@@ -71,7 +71,7 @@ public static class TopologyEndpoints
             if (string.IsNullOrEmpty(root))
                 return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
 
-            graph.Initialize(root);
+            graph.Initialize(root, config.ResolveStore(null, root));
             graph.BuildTopology();
             var names = modules
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -91,7 +91,7 @@ public static class TopologyEndpoints
             if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
                 return Results.Json(new { error = "未配置 DNA_PROJECT_ROOT" }, statusCode: 400);
 
-            graph.Initialize(config.DefaultProjectRoot);
+            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             graph.ReloadManifests();
             var topo = graph.BuildTopology();
             return Results.Json(new

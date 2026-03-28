@@ -40,9 +40,9 @@ public sealed class FileLogWriter : IDisposable
     /// <summary>
     /// 设置日志目录。可在项目根目录确定后调用。
     /// </summary>
-    public void SetLogDirectory(string projectRoot)
+    public void SetLogDirectory(string storePath)
     {
-        var dir = Path.Combine(projectRoot, ".dna", "logs");
+        var dir = Path.Combine(storePath, "logs");
         if (string.Equals(_logDirectory, dir, StringComparison.OrdinalIgnoreCase))
             return;
 

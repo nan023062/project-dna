@@ -16,7 +16,7 @@ public static class StatusEndpoints
             {
                 try
                 {
-                    graph.Initialize(root!);
+                    graph.Initialize(root!, config.ResolveStore(null, root!));
                     moduleCount = graph.BuildTopology().Nodes.Count;
                 }
                 catch { /* ignore */ }

@@ -23,5 +23,5 @@ public interface IMemoryEngine
     (int exported, int skipped) ExportToJson();
     int DecayStaleMemories();
 
-    void Initialize(string projectRoot);
+    void Initialize(string projectRoot, string storePath);
 }

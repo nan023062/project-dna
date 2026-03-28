@@ -637,7 +637,8 @@ public class KnowledgeTools(
     private void EnsureKnowledge(string? projectRoot)
     {
         var root = config.Resolve(projectRoot);
-        graph.Initialize(root);
+        var store = config.ResolveStore(null, root);
+        graph.Initialize(root, store);
     }
 
     private static List<string> SplitCsv(string csv) =>

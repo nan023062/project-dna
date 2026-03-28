@@ -27,7 +27,9 @@ internal partial class MemoryStore : IDisposable
     private readonly ILogger<MemoryStore> _logger;
     private SqliteConnection? _db;
     private string _projectRoot = string.Empty;
+    private string _storePath = string.Empty;
     public string ProjectRoot => _projectRoot;
+    public string StorePath => _storePath;
     private string _memoryDir = string.Empty;
     private string _entriesDir = string.Empty;
 
@@ -50,12 +52,13 @@ internal partial class MemoryStore : IDisposable
         _logger.LogInformation("MemoryStore 已重载配置");
     }
 
-    public void Initialize(string projectRoot)
+    public void Initialize(string projectRoot, string storePath)
     {
-        if (_initialized && _projectRoot == projectRoot) return;
+        if (_initialized && _projectRoot == projectRoot && _storePath == storePath) return;
 
         _projectRoot = projectRoot;
-        _memoryDir = Path.Combine(projectRoot, ".dna", "memory");
+        _storePath = storePath;
+        _memoryDir = Path.Combine(storePath, "memory");
         _entriesDir = Path.Combine(_memoryDir, "entries");
         Directory.CreateDirectory(_entriesDir);
 
@@ -76,7 +79,7 @@ internal partial class MemoryStore : IDisposable
 
         var jsonCount = RebuildFromJsonIfNeeded();
         _initialized = true;
-        _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, entries={Count}", dbPath, jsonCount);
+        _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}", dbPath, storePath, jsonCount);
     }
 
     private void EnsureSchema()

@@ -15,7 +15,7 @@ public static class FileTreeEndpoints
             if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
                 return Results.BadRequest(new { error = "未配置项目路径" });
 
-            graph.Initialize(config.DefaultProjectRoot);
+            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             var roots = graph.ScanProjectRoots(config.DefaultProjectRoot);
             return Results.Ok(new { roots });
         });
@@ -28,7 +28,7 @@ public static class FileTreeEndpoints
             if (!config.HasProject || string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
                 return Results.BadRequest(new { error = "未配置项目路径" });
 
-            graph.Initialize(config.DefaultProjectRoot);
+            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
             var children = graph.ScanDirectory(config.DefaultProjectRoot, path ?? "");
             return Results.Ok(new { children });
         });

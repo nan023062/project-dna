@@ -36,5 +36,5 @@ public interface IGraphEngine
     List<ProjectFileNode> ScanDirectory(string projectRoot, string relativePath);
     void InvalidateTreeCache();
 
-    void Initialize(string projectRoot);
+    void Initialize(string projectRoot, string storePath);
 }

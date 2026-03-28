@@ -208,7 +208,7 @@ public static class ModuleManagementEndpoints
     private static void EnsureReady(IGraphEngine graph, ProjectConfig config)
     {
         if (config.HasProject && !string.IsNullOrWhiteSpace(config.DefaultProjectRoot))
-            graph.Initialize(config.DefaultProjectRoot);
+            graph.Initialize(config.DefaultProjectRoot, config.ResolveStore(null, config.DefaultProjectRoot));
     }
 
     public sealed class UpsertModuleRequest
