@@ -245,7 +245,7 @@ public static class CliHandler
         if (json.TryGetProperty("total", out var total))
             Console.WriteLine($"  总记忆数: {total.GetInt32()}");
 
-        foreach (var prop in new[] { "byLayer", "byType", "byDiscipline", "byFreshness" })
+        foreach (var prop in new[] { "byNodeType", "byLayer", "byType", "byDiscipline", "byFreshness" })
         {
             if (!json.TryGetProperty(prop, out var obj) || obj.ValueKind != JsonValueKind.Object) continue;
             Console.WriteLine();

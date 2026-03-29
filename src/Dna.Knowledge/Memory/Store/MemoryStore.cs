@@ -1,3 +1,4 @@
+using Dna.Knowledge;
 using Dna.Knowledge.Models;
 using Dna.Memory.Models;
 using Microsoft.Data.Sqlite;
@@ -163,6 +164,7 @@ internal partial class MemoryStore : IDisposable
         ftsCmd.ExecuteNonQuery();
 
         MigrateSchemaIfNeeded();
+        MigrateLegacyLayerValuesToNodeType();
     }
 
     private void MigrateSchemaIfNeeded()
@@ -188,6 +190,32 @@ internal partial class MemoryStore : IDisposable
         using var alter = _db.CreateCommand();
         alter.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
         alter.ExecuteNonQuery();
+    }
+
+    private void MigrateLegacyLayerValuesToNodeType()
+    {
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = """
+            UPDATE memory_entries
+            SET layer = CASE LOWER(layer)
+                WHEN 'projectvision' THEN 'Project'
+                WHEN 'disciplinestandard' THEN 'Department'
+                WHEN 'crossdiscipline' THEN 'Team'
+                WHEN 'featuresystem' THEN 'Group'
+                WHEN 'implementation' THEN 'Team'
+                WHEN 'root' THEN 'Project'
+                WHEN 'module' THEN 'Group'
+                WHEN 'crosswork' THEN 'Team'
+                ELSE layer
+            END
+            WHERE LOWER(layer) IN (
+                'projectvision','disciplinestandard','crossdiscipline','featuresystem','implementation',
+                'root','module','crosswork'
+            )
+            """;
+        var migrated = cmd.ExecuteNonQuery();
+        if (migrated > 0)
+            _logger.LogInformation("记忆层级字段已迁移到 NodeType 语义，共 {Count} 条", migrated);
     }
 
     // ═══════════════════════════════════════════
@@ -537,7 +565,7 @@ internal partial class MemoryStore : IDisposable
         {
             Total = total,
             ConflictCount = conflictCount,
-            ByLayer = CountGroupBy("memory_entries", "layer"),
+            ByNodeType = CountGroupBy("memory_entries", "layer"),
             ByDiscipline = CountGroupBy("memory_disciplines", "discipline"),
             ByFeature = CountGroupBy("memory_features", "feature"),
             ByFreshness = CountGroupBy("memory_entries", "freshness"),
@@ -572,7 +600,7 @@ internal partial class MemoryStore : IDisposable
 
         cmd.Parameters.AddWithValue("@id", entry.Id);
         cmd.Parameters.AddWithValue("@type", entry.Type.ToString());
-        cmd.Parameters.AddWithValue("@layer", entry.Layer.ToString());
+        cmd.Parameters.AddWithValue("@layer", entry.NodeType.ToString());
         cmd.Parameters.AddWithValue("@source", entry.Source.ToString());
         cmd.Parameters.AddWithValue("@content", entry.Content);
         cmd.Parameters.AddWithValue("@summary", (object?)entry.Summary ?? DBNull.Value);
@@ -677,12 +705,13 @@ internal partial class MemoryStore : IDisposable
         var conditions = new List<string>();
         var parameters = new List<(string, object)>();
 
-        if (filter.Layers is { Count: > 0 })
+        var nodeTypes = filter.ResolvedNodeTypes;
+        if (nodeTypes is { Count: > 0 })
         {
-            var placeholders = filter.Layers.Select((l, i) => $"@layer{i}").ToList();
+            var placeholders = nodeTypes.Select((l, i) => $"@layer{i}").ToList();
             conditions.Add($"e.layer IN ({string.Join(",", placeholders)})");
-            for (var i = 0; i < filter.Layers.Count; i++)
-                parameters.Add(($"@layer{i}", filter.Layers[i].ToString()));
+            for (var i = 0; i < nodeTypes.Count; i++)
+                parameters.Add(($"@layer{i}", nodeTypes[i].ToString()));
         }
 
         if (filter.Types is { Count: > 0 })
@@ -790,7 +819,9 @@ internal partial class MemoryStore : IDisposable
     {
         var id = reader.GetString(0);
         Enum.TryParse<MemoryType>(reader.GetString(1), true, out var memType);
-        Enum.TryParse<KnowledgeLayer>(reader.GetString(2), true, out var layer);
+        var nodeType = NodeTypeCompat.TryParse(reader.GetString(2), out var parsedNodeType)
+            ? parsedNodeType
+            : NodeType.Group;
         Enum.TryParse<MemorySource>(reader.GetString(3), true, out var source);
         Enum.TryParse<FreshnessStatus>(reader.GetString(7), true, out var freshness);
 
@@ -798,7 +829,7 @@ internal partial class MemoryStore : IDisposable
         {
             Id = id,
             Type = memType,
-            Layer = layer,
+            NodeType = nodeType,
             Source = source,
             Content = reader.IsDBNull(4) ? "" : reader.GetString(4),
             Summary = reader.IsDBNull(5) ? null : reader.GetString(5),

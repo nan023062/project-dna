@@ -1,9 +1,10 @@
 namespace Dna.Memory.Models;
 
 /// <summary>
-/// 五层知识层级 — 每一层约束下一层。
-/// AI 执行 L4 任务时，系统自动召回 L0-L3 的约束。
+/// 已废弃：记忆坐标已迁移到 NodeType（Project/Department/Group/Team）。
+/// 仅保留此枚举用于历史兼容，请勿在新代码中使用。
 /// </summary>
+[Obsolete("KnowledgeLayer 已废弃，请改用 NodeType。")]
 public enum KnowledgeLayer
 {
     /// <summary>L0: 项目愿景 — 游戏类型、核心体验、目标平台、技术选型</summary>

@@ -39,7 +39,7 @@ internal class MemoryWriter
         {
             Id = UlidGenerator.New(),
             Type = request.Type,
-            Layer = request.Layer,
+            NodeType = request.ResolvedNodeType,
             Source = request.Source,
             Content = request.Content,
             Summary = request.Summary ?? GenerateAutoSummary(request.Content),
@@ -64,8 +64,8 @@ internal class MemoryWriter
         if (entry.Embedding != null)
             _vectorIndex.Upsert(entry.Id, entry.Embedding);
 
-        _logger.LogInformation("remember: {Type}/{Layer} [{Id}] {Summary}",
-            entry.Type, entry.Layer, entry.Id, Truncate(entry.Summary, 60));
+        _logger.LogInformation("remember: {Type}/{NodeType} [{Id}] {Summary}",
+            entry.Type, entry.NodeType, entry.Id, Truncate(entry.Summary, 60));
 
         return entry;
     }
@@ -84,7 +84,7 @@ internal class MemoryWriter
         {
             Id = memoryId,
             Type = request.Type,
-            Layer = request.Layer,
+            NodeType = request.ResolvedNodeType,
             Source = request.Source,
             Content = request.Content,
             Summary = request.Summary ?? GenerateAutoSummary(request.Content),

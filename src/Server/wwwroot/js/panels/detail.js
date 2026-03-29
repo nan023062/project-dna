@@ -119,7 +119,8 @@ function selectTag(tagKey) {
   }
 
   let combinedContent = items.map(m => {
-    let header = `> **ID**: ${m.id} | **类型**: ${m.type} | **层级**: ${m.layer} | **鲜活度**: ${m.freshness}\n`;
+    const nodeType = m.nodeType ?? m.layer ?? '-';
+    let header = `> **ID**: ${m.id} | **类型**: ${m.type} | **节点类型**: ${nodeType} | **鲜活度**: ${m.freshness}\n`;
     if (m.summary) header += `> **摘要**: ${m.summary}\n`;
     return header + '\n' + m.content;
   }).join('\n\n---\n\n');

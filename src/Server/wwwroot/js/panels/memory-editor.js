@@ -3,16 +3,15 @@ import { $, api, escapeHtml } from '../utils.js';
 let _memories = [];
 let _currentMemoryId = null;
 
-const LAYER_NAME_TO_VALUE = {
-  ProjectVision: 0,
-  DisciplineStandard: 1,
-  CrossDiscipline: 2,
-  FeatureSystem: 3,
-  Implementation: 4
+const NODE_TYPE_NAME_TO_VALUE = {
+  Project: 0,
+  Department: 1,
+  Group: 2,
+  Team: 3
 };
 
-const LAYER_VALUE_TO_NAME = Object.fromEntries(
-  Object.entries(LAYER_NAME_TO_VALUE).map(([k, v]) => [v, k])
+const NODE_TYPE_VALUE_TO_NAME = Object.fromEntries(
+  Object.entries(NODE_TYPE_NAME_TO_VALUE).map(([k, v]) => [v, k])
 );
 
 const TYPE_NAME_TO_VALUE = {
@@ -31,52 +30,49 @@ const SOURCE_NAME_TO_VALUE = {
   Human: 2
 };
 
-const TEMPLATE_BY_LAYER = {
-  ProjectVision: {
-    summary: '项目愿景与核心定义',
+const TEMPLATE_BY_NODE_TYPE = {
+  Project: {
+    summary: 'Project 全局愿景与边界',
     background: '项目整体背景',
-    goal: '统一团队目标与边界',
-    rules: ['游戏类型', '目标平台', '引擎版本', '网络模型', '目标帧率', '付费模式', '当前阶段'],
+    goal: '明确项目目标、边界与约束',
+    rules: ['商业目标', '核心体验目标', '预算边界', '合规底线', '技术总选型'],
     steps: [],
     notes: ''
   },
-  DisciplineStandard: {
-    summary: '职能标准与规范',
-    background: '单职能内部规范',
-    goal: '保障同职能协作一致性',
-    rules: ['架构选型', '性能预算', '命名规范', '质量门禁'],
+  Department: {
+    summary: 'Department 规则治理',
+    background: '部门级治理规范',
+    goal: '统一部门标准并协调资源冲突',
+    rules: ['质量标准', '流程规范', '协作约束', '资源优先级'],
     steps: ['设计规范', '评审通过', '执行落地'],
     notes: ''
   },
-  CrossDiscipline: {
-    summary: '跨职能协作协议',
-    background: '跨部门协作场景',
-    goal: '降低沟通成本与返工',
-    rules: ['输入输出约定', '责任边界', '验收标准'],
-    steps: ['需求对齐', '联调验证', '回归确认'],
+  Group: {
+    summary: 'Group 技术组规范',
+    background: '技术组负责的业务域',
+    goal: '固化工作流、接口与质量标准',
+    rules: ['接口协议', '性能规格', '文件责任域', '依赖约束（DAG）'],
+    steps: ['方案设计', '规范评审', '准入审核'],
     notes: ''
   },
-  FeatureSystem: {
-    summary: '业务系统知识',
-    background: '某功能系统的实现与约束',
-    goal: '沉淀系统级知识',
-    rules: ['关键约束', '性能边界', '兼容性要求'],
-    steps: ['开发', '测试', '上线'],
-    notes: ''
-  },
-  Implementation: {
-    summary: '执行细节与经验',
-    background: '具体任务上下文',
-    goal: '减少重复踩坑',
-    rules: ['关键教训', '修复原则'],
-    steps: ['定位问题', '实施修复', '验证回归'],
+  Team: {
+    summary: 'Team 执行记录',
+    background: '具体任务执行上下文',
+    goal: '交付结果并沉淀复盘知识',
+    rules: ['授权文件域', '交付验收标准', '过程记忆沉淀'],
+    steps: ['领取任务', '执行开发', '提审交付', '复盘沉淀'],
     notes: ''
   }
 };
 
-function normalizeLayerName(layer) {
-  if (typeof layer === 'number') return LAYER_VALUE_TO_NAME[layer] ?? 'Implementation';
-  return layer || 'Implementation';
+function normalizeNodeTypeName(nodeType) {
+  if (typeof nodeType === 'number') return NODE_TYPE_VALUE_TO_NAME[nodeType] ?? 'Group';
+  if (nodeType === 'ProjectVision') return 'Project';
+  if (nodeType === 'DisciplineStandard') return 'Department';
+  if (nodeType === 'CrossDiscipline') return 'Team';
+  if (nodeType === 'FeatureSystem') return 'Group';
+  if (nodeType === 'Implementation') return 'Team';
+  return nodeType || 'Group';
 }
 
 function normalizeTypeName(type) {
@@ -136,7 +132,7 @@ function splitLines(value) {
 }
 
 function composeMarkdown() {
-  const layer = $('memLayer').value;
+  const nodeType = $('memLayer').value;
   const type = $('memType').value;
   const background = $('memFieldBackground').value.trim();
   const goal = $('memFieldGoal').value.trim();
@@ -147,7 +143,7 @@ function composeMarkdown() {
   const lines = [];
   lines.push(`## ${$('memSummary').value.trim() || '未命名记忆'}`);
   lines.push('');
-  lines.push(`- 层级: ${layer}`);
+  lines.push(`- 节点类型: ${nodeType}`);
   lines.push(`- 类型: ${type}`);
   if (background) lines.push(`- 背景: ${background}`);
   if (goal) lines.push(`- 目标: ${goal}`);
@@ -200,7 +196,7 @@ function clearStructuredFields() {
 }
 
 function fillTemplate(layerName) {
-  const tpl = TEMPLATE_BY_LAYER[layerName] ?? TEMPLATE_BY_LAYER.Implementation;
+  const tpl = TEMPLATE_BY_NODE_TYPE[layerName] ?? TEMPLATE_BY_NODE_TYPE.Group;
   $('memSummary').value = tpl.summary;
   $('memFieldBackground').value = tpl.background;
   $('memFieldGoal').value = tpl.goal;
@@ -228,11 +224,11 @@ export function onLayerTypeChanged() {
 }
 
 export async function loadMemories() {
-  const layer = $('memFilterLayer').value;
+  const nodeType = $('memFilterLayer').value;
   const type = $('memFilterType').value;
 
   let url = '/memory/query?limit=100';
-  if (layer) url += `&layers=${layer}`;
+  if (nodeType) url += `&nodeTypes=${nodeType}`;
   if (type) url += `&types=${type}`;
 
   try {
@@ -254,7 +250,7 @@ function renderMemoryList() {
     <div class="memory-item ${_currentMemoryId === m.id ? 'active' : ''}" data-id="${m.id}">
       <div class="memory-item-title">${escapeHtml(m.summary || m.content.substring(0, 30) + '...')}</div>
       <div class="memory-item-meta">
-        <span>[${escapeHtml(normalizeLayerName(m.layer))}] ${escapeHtml(normalizeTypeName(m.type))}</span>
+        <span>[${escapeHtml(normalizeNodeTypeName(m.nodeType ?? m.layer))}] ${escapeHtml(normalizeTypeName(m.type))}</span>
         <span>${escapeHtml(m.freshness)}</span>
       </div>
     </div>
@@ -276,7 +272,7 @@ export function selectMemory(id) {
   $('memId').textContent = memory.id;
   $('memSummary').value = memory.summary || '';
   $('memType').value = normalizeTypeName(memory.type);
-  $('memLayer').value = normalizeLayerName(memory.layer);
+  $('memLayer').value = normalizeNodeTypeName(memory.nodeType ?? memory.layer);
   $('memImportance').value = memory.importance || 0.5;
 
   setCheckedDisciplines(memory.disciplines || []);
@@ -299,7 +295,7 @@ export function createNew() {
   $('memId').textContent = '新建记忆';
   $('memSummary').value = '';
   $('memType').value = 'Semantic';
-  $('memLayer').value = 'ProjectVision';
+  $('memLayer').value = 'Group';
   $('memImportance').value = 0.8;
 
   setCheckedDisciplines([]);
@@ -308,7 +304,7 @@ export function createNew() {
   renderListEditor('memTagsList', [], '例如：#lesson');
 
   clearStructuredFields();
-  fillTemplate('ProjectVision');
+  fillTemplate('Group');
 
   $('btnDeleteMemory').style.display = 'none';
 }
@@ -329,13 +325,13 @@ export async function saveMemory() {
   updateGeneratedContent();
 
   const typeName = $('memType').value;
-  const layerName = $('memLayer').value;
+  const nodeTypeName = $('memLayer').value;
 
   const request = {
     source: SOURCE_NAME_TO_VALUE.Human,
     summary: $('memSummary').value.trim() || null,
     type: TYPE_NAME_TO_VALUE[typeName] ?? TYPE_NAME_TO_VALUE.Semantic,
-    layer: LAYER_NAME_TO_VALUE[layerName] ?? LAYER_NAME_TO_VALUE.Implementation,
+    nodeType: NODE_TYPE_NAME_TO_VALUE[nodeTypeName] ?? NODE_TYPE_NAME_TO_VALUE.Group,
     disciplines: getCheckedDisciplines(),
     features: getListValues('memFeaturesList'),
     nodeId: getListValues('memNodeIdField')[0] || null,

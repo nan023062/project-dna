@@ -1,8 +1,10 @@
+using Dna.Knowledge;
+
 namespace Dna.Memory.Models;
 
 /// <summary>
 /// 记忆条目 — 知识图谱的最小单元。
-/// 通过知识坐标（Layer × Discipline × Feature × Path）定位在项目中的位置，
+/// 通过知识坐标（NodeType × Discipline × Feature × Path）定位在项目中的位置，
 /// 通过约束关系（ParentId / RelatedIds）表达层级约束链。
 /// </summary>
 public sealed class MemoryEntry
@@ -19,7 +21,7 @@ public sealed class MemoryEntry
 
     // === 知识坐标 ===
 
-    public KnowledgeLayer Layer { get; init; }
+    public NodeType NodeType { get; init; } = NodeType.Group;
 
     /// <summary>关联的职能域：engineering / design / art / ta / audio / devops / qa</summary>
     public List<string> Disciplines { get; init; } = [];

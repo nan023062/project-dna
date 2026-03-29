@@ -38,7 +38,8 @@ public class MemoryTools(
         "#active-task: {\"goal\":\"目标\",\"modules\":[\"模块\"],\"status\":\"进行中\"}。" +
         "普通知识用纯文本即可。" +
         "参数 type：记忆类型 — Structural(结构)/Semantic(语义)/Episodic(事件)/Working(工作)/Procedural(过程)。" +
-        "参数 layer：知识层级 — ProjectVision(L0)/DisciplineStandard(L1)/CrossDiscipline(L2)/FeatureSystem(L3)/Implementation(L4)。" +
+        "参数 nodeType：节点类型 — Project/Department/Group/Team。" +
+        "参数 layer：兼容旧参数（已废弃），会自动映射到 nodeType。" +
         "参数 disciplines：关联职能域（逗号分隔）— engineering/design/art/ta/audio/devops/qa。" +
         "参数 tags：标签（逗号分隔）— 如 #lesson,#bug-fix,#performance。" +
         "参数 summary：可选，一句话摘要（留空则自动生成）。" +
@@ -49,8 +50,9 @@ public class MemoryTools(
     public async Task<string> remember(
         [Description("知识正文（文本或 JSON）")] string content,
         [Description("记忆类型: Structural/Semantic/Episodic/Working/Procedural")] string type,
-        [Description("知识层级: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string layer,
         [Description("关联职能域，逗号分隔: engineering/design/art/ta/audio/devops/qa")] string disciplines,
+        [Description("节点类型: Project/Department/Group/Team")] string? nodeType = null,
+        [Description("兼容旧参数，已废弃: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string? layer = null,
         [Description("标签，逗号分隔: 如 #lesson,#bug-fix")] string? tags = null,
         [Description("一句话摘要（留空自动生成）")] string? summary = null,
         [Description("关联业务系统，逗号分隔: 如 character,building")] string? features = null,
@@ -58,18 +60,18 @@ public class MemoryTools(
         [Description("上层约束记忆 ID（用于约束链）")] string? parentId = null,
         [Description("重要度 0.0-1.0")] double importance = 0.5)
     {
-        logger.LogInformation(LogEvents.Mcp, "remember() type={Type} layer={Layer}", type, layer);
+        logger.LogInformation(LogEvents.Mcp, "remember() type={Type} nodeType={NodeType}", type, nodeType ?? layer);
 
         if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
             return $"错误：无效的记忆类型 '{type}'。可选值: Structural, Semantic, Episodic, Working, Procedural";
-        if (!Enum.TryParse<KnowledgeLayer>(layer, true, out var knowledgeLayer))
-            return $"错误：无效的知识层级 '{layer}'。可选值: ProjectVision, DisciplineStandard, CrossDiscipline, FeatureSystem, Implementation";
+        if (!NodeTypeCompat.TryParse(nodeType ?? layer, out var parsedNodeType))
+            return $"错误：无效的节点类型 '{nodeType ?? layer}'。可选值: Project, Department, Group, Team";
 
         var request = new RememberRequest
         {
             Content = content,
             Type = memoryType,
-            Layer = knowledgeLayer,
+            NodeType = parsedNodeType,
             Source = MemorySource.Ai,
             Summary = summary,
             Disciplines = SplitCsv(disciplines),
@@ -81,19 +83,20 @@ public class MemoryTools(
         };
 
         var entry = await memory.RememberAsync(request);
-        return $"✓ 记忆已写入 [{entry.Id}]\n类型: {entry.Type} | 层级: {entry.Layer} | 鲜活度: Fresh\n摘要: {entry.Summary}";
+        return $"✓ 记忆已写入 [{entry.Id}]\n类型: {entry.Type} | 节点类型: {entry.NodeType} | 鲜活度: Fresh\n摘要: {entry.Summary}";
     }
 
     [McpServerTool, Description(
         "语义检索项目记忆。遇到不确定的规范、流程、约定时应主动调用，NEVER 凭猜测行事。" +
         "输入自然语言问题，系统通过向量语义搜索 + 标签匹配 + 全文检索 + 坐标匹配 四通道召回，" +
-        "自动沿知识层级展开约束链（L0→L1→L2→L3 的上层约束也会返回）。" +
+        "自动沿治理节点类型展开约束链（Project→Department→Group）。" +
         "参数 question：自然语言问题，如「上次改角色换装遇到什么问题？」。" +
         "参数 disciplines：可选，限定职能域（逗号分隔）。" +
         "参数 features：可选，限定业务系统（逗号分隔）。" +
         "参数 nodeId：可选，限定节点 ID（单个）。" +
         "参数 tags：可选，精确匹配标签（逗号分隔）。" +
-        "参数 layers：可选，限定知识层级（逗号分隔）。" +
+        "参数 nodeTypes：可选，限定节点类型（逗号分隔）。" +
+        "参数 layers：兼容旧参数（已废弃）。" +
         "参数 expandChain：是否展开约束链，默认 true。" +
         "参数 maxResults：最多返回条数，默认 10。" +
         "When to call: whenever you're uncertain about conventions, standards, past decisions, or lessons learned.")]
@@ -103,7 +106,8 @@ public class MemoryTools(
         [Description("限定业务系统，逗号分隔")] string? features = null,
         [Description("限定节点 ID")] string? nodeId = null,
         [Description("精确匹配标签，逗号分隔")] string? tags = null,
-        [Description("限定知识层级，逗号分隔: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string? layers = null,
+        [Description("限定节点类型，逗号分隔: Project/Department/Group/Team")] string? nodeTypes = null,
+        [Description("兼容旧参数，已废弃")] string? layers = null,
         [Description("是否展开约束链")] bool expandChain = true,
         [Description("最多返回条数")] int maxResults = 10)
     {
@@ -129,7 +133,7 @@ public class MemoryTools(
             Features = SplitCsvOrNull(features),
             NodeId = nodeId,
             Tags = SplitCsvOrNull(tags),
-            Layers = ParseLayers(layers),
+            NodeTypes = ParseNodeTypes(nodeTypes, layers),
             ExpandConstraintChain = expandChain,
             MaxResults = Math.Clamp(maxResults, 1, 50)
         };
@@ -167,11 +171,12 @@ public class MemoryTools(
 
     [McpServerTool, Description(
         "批量写入多条项目记忆。适用于从文档蒸馏、首次灌入项目知识等场景。" +
-        "每条 entry 是一个 JSON 对象，字段与 remember 相同：content(必填), type(必填), layer(必填), disciplines(必填), " +
+        "每条 entry 是一个 JSON 对象，字段与 remember 相同：content(必填), type(必填), nodeType(必填), disciplines(必填), " +
+        "兼容旧字段 layer（已废弃），" +
         "tags, summary, features, nodeId, parentId, importance。" +
         "单次上限 50 条。返回成功/失败计数和写入的 ID 列表。")]
     public async Task<string> batch_remember(
-        [Description("JSON 数组，每个元素包含 content/type/layer/disciplines 等字段")] string entries)
+        [Description("JSON 数组，每个元素包含 content/type/nodeType/disciplines 等字段")] string entries)
     {
         logger.LogInformation(LogEvents.Mcp, "batch_remember()");
 
@@ -182,7 +187,7 @@ public class MemoryTools(
         }
         catch (Exception ex)
         {
-            return $"错误：entries 解析失败 — {ex.Message}\n期望格式: [{{\n  \"content\": \"...\",\n  \"type\": \"Semantic\",\n  \"layer\": \"DisciplineStandard\",\n  \"disciplines\": \"engineering\"\n}}]";
+            return $"错误：entries 解析失败 — {ex.Message}\n期望格式: [{{\n  \"content\": \"...\",\n  \"type\": \"Semantic\",\n  \"nodeType\": \"Group\",\n  \"disciplines\": \"engineering\"\n}}]";
         }
 
         if (items == null || items.Count == 0)
@@ -199,14 +204,14 @@ public class MemoryTools(
             { errors.Add($"[{i}] content 为空"); continue; }
             if (!Enum.TryParse<MemoryType>(item.Type, true, out var mt))
             { errors.Add($"[{i}] 无效 type '{item.Type}'"); continue; }
-            if (!Enum.TryParse<KnowledgeLayer>(item.Layer, true, out var kl))
-            { errors.Add($"[{i}] 无效 layer '{item.Layer}'"); continue; }
+            if (!NodeTypeCompat.TryParse(item.NodeType ?? item.Layer, out var nt))
+            { errors.Add($"[{i}] 无效 nodeType/layer '{item.NodeType ?? item.Layer}'"); continue; }
 
             requests.Add(new RememberRequest
             {
                 Content = item.Content,
                 Type = mt,
-                Layer = kl,
+                NodeType = nt,
                 Source = MemorySource.Ai,
                 Summary = item.Summary,
                 Disciplines = SplitCsv(item.Disciplines ?? ""),
@@ -244,7 +249,8 @@ public class MemoryTools(
         [Description("新的知识正文（不修改则留空）")] string? content = null,
         [Description("新的摘要（不修改则留空）")] string? summary = null,
         [Description("新的记忆类型: Structural/Semantic/Episodic/Working/Procedural（不修改则留空）")] string? type = null,
-        [Description("新的知识层级: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation（不修改则留空）")] string? layer = null,
+        [Description("新的节点类型: Project/Department/Group/Team（不修改则留空）")] string? nodeType = null,
+        [Description("兼容旧参数，已废弃")] string? layer = null,
         [Description("新的标签，逗号分隔（会替换原有标签；不修改则留空）")] string? tags = null,
         [Description("新的关联职能域，逗号分隔（不修改则留空）")] string? disciplines = null,
         [Description("新的重要度 0.0-1.0（不修改则留空）")] double? importance = null)
@@ -256,17 +262,20 @@ public class MemoryTools(
             return $"错误：记忆不存在 [{id}]";
 
         var mt = existing.Type;
-        var kl = existing.Layer;
+        var nt = existing.NodeType;
         if (!string.IsNullOrWhiteSpace(type) && !Enum.TryParse(type, true, out mt))
             return $"错误：无效的记忆类型 '{type}'";
-        if (!string.IsNullOrWhiteSpace(layer) && !Enum.TryParse(layer, true, out kl))
-            return $"错误：无效的知识层级 '{layer}'";
+        if (!string.IsNullOrWhiteSpace(nodeType) || !string.IsNullOrWhiteSpace(layer))
+        {
+            if (!NodeTypeCompat.TryParse(nodeType ?? layer, out nt))
+                return $"错误：无效的节点类型 '{nodeType ?? layer}'";
+        }
 
         var request = new RememberRequest
         {
             Content = content ?? existing.Content,
             Type = mt,
-            Layer = kl,
+            NodeType = nt,
             Source = existing.Source,
             Summary = summary ?? existing.Summary,
             Disciplines = disciplines != null ? SplitCsv(disciplines) : existing.Disciplines,
@@ -278,7 +287,7 @@ public class MemoryTools(
         };
 
         var updated = await memory.UpdateMemoryAsync(id, request);
-        return $"✓ 记忆 [{id}] 已更新\n类型: {updated.Type} | 层级: {updated.Layer}\n摘要: {updated.Summary}";
+        return $"✓ 记忆 [{id}] 已更新\n类型: {updated.Type} | 节点类型: {updated.NodeType}\n摘要: {updated.Summary}";
     }
 
     [McpServerTool, Description(
@@ -301,10 +310,11 @@ public class MemoryTools(
 
     [McpServerTool, Description(
         "按条件筛选项目记忆列表。与 recall 的区别：recall 是语义搜索（输入自然语言问题），" +
-        "query_memories 是结构化过滤（按层级/类型/职能/标签等精确筛选）。" +
-        "适用于：浏览某层级的全部知识、查看某模块关联的所有记忆、统计某类标签的条目数。")]
+        "query_memories 是结构化过滤（按节点类型/类型/职能/标签等精确筛选）。" +
+        "适用于：浏览某节点类型的全部知识、查看某模块关联的所有记忆、统计某类标签的条目数。")]
     public string query_memories(
-        [Description("知识层级过滤，逗号分隔: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string? layers = null,
+        [Description("节点类型过滤，逗号分隔: Project/Department/Group/Team")] string? nodeTypes = null,
+        [Description("兼容旧参数，已废弃")] string? layers = null,
         [Description("记忆类型过滤，逗号分隔: Structural/Semantic/Episodic/Working/Procedural")] string? types = null,
         [Description("职能域过滤，逗号分隔: engineering/design/art/ta/audio/devops/qa")] string? disciplines = null,
         [Description("业务系统过滤，逗号分隔")] string? features = null,
@@ -320,7 +330,7 @@ public class MemoryTools(
 
         var filter = new MemoryFilter
         {
-            Layers = ParseLayers(layers),
+            NodeTypes = ParseNodeTypes(nodeTypes, layers),
             Types = ParseTypes(types),
             Disciplines = SplitCsvOrNull(disciplines),
             Features = SplitCsvOrNull(features),
@@ -340,7 +350,7 @@ public class MemoryTools(
         foreach (var e in entries)
         {
             sb.AppendLine($"- [{e.Id}] {e.Summary ?? "(无摘要)"}");
-            sb.AppendLine($"  {e.Type}/{e.Layer} | 鲜活度: {e.Freshness} | 重要度: {e.Importance:F1}");
+            sb.AppendLine($"  {e.Type}/{e.NodeType} | 鲜活度: {e.Freshness} | 重要度: {e.Importance:F1}");
             if (e.Tags.Count > 0)
                 sb.AppendLine($"  标签: {string.Join(", ", e.Tags)}");
         }
@@ -348,7 +358,7 @@ public class MemoryTools(
     }
 
     [McpServerTool, Description(
-        "按 ID 获取一条记忆的完整内容。返回记忆的所有字段：正文、摘要、类型、层级、标签、关联模块、鲜活度等。" +
+        "按 ID 获取一条记忆的完整内容。返回记忆的所有字段：正文、摘要、类型、节点类型、标签、关联模块、鲜活度等。" +
         "适用于：查看 recall/query 返回的某条记忆的完整正文、检查记忆详情后决定是否 update 或 delete。")]
     public string get_memory(
         [Description("记忆 ID")] string id)
@@ -363,8 +373,8 @@ public class MemoryTools(
     }
 
     [McpServerTool, Description(
-        "获取知识库整体统计信息。返回各维度的条目计数：按知识层级、按记忆类型、按职能域、按业务系统、按鲜活度。" +
-        "适用于：灌入知识后确认效果、评估知识库完整度和健康状况、发现哪些层级/职能的知识缺失。")]
+        "获取知识库整体统计信息。返回各维度的条目计数：按节点类型、按记忆类型、按职能域、按业务系统、按鲜活度。" +
+        "适用于：灌入知识后确认效果、评估知识库完整度和健康状况、发现哪些节点类型/职能的知识缺失。")]
     public string get_memory_stats()
     {
         logger.LogInformation(LogEvents.Mcp, "get_memory_stats()");
@@ -388,7 +398,7 @@ public class MemoryTools(
             sb.AppendLine("## 约束链（上层规范）\n");
             foreach (var c in result.ConstraintChain)
             {
-                sb.AppendLine($"### [{c.Layer}] {c.Summary ?? "(无摘要)"}");
+                sb.AppendLine($"### [{c.NodeType}] {c.Summary ?? "(无摘要)"}");
                 sb.AppendLine($"- ID: `{c.Id}` | 类型: {c.Type} | 鲜活度: {c.Freshness}");
                 sb.AppendLine($"- {TruncateContent(c.Content, 200)}");
                 sb.AppendLine();
@@ -411,7 +421,7 @@ public class MemoryTools(
             var m = result.Memories[i];
             sb.AppendLine($"### {i + 1}. {m.Entry.Summary ?? "(无摘要)"}");
             sb.AppendLine($"- ID: `{m.Entry.Id}` | 通道: {m.MatchChannel} | 分数: {m.Score:F3}");
-            sb.AppendLine($"- {m.Entry.Type}/{m.Entry.Layer} | 鲜活度: {m.Entry.Freshness} | 重要度: {m.Entry.Importance:F1}");
+            sb.AppendLine($"- {m.Entry.Type}/{m.Entry.NodeType} | 鲜活度: {m.Entry.Freshness} | 重要度: {m.Entry.Importance:F1}");
             if (m.Entry.Tags.Count > 0)
                 sb.AppendLine($"- 标签: {string.Join(", ", m.Entry.Tags)}");
             sb.AppendLine($"- {TruncateContent(m.Entry.Content, 300)}");
@@ -446,7 +456,7 @@ public class MemoryTools(
         {
             sb.AppendLine($"## {discipline}（{entries.Count} 条）\n");
             foreach (var entry in entries.OrderByDescending(e => e.Importance).Take(10))
-                sb.AppendLine($"- [{entry.Layer}] {entry.Summary} (重要度:{entry.Importance:F1})");
+                sb.AppendLine($"- [{entry.NodeType}] {entry.Summary} (重要度:{entry.Importance:F1})");
             sb.AppendLine();
         }
 
@@ -465,13 +475,20 @@ public class MemoryTools(
     private static List<string>? SplitCsvOrNull(string? csv) =>
         string.IsNullOrWhiteSpace(csv) ? null : SplitCsv(csv);
 
-    private static List<KnowledgeLayer>? ParseLayers(string? layers)
+    private static List<NodeType>? ParseNodeTypes(string? nodeTypes, string? legacyLayers = null)
     {
-        if (string.IsNullOrWhiteSpace(layers)) return null;
-        return SplitCsv(layers)
-            .Select(l => Enum.TryParse<KnowledgeLayer>(l, true, out var v) ? v : (KnowledgeLayer?)null)
+        var merged = new List<string>();
+        if (!string.IsNullOrWhiteSpace(nodeTypes))
+            merged.AddRange(SplitCsv(nodeTypes));
+        if (!string.IsNullOrWhiteSpace(legacyLayers))
+            merged.AddRange(SplitCsv(legacyLayers));
+        if (merged.Count == 0) return null;
+
+        return merged
+            .Select(v => NodeTypeCompat.TryParse(v, out var nodeType) ? (NodeType?)nodeType : null)
             .Where(v => v.HasValue)
             .Select(v => v!.Value)
+            .Distinct()
             .ToList();
     }
 
@@ -557,7 +574,8 @@ public class MemoryTools(
     {
         public string Content { get; set; } = "";
         public string Type { get; set; } = "";
-        public string Layer { get; set; } = "";
+        public string? NodeType { get; set; }
+        public string? Layer { get; set; }
         public string? Disciplines { get; set; }
         public string? Tags { get; set; }
         public string? Summary { get; set; }

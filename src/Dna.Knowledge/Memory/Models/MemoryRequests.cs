@@ -1,3 +1,5 @@
+using Dna.Knowledge;
+
 namespace Dna.Memory.Models;
 
 /// <summary>
@@ -6,7 +8,9 @@ namespace Dna.Memory.Models;
 public sealed class RememberRequest
 {
     public MemoryType Type { get; init; }
-    public KnowledgeLayer Layer { get; init; }
+    public NodeType? NodeType { get; init; }
+    [Obsolete("Layer 已废弃，请改用 NodeType。")]
+    public string? Layer { get; init; }
     public MemorySource Source { get; init; } = MemorySource.Ai;
     public string Content { get; init; } = string.Empty;
     public string? Summary { get; init; }
@@ -19,6 +23,10 @@ public sealed class RememberRequest
     public double Importance { get; init; } = 0.5;
     public string? ExternalSourceUrl { get; init; }
     public string? ExternalSourceId { get; init; }
+
+#pragma warning disable CS0618 // Legacy alias compatibility
+    public NodeType ResolvedNodeType => NodeTypeCompat.Resolve(NodeType, Layer);
+#pragma warning restore CS0618
 }
 
 /// <summary>
@@ -27,7 +35,9 @@ public sealed class RememberRequest
 public sealed class RecallQuery
 {
     public string Question { get; init; } = string.Empty;
-    public List<KnowledgeLayer>? Layers { get; init; }
+    public List<NodeType>? NodeTypes { get; init; }
+    [Obsolete("Layers 已废弃，请改用 NodeTypes。")]
+    public List<string>? Layers { get; init; }
     public List<string>? Disciplines { get; init; }
     public List<string>? Features { get; init; }
     public List<MemoryType>? Types { get; init; }
@@ -37,6 +47,10 @@ public sealed class RecallQuery
     public FreshnessFilter Freshness { get; init; } = FreshnessFilter.FreshAndAging;
     public bool ExpandConstraintChain { get; init; } = true;
     public int MaxResults { get; init; } = 10;
+
+#pragma warning disable CS0618 // Legacy alias compatibility
+    public List<NodeType>? ResolvedNodeTypes => NodeTypeCompat.ResolveList(NodeTypes, Layers);
+#pragma warning restore CS0618
 }
 
 public enum FreshnessFilter
@@ -72,7 +86,9 @@ public sealed class ScoredMemory
 /// </summary>
 public sealed class MemoryFilter
 {
-    public List<KnowledgeLayer>? Layers { get; init; }
+    public List<NodeType>? NodeTypes { get; init; }
+    [Obsolete("Layers 已废弃，请改用 NodeTypes。")]
+    public List<string>? Layers { get; init; }
     public List<string>? Disciplines { get; init; }
     public List<string>? Features { get; init; }
     public List<MemoryType>? Types { get; init; }
@@ -81,6 +97,10 @@ public sealed class MemoryFilter
     public FreshnessFilter Freshness { get; init; } = FreshnessFilter.FreshAndAging;
     public int Limit { get; init; } = 50;
     public int Offset { get; init; }
+
+#pragma warning disable CS0618 // Legacy alias compatibility
+    public List<NodeType>? ResolvedNodeTypes => NodeTypeCompat.ResolveList(NodeTypes, Layers);
+#pragma warning restore CS0618
 }
 
 /// <summary>
@@ -100,7 +120,9 @@ public sealed class FeatureKnowledgeSummary
 public sealed class DisciplineKnowledgeSummary
 {
     public string DisciplineId { get; init; } = string.Empty;
-    public Dictionary<KnowledgeLayer, List<MemoryEntry>> ByLayer { get; init; } = new();
+    public Dictionary<NodeType, List<MemoryEntry>> ByNodeType { get; init; } = new();
+    [Obsolete("ByLayer 已废弃，请改用 ByNodeType。")]
+    public Dictionary<NodeType, List<MemoryEntry>> ByLayer => ByNodeType;
     public int TotalCount { get; init; }
 }
 
@@ -111,7 +133,9 @@ public sealed class MemoryStats
 {
     public int Total { get; init; }
     public int ConflictCount { get; init; }
-    public Dictionary<string, int> ByLayer { get; init; } = new();
+    public Dictionary<string, int> ByNodeType { get; init; } = new();
+    [Obsolete("ByLayer 已废弃，请改用 ByNodeType。")]
+    public Dictionary<string, int> ByLayer => ByNodeType;
     public Dictionary<string, int> ByDiscipline { get; init; } = new();
     public Dictionary<string, int> ByFeature { get; init; } = new();
     public Dictionary<string, int> ByFreshness { get; init; } = new();

@@ -103,12 +103,11 @@
         <div class="memory-sidebar">
           <div class="memory-filters">
             <select id="memFilterLayer" onchange="window.MemoryEditor.loadMemories()">
-              <option value="">所有层级</option>
-              <option value="ProjectVision">L0 愿景</option>
-              <option value="DisciplineStandard">L1 职能总纲</option>
-              <option value="CrossDiscipline">L2 跨职能协议</option>
-              <option value="FeatureSystem">L3 业务系统</option>
-              <option value="Implementation">L4 执行细节</option>
+              <option value="">所有节点类型</option>
+              <option value="Project">Project（项目）</option>
+              <option value="Department">Department（部门）</option>
+              <option value="Group">Group（技术组）</option>
+              <option value="Team">Team（执行团队）</option>
             </select>
             <select id="memFilterType" onchange="window.MemoryEditor.loadMemories()">
               <option value="">所有类型</option>
@@ -133,13 +132,12 @@
             </div>
             <div class="memory-form-row">
               <div class="memory-form-group">
-                <label>层级</label>
+                <label>节点类型</label>
                 <select id="memLayer" onchange="window.MemoryEditor.onLayerTypeChanged()">
-                  <option value="ProjectVision">L0 愿景</option>
-                  <option value="DisciplineStandard">L1 职能总纲</option>
-                  <option value="CrossDiscipline">L2 跨职能协议</option>
-                  <option value="FeatureSystem">L3 业务系统</option>
-                  <option value="Implementation">L4 执行细节</option>
+                  <option value="Project">Project（项目）</option>
+                  <option value="Department">Department（部门）</option>
+                  <option value="Group">Group（技术组）</option>
+                  <option value="Team">Team（执行团队）</option>
                 </select>
               </div>
               <div class="memory-form-group">

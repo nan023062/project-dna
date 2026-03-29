@@ -129,7 +129,7 @@ internal class MemoryMaintainer
         var identityRequest = new RememberRequest
         {
             Type = MemoryType.Structural,
-            Layer = KnowledgeLayer.DisciplineStandard,
+            NodeType = node.Type,
             Source = MemorySource.System,
             NodeId = node.Id,
             Disciplines = string.IsNullOrWhiteSpace(node.Discipline) ? [] : [node.Discipline],

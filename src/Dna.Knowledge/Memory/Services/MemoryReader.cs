@@ -1,3 +1,4 @@
+using Dna.Knowledge;
 using Dna.Memory.Models;
 using Dna.Memory.Store;
 using Microsoft.Extensions.Logging;
@@ -44,7 +45,7 @@ internal class MemoryReader
 
         foreach (var entry in allEntries)
         {
-            if (entry.Layer == KnowledgeLayer.CrossDiscipline)
+            if (entry.NodeType == NodeType.Team)
             {
                 crossDiscipline.Add(entry);
                 continue;
@@ -70,7 +71,7 @@ internal class MemoryReader
         };
     }
 
-    /// <summary>获取职能知识汇总（按层级分组）</summary>
+    /// <summary>获取职能知识汇总（按节点类型分组）</summary>
     public DisciplineKnowledgeSummary GetDisciplineSummary(string disciplineId)
     {
         var allEntries = _store.Query(new MemoryFilter
@@ -80,13 +81,13 @@ internal class MemoryReader
             Limit = 200
         });
 
-        var byLayer = new Dictionary<KnowledgeLayer, List<MemoryEntry>>();
+        var byNodeType = new Dictionary<NodeType, List<MemoryEntry>>();
         foreach (var entry in allEntries)
         {
-            if (!byLayer.TryGetValue(entry.Layer, out var list))
+            if (!byNodeType.TryGetValue(entry.NodeType, out var list))
             {
                 list = [];
-                byLayer[entry.Layer] = list;
+                byNodeType[entry.NodeType] = list;
             }
             list.Add(entry);
         }
@@ -94,7 +95,7 @@ internal class MemoryReader
         return new DisciplineKnowledgeSummary
         {
             DisciplineId = disciplineId,
-            ByLayer = byLayer,
+            ByNodeType = byNodeType,
             TotalCount = allEntries.Count
         };
     }

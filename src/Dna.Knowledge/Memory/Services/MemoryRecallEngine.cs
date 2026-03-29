@@ -1,3 +1,4 @@
+using Dna.Knowledge;
 using Dna.Memory.Models;
 using Dna.Memory.Store;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,7 @@ internal class MemoryRecallEngine
     private const double EpsilonFreshness = 0.10;
     private const double ZetaRecency = 0.10;
 
-    private const int MaxConstraintPerLayer = 3;
+    private const int MaxConstraintPerNodeType = 3;
     private const int MaxConstraintTotal = 15;
 
     private readonly MemoryStore _store;
@@ -71,7 +72,7 @@ internal class MemoryRecallEngine
             });
         }
 
-        // ═══ 通道 4：坐标匹配（Discipline + Feature + Module + Layer） ═══
+        // ═══ 通道 4：坐标匹配（Discipline + Feature + Module + NodeType） ═══
         var coordEntries = new List<MemoryEntry>();
         if (query.Disciplines is { Count: > 0 } || query.Features is { Count: > 0 } || !string.IsNullOrEmpty(query.NodeId))
         {
@@ -80,7 +81,7 @@ internal class MemoryRecallEngine
                 Disciplines = query.Disciplines,
                 Features = query.Features,
                 NodeId = query.NodeId,
-                Layers = query.Layers,
+                NodeTypes = query.ResolvedNodeTypes,
                 Freshness = query.Freshness,
                 Limit = query.MaxResults * 2
             });
@@ -217,7 +218,7 @@ internal class MemoryRecallEngine
             score += 0.4;
         if (!string.IsNullOrEmpty(query.NodeId) && string.Equals(query.NodeId, entry.NodeId, StringComparison.OrdinalIgnoreCase))
             score += 0.4;
-        if (query.Layers?.Contains(entry.Layer) == true)
+        if (query.ResolvedNodeTypes?.Contains(entry.NodeType) == true)
             score += 0.2;
         return score;
     }
@@ -269,8 +270,8 @@ internal class MemoryRecallEngine
     // ═══════════════════════════════════════════
 
     /// <summary>
-    /// 核心创新：AI 不只是搜到相关记忆，而是沿层级自动展开约束。
-    /// 从 top-K 结果中推断知识坐标，向上召回 L0-L3 的约束。
+    /// 核心创新：AI 不只是搜到相关记忆，而是沿治理层级自动展开约束。
+    /// 从 top-K 结果中推断知识坐标，向上召回 Project/Department/Group 的约束。
     /// </summary>
     private List<MemoryEntry> ExpandConstraintChain(List<ScoredMemory> topK, RecallQuery query)
     {
@@ -290,17 +291,17 @@ internal class MemoryRecallEngine
         var disciplines = topK.SelectMany(s => s.Entry.Disciplines).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var features = topK.SelectMany(s => s.Entry.Features).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        for (var layer = KnowledgeLayer.ProjectVision; layer < KnowledgeLayer.Implementation; layer++)
+        foreach (var nodeType in new[] { NodeType.Project, NodeType.Department, NodeType.Group })
         {
             if (chain.Count >= MaxConstraintTotal) break;
 
             var upperMemories = _store.Query(new MemoryFilter
             {
-                Layers = [layer],
+                NodeTypes = [nodeType],
                 Disciplines = disciplines.Count > 0 ? disciplines : null,
                 Features = features.Count > 0 ? features : null,
                 Freshness = FreshnessFilter.FreshAndAging,
-                Limit = MaxConstraintPerLayer
+                Limit = MaxConstraintPerNodeType
             });
 
             foreach (var m in upperMemories)
@@ -311,7 +312,7 @@ internal class MemoryRecallEngine
             }
         }
 
-        chain.Sort((a, b) => a.Layer.CompareTo(b.Layer));
+        chain.Sort((a, b) => NodeTypeCompat.GovernanceOrder(a.NodeType).CompareTo(NodeTypeCompat.GovernanceOrder(b.NodeType)));
         return chain;
     }
 
@@ -323,11 +324,11 @@ internal class MemoryRecallEngine
     {
         var suggestions = new List<string>();
 
-        var layers = results.Select(r => r.Entry.Layer).Distinct().ToList();
-        if (!layers.Contains(KnowledgeLayer.DisciplineStandard))
-            suggestions.Add("可以查看相关职能的 L1 总纲规范");
-        if (!layers.Contains(KnowledgeLayer.CrossDiscipline))
-            suggestions.Add("可以查看跨职能协议（L2）了解接缝处约定");
+        var nodeTypes = results.Select(r => r.Entry.NodeType).Distinct().ToList();
+        if (!nodeTypes.Contains(NodeType.Department))
+            suggestions.Add("可以查看 Department 节点约束，补齐部门级标准");
+        if (!nodeTypes.Contains(NodeType.Group))
+            suggestions.Add("可以查看 Group 节点规范，补齐技术组级约束");
 
         var types = results.Select(r => r.Entry.Type).Distinct().ToList();
         if (!types.Contains(MemoryType.Episodic))

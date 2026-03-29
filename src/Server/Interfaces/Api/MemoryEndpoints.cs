@@ -35,7 +35,7 @@ public static class MemoryEndpoints
         });
 
         group.MapGet("/query", (
-            string? layers, string? disciplines, string? features,
+            string? nodeTypes, string? layers, string? disciplines, string? features,
             string? types, string? tags, string? nodeId, string? freshness,
             int? limit, int? offset,
             IMemoryEngine memory,
@@ -44,7 +44,7 @@ public static class MemoryEndpoints
             EnsureReady(memory, config);
             var filter = new MemoryFilter
             {
-                Layers = ParseEnumList<KnowledgeLayer>(layers),
+                NodeTypes = ParseNodeTypeList(nodeTypes, layers),
                 Disciplines = SplitOrNull(disciplines),
                 Features = SplitOrNull(features),
                 Types = ParseEnumList<MemoryType>(types),
@@ -187,6 +187,25 @@ public static class MemoryEndpoints
             csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(s => Enum.TryParse<T>(s, true, out var v) ? v : (T?)null)
                 .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+
+    private static List<NodeType>? ParseNodeTypeList(string? nodeTypes, string? legacyLayers = null)
+    {
+        var merged = new List<string>();
+        if (!string.IsNullOrWhiteSpace(nodeTypes))
+            merged.AddRange(nodeTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (!string.IsNullOrWhiteSpace(legacyLayers))
+            merged.AddRange(legacyLayers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        if (merged.Count == 0) return null;
+
+        var parsed = merged
+            .Select(item => NodeTypeCompat.TryParse(item, out var nodeType) ? (NodeType?)nodeType : null)
+            .Where(v => v.HasValue)
+            .Select(v => v!.Value)
+            .Distinct()
+            .ToList();
+
+        return parsed.Count > 0 ? parsed : null;
+    }
 
     private static T? ParseEnum<T>(string? value) where T : struct, Enum =>
         Enum.TryParse<T>(value, true, out var result) ? result : null;
