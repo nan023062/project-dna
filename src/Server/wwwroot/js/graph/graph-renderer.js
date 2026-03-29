@@ -11,10 +11,10 @@ const NODE_W = 190;
 const NODE_H = 44;
 const GROUP_PAD = { top: 42, left: 20, bottom: 20, right: 20 };
 const EDGE_COLORS = {
-  normal: '#4ade80',
-  cross: '#60a5fa',
-  cycle: '#f87171',
-  inherited: '#6b7280'
+  dependency: '#4ade80',
+  containment: '#f59e0b',
+  collaboration: '#60a5fa',
+  computed: '#9ca3af'
 };
 
 let _elk = null;
@@ -27,6 +27,8 @@ let _topoData = null;
 let _onModuleClick = null;
 let _lastFingerprint = null;
 let _boundGlobal = false;
+let _relationFilter = { dependency: true, containment: true, collaboration: true };
+let _visibleEdges = [];
 
 function getElk() {
   if (_elk) return _elk;
@@ -35,19 +37,82 @@ function getElk() {
   return _elk;
 }
 
+function normalizeRelationFilter(raw) {
+  const defaults = { dependency: true, containment: true, collaboration: true };
+  if (!raw) return defaults;
+  return {
+    dependency: raw.dependency !== false,
+    containment: raw.containment !== false,
+    collaboration: raw.collaboration !== false
+  };
+}
+
+function getAllRelationEdges(topo) {
+  if (!topo) return [];
+  if (Array.isArray(topo.relationEdges) && topo.relationEdges.length > 0) {
+    return topo.relationEdges.map(e => ({
+      from: e.from,
+      to: e.to,
+      relation: e.relation || 'dependency',
+      isComputed: !!e.isComputed,
+      crossWorkNames: e.crossWorkNames || []
+    }));
+  }
+
+  const depEdges = (topo.edges || []).map(e => ({
+    from: e.from,
+    to: e.to,
+    relation: 'dependency',
+    isComputed: !!e.isComputed
+  }));
+
+  const containmentEdges = (topo.containmentEdges || []).map(e => ({
+    from: e.from,
+    to: e.to,
+    relation: 'containment',
+    isComputed: !!e.isComputed
+  }));
+
+  const collaborationEdges = (topo.collaborationEdges || []).map(e => ({
+    from: e.from,
+    to: e.to,
+    relation: 'collaboration',
+    isComputed: !!e.isComputed,
+    crossWorkNames: e.crossWorkNames || []
+  }));
+
+  return depEdges.concat(containmentEdges, collaborationEdges);
+}
+
+function getVisibleEdges(topo, filter) {
+  const all = getAllRelationEdges(topo);
+  return all.filter(e => {
+    if (e.relation === 'dependency') return !!filter.dependency;
+    if (e.relation === 'containment') return !!filter.containment;
+    if (e.relation === 'collaboration') return !!filter.collaboration;
+    return true;
+  });
+}
+
 function topoFingerprint(topo) {
   if (!topo) return '';
   const mods = (topo.modules || []).map(m => m.name).sort().join(',');
-  const edges = (topo.edges || []).map(e => `${e.from}>${e.to}`).sort().join(',');
-  return `${mods}|${edges}`;
+  const rels = (getAllRelationEdges(topo) || [])
+    .map(e => `${e.relation || 'dependency'}:${e.from}>${e.to}`)
+    .sort()
+    .join(',');
+  const filter = `${_relationFilter.dependency ? 1 : 0}${_relationFilter.containment ? 1 : 0}${_relationFilter.collaboration ? 1 : 0}`;
+  return `${mods}|${rels}|${filter}`;
 }
 
 export async function renderGraph(container, topoData, opts = {}) {
   _onModuleClick = opts.onModuleClick || null;
+  _relationFilter = normalizeRelationFilter(opts.relationFilter);
+  _visibleEdges = getVisibleEdges(topoData, _relationFilter);
 
   if (!topoData?.modules?.length) {
     _lastFingerprint = null;
-    container.innerHTML = '<div class="graph-empty">暂无模块 — AI Agent 通过 MCP 注册模块后此处自动显示</div>';
+    container.innerHTML = '<div class="graph-empty">暂无图节点 — AI Agent 通过 MCP 注册后此处自动显示</div>';
     return;
   }
 
@@ -82,7 +147,8 @@ export async function renderGraph(container, topoData, opts = {}) {
 }
 
 function toElkGraph(topo, containerAspectRatio = 1.6) {
-  const { modules, edges } = topo;
+  const { modules } = topo;
+  const visibleEdges = getVisibleEdges(topo, _relationFilter);
 
   const discMap = {};
   for (const m of modules) {
@@ -95,6 +161,7 @@ function toElkGraph(topo, containerAspectRatio = 1.6) {
   const nodeIdSet = new Set();
 
   for (const [disc, mods] of Object.entries(discMap)) {
+    const disciplineDisplayName = mods.find(m => m.disciplineDisplayName)?.disciplineDisplayName || disc;
     const groupChildren = mods.map(m => {
       nodeIdSet.add(m.name);
       return {
@@ -109,28 +176,30 @@ function toElkGraph(topo, containerAspectRatio = 1.6) {
 
     children.push({
       id: `group_${disc}`,
-      labels: [{ text: disc }],
+      labels: [{ text: disciplineDisplayName }],
       children: groupChildren,
       layoutOptions: {
         'elk.padding': `[top=${GROUP_PAD.top},left=${GROUP_PAD.left},bottom=${GROUP_PAD.bottom},right=${GROUP_PAD.right}]`
       },
-      _discipline: disc
+      _discipline: disc,
+      _disciplineDisplayName: disciplineDisplayName
     });
   }
 
   const elkEdges = [];
-  for (const e of (edges || [])) {
+  for (const e of visibleEdges) {
     if (!nodeIdSet.has(e.from) || !nodeIdSet.has(e.to)) continue;
 
     const fromDisc = modules.find(m => m.name === e.from)?.discipline || 'root';
     const toDisc = modules.find(m => m.name === e.to)?.discipline || 'root';
 
     elkEdges.push({
-      id: `e_${e.from}_${e.to}`,
+      id: `e_${e.relation || 'dependency'}_${e.from}_${e.to}`,
       sources: [e.from],
       targets: [e.to],
-      _kind: e.kind || 'normal',
-      _inferred: e.inferred,
+      _relation: e.relation || 'dependency',
+      _isComputed: !!e.isComputed,
+      _crossWorkNames: e.crossWorkNames || [],
       _isHierarchical: fromDisc === toDisc
     });
   }
@@ -165,17 +234,14 @@ function renderSvg(container, laid, topo, savedTransform, savedSelection) {
 
   const defs = document.createElementNS(svgNs, 'defs');
   defs.innerHTML = `
-    <marker id="arrow-normal" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.normal}" />
+    <marker id="arrow-dependency" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.dependency}" />
     </marker>
-    <marker id="arrow-cross" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.cross}" />
+    <marker id="arrow-collaboration" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.collaboration}" />
     </marker>
-    <marker id="arrow-cycle" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.cycle}" />
-    </marker>
-    <marker id="arrow-inherited" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
-      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.inherited}" />
+    <marker id="arrow-computed" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,3 L0,6" fill="${EDGE_COLORS.computed}" />
     </marker>
   `;
   svg.appendChild(defs);
@@ -235,7 +301,7 @@ function drawGroups(viewport, groups, ns) {
     label.setAttribute('x', x + 12);
     label.setAttribute('y', y + 22);
     label.classList.add('graph-group-label');
-    label.textContent = g._discipline;
+    label.textContent = g._disciplineDisplayName || g._discipline;
     viewport.appendChild(label);
   }
 }
@@ -299,9 +365,12 @@ function drawEdges(viewport, laid, ns) {
   }
 
   for (const edge of (laid.edges || [])) {
-    const kind = edge._kind || 'normal';
-    const color = edge._inferred ? EDGE_COLORS.inherited : (EDGE_COLORS[kind] || EDGE_COLORS.normal);
-    const markerId = edge._inferred ? 'arrow-inherited' : `arrow-${kind}`;
+    const relation = edge._relation || 'dependency';
+    const isComputed = !!edge._isComputed;
+    const color = isComputed ? EDGE_COLORS.computed : (EDGE_COLORS[relation] || EDGE_COLORS.dependency);
+    const markerId = relation === 'containment'
+      ? null
+      : (isComputed ? 'arrow-computed' : `arrow-${relation}`);
 
     const sections = edge.sections || [];
     if (sections.length === 0) {
@@ -310,11 +379,13 @@ function drawEdges(viewport, laid, ns) {
       if (!fromPos || !toPos) continue;
 
       const path = document.createElementNS(ns, 'path');
+      path.dataset.from = edge.sources?.[0] || '';
+      path.dataset.to = edge.targets?.[0] || '';
       path.setAttribute('d', bezierPath(
         fromPos.x + fromPos.w / 2, fromPos.y + fromPos.h,
         toPos.x + toPos.w / 2, toPos.y
       ));
-      styleEdge(path, kind, color, markerId, edge._inferred);
+      styleEdge(path, relation, color, markerId, isComputed);
       viewport.appendChild(path);
       continue;
     }
@@ -323,6 +394,8 @@ function drawEdges(viewport, laid, ns) {
       const sp = section.startPoint, ep = section.endPoint;
       const bends = section.bendPoints || [];
       const path = document.createElementNS(ns, 'path');
+      path.dataset.from = edge.sources?.[0] || '';
+      path.dataset.to = edge.targets?.[0] || '';
 
       if (bends.length === 0) {
         path.setAttribute('d', bezierPath(sp.x, sp.y, ep.x, ep.y));
@@ -337,18 +410,20 @@ function drawEdges(viewport, laid, ns) {
         path.setAttribute('d', d);
       }
 
-      styleEdge(path, kind, color, markerId, edge._inferred);
+      styleEdge(path, relation, color, markerId, isComputed);
       viewport.appendChild(path);
     }
   }
 }
 
-function styleEdge(path, kind, color, markerId, inferred) {
+function styleEdge(path, relation, color, markerId, isComputed) {
   path.classList.add('graph-edge');
+  path.classList.add(`graph-edge-${relation}`);
   path.setAttribute('stroke', color);
-  path.setAttribute('marker-end', `url(#${markerId})`);
-  if (kind === 'cycle') path.classList.add('graph-edge-cycle');
-  if (inferred) path.setAttribute('stroke-dasharray', '6,4');
+  if (markerId) path.setAttribute('marker-end', `url(#${markerId})`);
+  if (relation === 'containment') path.setAttribute('stroke-dasharray', '4,5');
+  if (relation === 'collaboration') path.setAttribute('stroke-dasharray', '8,4');
+  if (isComputed) path.setAttribute('stroke-dasharray', '5,4');
 }
 
 function bezierPath(x1, y1, x2, y2) {
@@ -466,22 +541,33 @@ function handleNodeClick(nodeG, svg) {
 
 function highlightConnected(moduleName, svg, on) {
   if (!_topoData) return;
-  const deps = new Set(_topoData.depMap?.[moduleName] || []);
-  const rdeps = new Set(_topoData.rdepMap?.[moduleName] || []);
+  const neighbors = new Set();
+  for (const e of _visibleEdges) {
+    if (e.from === moduleName) neighbors.add(e.to);
+    if (e.to === moduleName) neighbors.add(e.from);
+  }
 
   svg.querySelectorAll('.graph-node').forEach(n => {
     const id = n.dataset.module;
     if (id === moduleName) return;
     if (on) {
-      n.classList.toggle('connected', deps.has(id) || rdeps.has(id));
-      n.classList.toggle('dimmed', !deps.has(id) && !rdeps.has(id));
+      n.classList.toggle('connected', neighbors.has(id));
+      n.classList.toggle('dimmed', !neighbors.has(id));
     } else {
       n.classList.remove('connected', 'dimmed');
     }
   });
 
   svg.querySelectorAll('.graph-edge').forEach(e => {
-    e.classList.toggle('dimmed-edge', on);
+    if (!on) {
+      e.classList.remove('dimmed-edge', 'highlight-edge');
+      return;
+    }
+    const from = e.dataset.from;
+    const to = e.dataset.to;
+    const isIncident = from === moduleName || to === moduleName;
+    e.classList.toggle('dimmed-edge', !isIncident);
+    e.classList.toggle('highlight-edge', isIncident);
   });
 }
 

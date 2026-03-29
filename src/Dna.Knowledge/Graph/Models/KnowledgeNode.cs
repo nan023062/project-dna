@@ -2,17 +2,21 @@ namespace Dna.Knowledge;
 
 public enum NodeType
 {
-    Root,
+    Project,
     Department,
-    Module,
-    CrossWork
+    Group,
+    Team,
+    // Backward-compatible aliases for old terminology.
+    Root = Project,
+    Module = Group,
+    CrossWork = Team
 }
 
 public class KnowledgeNode
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public NodeType Type { get; set; } = NodeType.Module;
+    public NodeType Type { get; set; } = NodeType.Group;
 
     public string? ParentId { get; set; }
     public List<string> ChildIds { get; set; } = [];

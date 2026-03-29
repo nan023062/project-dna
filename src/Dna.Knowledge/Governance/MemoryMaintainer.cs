@@ -194,7 +194,7 @@ internal class MemoryMaintainer
         int maxSourceMemories = 200)
     {
         var results = new List<KnowledgeCondenseResult>();
-        foreach (var node in topology.Nodes.Where(n => n.Type is NodeType.Module or NodeType.CrossWork))
+        foreach (var node in topology.Nodes.Where(n => n.Type is NodeType.Group or NodeType.Team))
         {
             try
             {

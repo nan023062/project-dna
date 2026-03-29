@@ -50,8 +50,10 @@
     <!-- ── 架构总览面板 ── -->
     <div id="panelTopology" class="panel active">
       <div class="summary-bar">
-        <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">模块</div></div>
+        <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">节点</div></div>
         <div class="stat"><div id="statEdges" class="val">-</div><div class="lbl">依赖边</div></div>
+        <div class="stat"><div id="statContainment" class="val">-</div><div class="lbl">包含边</div></div>
+        <div class="stat"><div id="statCollaboration" class="val">-</div><div class="lbl">协作边</div></div>
       </div>
       <div class="arch-layout">
         <div id="topoGrid" class="topo-grid"></div>
@@ -65,7 +67,7 @@
         <button class="btn btn-primary btn-sm" onclick="window.FileTree.refreshFileTree()">刷新</button>
         <div class="legend">
           <span class="legend-item"><span class="legend-dot registered"></span> 已注册</span>
-          <span class="legend-item"><span class="legend-dot crosswork"></span> CrossWork</span>
+          <span class="legend-item"><span class="legend-dot crosswork"></span> 执行团队</span>
           <span class="legend-item"><span class="legend-dot container"></span> 容器</span>
           <span class="legend-item"><span class="legend-dot candidate"></span> 候选（双击注册）</span>
         </div>
