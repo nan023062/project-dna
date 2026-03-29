@@ -2,8 +2,6 @@
 
 > **Author**: nave
 > **Prerequisite**: Read [project-dna-design.md](./project-dna-design.md) for the core model
-> **Documentation Convention**: In `project-dna/docs/architecture`, only `project-dna-design.md` and this ecosystem doc are kept. Planning/action/roadmap docs stay in the parent `agentic-os` repository.
-
 ---
 
 ## Extension Dimensions

@@ -3,8 +3,6 @@
 > **Status**: Design Draft v1.4 (synced to implementation) — 2026-03-29
 > **Author**: nave
 > **Scope**: Core model and refactoring direction for the Agentic OS Project DNA system
-> **Documentation Convention**: In `project-dna/docs/architecture`, only this design doc and `project-dna-ecosystem.md` are kept. Planning/action/roadmap docs stay in the parent `agentic-os` repository.
-
 ---
 
 ## 1. Design Philosophy
