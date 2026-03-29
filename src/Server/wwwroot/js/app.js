@@ -152,13 +152,17 @@ async function refreshTopologyOnly() {
     topoData = await topoRes.json();
     stackData = {};
 
-    renderTopology(topoData, stackData);
+    renderTopology(topoData);
 
     const modulesCount = topoData.modules ? topoData.modules.length : 0;
     const edgesCount = topoData.edges ? topoData.edges.length : 0;
+    const containmentCount = topoData.containmentEdges ? topoData.containmentEdges.length : 0;
+    const collaborationCount = topoData.collaborationEdges ? topoData.collaborationEdges.length : 0;
 
     const statModules = $('statModules');
     const statEdges = $('statEdges');
+    const statContainment = $('statContainment');
+    const statCollaboration = $('statCollaboration');
     if (statModules) {
       statModules.textContent = formatSummaryMetric(modulesCount);
       statModules.title = String(modulesCount);
@@ -166,6 +170,14 @@ async function refreshTopologyOnly() {
     if (statEdges) {
       statEdges.textContent = formatSummaryMetric(edgesCount);
       statEdges.title = String(edgesCount);
+    }
+    if (statContainment) {
+      statContainment.textContent = formatSummaryMetric(containmentCount);
+      statContainment.title = String(containmentCount);
+    }
+    if (statCollaboration) {
+      statCollaboration.textContent = formatSummaryMetric(collaborationCount);
+      statCollaboration.title = String(collaborationCount);
     }
     return true;
   } catch (e) {

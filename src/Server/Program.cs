@@ -5,8 +5,10 @@ using Dna.Interfaces.Api;
 using Dna.Interfaces.Cli;
 using Dna.Adapters.Game;
 using Dna.Knowledge;
+using Dna.Memory.Models;
 using Dna.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Logging;
 
 // ── 解析存储路径 ──
 var dataPath = ResolveDataPath(args);
@@ -38,7 +40,7 @@ DnaApp.Create(args, new AppOptions
         graph.Initialize(dataPath);
         memory.Initialize(dataPath);
         try { graph.BuildTopology(); } catch { /* empty store is fine */ }
-        await Task.CompletedTask;
+        await EnsureDevGroupFirstStartupAndRetrospectiveAsync(sp, graph, memory);
     }
 });
 
@@ -96,6 +98,78 @@ DnaApp.ConfigureWebApp(web =>
 });
 
 return await DnaApp.RunAsync();
+
+static Task EnsureDevGroupFirstStartupAndRetrospectiveAsync(
+    IServiceProvider sp,
+    IGraphEngine graph,
+    IMemoryEngine memory)
+{
+    const string devGroupName = "开发组";
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("StartupWorkflow");
+
+    try
+    {
+        var devGroup = graph.FindModule(devGroupName);
+        if (devGroup == null)
+        {
+            logger.LogWarning("启动流程未找到模块 '{DevGroup}'，跳过优先启动与复盘。", devGroupName);
+            return Task.CompletedTask;
+        }
+
+        // 启动时优先激活开发组上下文，作为首个工作模块。
+        var context = graph.GetModuleContext(devGroupName, devGroupName, [devGroupName]);
+        logger.LogInformation(
+            "启动流程：已优先激活模块 [{Module}]，约束={ConstraintCount}。",
+            devGroupName,
+            context.Constraints?.Count ?? 0);
+
+        var lastCompleted = memory.QueryMemories(new MemoryFilter
+        {
+            NodeId = devGroupName,
+            Tags = ["#completed-task"],
+            Freshness = FreshnessFilter.All,
+            Limit = 1
+        }).FirstOrDefault();
+
+        var lastLesson = memory.QueryMemories(new MemoryFilter
+        {
+            NodeId = devGroupName,
+            Tags = ["#lesson"],
+            Freshness = FreshnessFilter.All,
+            Limit = 1
+        }).FirstOrDefault();
+
+        if (lastCompleted == null && lastLesson == null)
+        {
+            logger.LogInformation("启动复盘：模块 [{Module}] 暂无可复盘的历史任务记录。", devGroupName);
+            return Task.CompletedTask;
+        }
+
+        if (lastCompleted != null)
+        {
+            logger.LogInformation(
+                "启动复盘-上次完成：[{Id}] {Summary} @ {CreatedAt}",
+                lastCompleted.Id,
+                lastCompleted.Summary ?? "(无摘要)",
+                lastCompleted.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+
+        if (lastLesson != null)
+        {
+            logger.LogInformation(
+                "启动复盘-上次教训：[{Id}] {Summary} @ {CreatedAt}",
+                lastLesson.Id,
+                lastLesson.Summary ?? "(无摘要)",
+                lastLesson.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"));
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "启动流程执行开发组优先启动/上次任务复盘时发生异常，已降级继续启动。");
+    }
+
+    return Task.CompletedTask;
+}
 
 static string ResolveDataPath(string[] args)
 {

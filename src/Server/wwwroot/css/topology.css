@@ -108,7 +108,7 @@
 
 /* ── 侧边依赖面板 ── */
 .arch-sidebar {
-  width: 260px; min-width: 220px; flex-shrink: 0;
+  width: 360px; min-width: 260px; flex-shrink: 0;
   background: #0e0e1f; border-left: 1px solid #1e1e3a;
   overflow-y: auto; font-size: 13px;
   display: flex; flex-direction: column;
@@ -131,6 +131,16 @@
 
 .sidebar-meta { display: flex; align-items: center; gap: 8px; padding: 8px 14px; }
 .sidebar-maintainer { font-size: 11px; color: #4a4a6a; }
+.sidebar-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid #2a2a4e;
+  background: #15152f;
+  color: #cbd5e1;
+  font-size: 11px;
+}
 
 .sidebar-section { padding: 8px 14px; }
 .sidebar-section-title { font-size: 12px; color: #94a3b8; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
@@ -140,6 +150,73 @@
   padding: 1px 6px; border-radius: 8px; min-width: 18px; text-align: center;
 }
 .sidebar-empty { font-size: 12px; color: #3a3a5a; padding: 4px 0; }
+.sidebar-text {
+  color: #cbd5e1;
+  line-height: 1.55;
+  font-size: 12px;
+}
+.sidebar-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-kv-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.sidebar-kv-row.sidebar-kv-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed #1f2a40;
+}
+.sidebar-kv-row.sidebar-kv-stack:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.sidebar-k {
+  color: #94a3b8;
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.sidebar-v {
+  color: #e2e8f0;
+  font-size: 11px;
+  text-align: right;
+  word-break: break-word;
+}
+.sidebar-link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-link-btn {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #25304a;
+  border-radius: 6px;
+  background: #121a2e;
+  color: #bfdbfe;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.sidebar-link-btn:hover {
+  background: #1a2742;
+  border-color: #36507e;
+  color: #dbeafe;
+}
+.sidebar-list {
+  margin: 0;
+  padding-left: 16px;
+  color: #d1d5db;
+  line-height: 1.6;
+  font-size: 12px;
+}
 
 .sidebar-dep-item {
   display: flex; align-items: center; gap: 6px;
@@ -274,3 +351,23 @@
 
 /* ── 旧扁平卡片（保留但隐藏，以防回退） ── */
 .topo-grid { display: none; }
+
+@media (max-width: 1180px) {
+  .arch-sidebar {
+    width: 320px;
+    min-width: 220px;
+  }
+}
+
+@media (max-width: 900px) {
+  .arch-layout {
+    flex-direction: column;
+  }
+  .arch-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 42%;
+    border-left: none;
+    border-top: 1px solid #1e1e3a;
+  }
+}

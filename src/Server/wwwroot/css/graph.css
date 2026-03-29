@@ -93,7 +93,6 @@
   fill: #64748b;
   font-size: 13px;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
@@ -161,12 +160,14 @@
   stroke-width: 1.5;
   transition: opacity .15s;
 }
-.graph-edge-cycle {
-  stroke-dasharray: 8, 4;
-  animation: dash-flow 1s linear infinite;
+.graph-edge-dependency { stroke: #4ade80; }
+.graph-edge-containment {
+  stroke: #f59e0b;
+  opacity: .85;
 }
-@keyframes dash-flow {
-  to { stroke-dashoffset: -12; }
+.graph-edge-collaboration {
+  stroke: #60a5fa;
+  opacity: .95;
 }
 .graph-edge.dimmed-edge { opacity: 0.12; }
 .graph-edge.highlight-edge { opacity: 1; stroke-width: 2.5; }
@@ -217,6 +218,6 @@
   width: 20px; height: 2px;
   border-radius: 1px;
 }
-.graph-legend-line.normal { background: #4ade80; }
-.graph-legend-line.cross { background: #60a5fa; }
-.graph-legend-line.cycle { background: #f87171; }
+.graph-legend-line.dependency { background: #4ade80; }
+.graph-legend-line.containment { background: #f59e0b; }
+.graph-legend-line.collaboration { background: #60a5fa; }
