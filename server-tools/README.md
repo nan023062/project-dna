@@ -6,7 +6,13 @@
 
 ### 1. 编辑配置
 
-打开 `server-config.json`，填入实际路径：
+复制模板并填入实际路径：
+
+```bash
+cp server-config.example.json server-config.json
+```
+
+编辑 `server-config.json`：
 
 ```json
 {

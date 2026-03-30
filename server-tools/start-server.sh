@@ -6,6 +6,7 @@ CONFIG="$SCRIPT_DIR/server-config.json"
 
 if [ ! -f "$CONFIG" ]; then
     echo "[ERROR] Config not found: $CONFIG"
+    echo "Please copy server-config.example.json to server-config.json and edit it."
     exit 1
 fi
 

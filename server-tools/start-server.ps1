@@ -1,6 +1,11 @@
 $ErrorActionPreference = "Stop"
 
-$config  = Get-Content "$PSScriptRoot\server-config.json" -Raw | ConvertFrom-Json
+$configPath = Join-Path $PSScriptRoot "server-config.json"
+if (-not (Test-Path $configPath)) {
+    throw "Config not found: $configPath`nPlease copy server-config.example.json to server-config.json and edit it."
+}
+
+$config  = Get-Content $configPath -Raw | ConvertFrom-Json
 $appPath = $config.appPath
 $dbPath  = $config.dbPath
 $port    = if ($config.port) { $config.port } else { 5051 }

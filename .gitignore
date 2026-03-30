@@ -20,6 +20,9 @@ node_modules/
 .dna/
 *.db
 
+# User-specific config (copy from .example.json)
+server-tools/server-config.json
+
 # Secrets
 .env
 *.pfx
