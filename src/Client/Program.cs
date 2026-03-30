@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dna.Client.Interfaces.Cli;
 using Dna.Client.Services;
 using Dna.Client.Services.Pipeline;
@@ -55,8 +56,6 @@ DnaApp.ConfigureServices(services =>
 
 DnaApp.ConfigureWebApp(web =>
 {
-    web.MapGet("/", () => Results.Text("Project DNA Client is running."));
-
     web.MapGet("/api/client/status", async (DnaServerApi api) =>
     {
         try
@@ -77,6 +76,186 @@ DnaApp.ConfigureWebApp(web =>
                 targetServer = api.BaseUrl,
                 error = ex.Message
             });
+        }
+    });
+
+    web.MapGet("/api/status", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/status"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/topology", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/topology"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/memory/stats", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/memory/stats"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/memory/query", async (
+        string? nodeTypes,
+        string? layers,
+        string? disciplines,
+        string? features,
+        string? types,
+        string? tags,
+        string? nodeId,
+        string? freshness,
+        int? limit,
+        int? offset,
+        DnaServerApi api) =>
+    {
+        try
+        {
+            var path = BuildApiPath("/api/memory/query", new Dictionary<string, string?>
+            {
+                ["nodeTypes"] = nodeTypes,
+                ["layers"] = layers,
+                ["disciplines"] = disciplines,
+                ["features"] = features,
+                ["types"] = types,
+                ["tags"] = tags,
+                ["nodeId"] = nodeId,
+                ["freshness"] = freshness,
+                ["limit"] = limit?.ToString(),
+                ["offset"] = offset?.ToString()
+            });
+            return Results.Json(await api.GetAsync(path));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/memory/{id}", async (string id, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync($"/api/memory/{Uri.EscapeDataString(id)}"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPost("/api/memory/remember", async (JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PostAsync("/api/memory/remember", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPut("/api/memory/{id}", async (string id, JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PutAsync($"/api/memory/{Uri.EscapeDataString(id)}", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapDelete("/api/memory/{id}", async (string id, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.DeleteAsync($"/api/memory/{Uri.EscapeDataString(id)}"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/review/memory/submissions/mine", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/review/memory/submissions/mine"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/review/memory/submissions/{id}", async (string id, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync($"/api/review/memory/submissions/{Uri.EscapeDataString(id)}"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPost("/api/review/memory/submissions", async (JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PostAsync("/api/review/memory/submissions", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPut("/api/review/memory/submissions/{id}", async (string id, JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PutAsync($"/api/review/memory/submissions/{Uri.EscapeDataString(id)}", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapDelete("/api/review/memory/submissions/{id}", async (string id, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.DeleteAsync($"/api/review/memory/submissions/{Uri.EscapeDataString(id)}"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
         }
     });
 
@@ -117,6 +296,35 @@ DnaApp.ConfigureWebApp(web =>
 });
 
 return await DnaApp.RunAsync();
+
+static string BuildApiPath(string path, IReadOnlyDictionary<string, string?> query)
+{
+    var pairs = query
+        .Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+        .Select(kv => $"{Uri.EscapeDataString(kv.Key)}={Uri.EscapeDataString(kv.Value!)}")
+        .ToList();
+
+    if (pairs.Count == 0) return path;
+    return $"{path}?{string.Join("&", pairs)}";
+}
+
+static IResult HandleProxyError(Exception ex, string targetServer)
+{
+    var message = ex.Message ?? "Proxy request failed.";
+    const string prefix = "HTTP ";
+    if (message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+    {
+        var separator = message.IndexOf(':');
+        if (separator > prefix.Length &&
+            int.TryParse(message[prefix.Length..separator], out var statusCode))
+        {
+            var body = message[(separator + 1)..].Trim();
+            return Results.Json(new { error = body, targetServer }, statusCode: statusCode);
+        }
+    }
+
+    return Results.Json(new { error = message, targetServer }, statusCode: 502);
+}
 
 static string ResolveServerBaseUrl(string[] args)
 {

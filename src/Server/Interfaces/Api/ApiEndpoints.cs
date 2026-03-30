@@ -14,6 +14,7 @@ public static class ApiEndpoints
         app.MapGovernanceEndpoints();
         app.MapConfigEndpoints();
         app.MapMemoryEndpoints();
+        app.MapReviewEndpoints();
         app.MapModuleManagementEndpoints();
         app.MapFileTreeEndpoints();
     }

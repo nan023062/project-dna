@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project DNA Client</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/ui-framework.css" />
+  <link rel="stylesheet" href="css/topology.css" />
+  <link rel="stylesheet" href="css/memory.css" />
+  <link rel="stylesheet" href="css/graph.css" />
+  <link rel="stylesheet" href="css/client.css" />
+</head>
+<body>
+  <div class="client-shell">
+    <header class="client-header">
+      <div>
+        <div class="client-brand">Project DNA Client</div>
+        <div class="client-subtitle">本地 MCP、知识工作台，以及后续内置 Agent 的宿主内核</div>
+      </div>
+      <div class="client-actions">
+        <a id="serverDashboardLink" class="btn btn-secondary btn-sm" href="http://127.0.0.1:5051" target="_blank" rel="noreferrer">打开 Server</a>
+        <button class="btn btn-primary btn-sm" onclick="refreshAll()">刷新</button>
+      </div>
+    </header>
+
+    <main class="client-main">
+      <section class="overview-strip">
+        <div class="overview-card">
+          <div class="overview-label">Client</div>
+          <div id="clientHealth" class="overview-value">检查中</div>
+          <div id="clientPort" class="overview-meta">本地端口 5052</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">Server</div>
+          <div id="serverHealth" class="overview-value">检查中</div>
+          <div id="serverUptime" class="overview-meta">等待状态</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">目标地址</div>
+          <div id="targetServer" class="overview-value overview-value-sm">-</div>
+          <div id="mcpAddress" class="overview-meta">MCP: /mcp</div>
+        </div>
+        <div class="overview-card">
+          <div class="overview-label">知识概览</div>
+          <div id="memoryTotal" class="overview-value">-</div>
+          <div id="memoryFreshness" class="overview-meta">等待统计</div>
+        </div>
+      </section>
+
+      <section class="overview-panel" id="panelOverview">
+        <div class="section-heading">
+          <div>
+            <h2>状态页</h2>
+            <p>第一版 Client Web UI 先聚焦运行状态、知识图谱预览、正式知识预览，以及面向普通用户的提审入口。</p>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="btn btn-primary btn-sm" onclick="switchTab('topology')">进入图谱预览</button>
+          <button class="btn btn-secondary btn-sm" onclick="switchTab('memory')">进入知识工作台</button>
+        </div>
+        <div class="status-grid">
+          <div class="status-card">
+            <div class="status-card-title">当前已覆盖</div>
+            <ul class="status-list">
+              <li>状态概览</li>
+              <li>知识图谱预览</li>
+              <li>正式知识预览</li>
+              <li>手动编辑并提交审核</li>
+            </ul>
+          </div>
+          <div class="status-card">
+            <div class="status-card-title">下一步自然扩展</div>
+            <ul class="status-list">
+              <li>执行管线面板</li>
+              <li>内置 Agent 会话面板</li>
+              <li>EXE 托盘外壳</li>
+            </ul>
+          </div>
+          <div class="status-card">
+            <div class="status-card-title">当前定位</div>
+            <p id="overviewSummary" class="status-copy">Client 负责本地 MCP 和工作台入口，Server 负责正式知识、账号权限与审核发布。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="workspace-tabs">
+        <button class="workspace-tab active" data-tab="topology" onclick="switchTab('topology')">图谱预览</button>
+        <button class="workspace-tab" data-tab="memory" onclick="switchTab('memory')">知识工作台</button>
+      </section>
+
+      <section id="panelTopology" class="workspace-panel active">
+        <div class="section-heading">
+          <div>
+            <h2>知识图谱预览</h2>
+            <p>复用 Server 的拓扑数据和渲染器，作为 Client 第一版图谱入口。</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="refreshTopology()">刷新图谱</button>
+        </div>
+        <div class="summary-bar">
+          <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">节点</div></div>
+          <div class="stat"><div id="statEdges" class="val">-</div><div class="lbl">依赖边</div></div>
+          <div class="stat"><div id="statContainment" class="val">-</div><div class="lbl">包含边</div></div>
+          <div class="stat"><div id="statCollaboration" class="val">-</div><div class="lbl">协作边</div></div>
+        </div>
+        <div class="arch-layout">
+          <div id="topoGrid" class="topo-grid"></div>
+          <div id="archSidebar" class="arch-sidebar" style="display:none"></div>
+        </div>
+      </section>
+
+      <section id="panelMemory" class="workspace-panel">
+        <div class="section-heading">
+          <div>
+            <h2>知识预览与手动编辑</h2>
+            <p>这里展示的是正式知识。普通客户端的新增、修改、删除都会进入预审队列，不会直接写入正式库。</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="refreshMemories()">刷新知识</button>
+        </div>
+
+        <div class="review-mode-banner">
+          <div class="review-mode-title">当前处于提审模式</div>
+          <div class="review-mode-copy">正式知识始终只读可查。你在这里做的编辑会生成预审提交，管理员审核并发布后，正式知识库才会更新。</div>
+        </div>
+
+        <div class="memory-layout">
+          <div class="memory-sidebar">
+            <div class="memory-filters">
+              <select id="memFilterLayer" onchange="window.MemoryEditor.loadMemories()">
+                <option value="">所有节点类型</option>
+                <option value="Project">Project</option>
+                <option value="Department">Department</option>
+                <option value="Technical">Technical</option>
+                <option value="Team">Team</option>
+              </select>
+              <select id="memFilterType" onchange="window.MemoryEditor.loadMemories()">
+                <option value="">所有记忆类型</option>
+                <option value="Structural">Structural</option>
+                <option value="Semantic">Semantic</option>
+                <option value="Episodic">Episodic</option>
+                <option value="Procedural">Procedural</option>
+              </select>
+              <button class="btn btn-primary btn-sm memory-new-btn" onclick="window.MemoryEditor.createNew()">新建提审</button>
+            </div>
+
+            <div class="memory-sidebar-section">
+              <div class="memory-sidebar-heading">正式知识</div>
+              <div id="memoryList" class="memory-list"></div>
+            </div>
+
+            <div class="memory-sidebar-section submission-section">
+              <div class="submission-panel-header">
+                <div>
+                  <div class="memory-sidebar-heading">我的提审</div>
+                  <div class="submission-panel-copy">查看当前用户提交到预审队列的变更。</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" type="button" onclick="window.MemoryEditor.loadSubmissions()">刷新</button>
+              </div>
+              <div id="submissionList" class="submission-list"></div>
+            </div>
+          </div>
+
+          <div class="memory-content">
+            <div id="memoryEditorForm" class="memory-form" style="display:none;">
+              <div class="memory-page-header">
+                <div>
+                  <h3>知识编辑 <span id="memId" class="memory-page-subtitle"></span></h3>
+                  <div id="memoryEditorHint" class="memory-editor-hint">编辑正式知识会生成一条预审提交。</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.applyTemplate()">应用模板</button>
+              </div>
+
+              <div id="submissionNotice" class="submission-notice hidden"></div>
+
+              <div class="memory-form-group">
+                <label>摘要</label>
+                <input type="text" id="memSummary" placeholder="用一句话概括这条知识" />
+              </div>
+
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label>节点类型</label>
+                  <select id="memLayer" onchange="window.MemoryEditor.onLayerTypeChanged()">
+                    <option value="Project">Project</option>
+                    <option value="Department">Department</option>
+                    <option value="Technical">Technical</option>
+                    <option value="Team">Team</option>
+                  </select>
+                </div>
+                <div class="memory-form-group">
+                  <label>记忆类型</label>
+                  <select id="memType" onchange="window.MemoryEditor.onLayerTypeChanged()">
+                    <option value="Structural">Structural</option>
+                    <option value="Semantic">Semantic</option>
+                    <option value="Episodic">Episodic</option>
+                    <option value="Procedural">Procedural</option>
+                    <option value="Working">Working</option>
+                  </select>
+                </div>
+                <div class="memory-form-group">
+                  <label>重要度</label>
+                  <input type="number" id="memImportance" step="0.1" min="0" max="1" value="0.5" />
+                </div>
+              </div>
+
+              <div class="memory-form-group">
+                <label>职能域</label>
+                <div id="memDisciplines" class="memory-check-grid">
+                  <label><input type="checkbox" value="engineering" /> engineering</label>
+                  <label><input type="checkbox" value="design" /> design</label>
+                  <label><input type="checkbox" value="art" /> art</label>
+                  <label><input type="checkbox" value="ta" /> ta</label>
+                  <label><input type="checkbox" value="audio" /> audio</label>
+                  <label><input type="checkbox" value="devops" /> devops</label>
+                  <label><input type="checkbox" value="qa" /> qa</label>
+                </div>
+              </div>
+
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label>业务系统</label>
+                  <div id="memFeaturesList" class="memory-list-editor"></div>
+                  <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addFeature()" type="button">+ 添加</button>
+                </div>
+                <div class="memory-form-group">
+                  <label>Node ID</label>
+                  <div id="memNodeIdField" class="memory-list-editor"></div>
+                  <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addNodeId()" type="button">+ 添加</button>
+                </div>
+              </div>
+
+              <div class="memory-form-group">
+                <label>标签</label>
+                <div id="memTagsList" class="memory-list-editor"></div>
+                <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addTag()" type="button">+ 添加</button>
+              </div>
+
+              <div class="memory-form-group">
+                <label>结构化内容</label>
+                <div class="memory-form-row">
+                  <div class="memory-form-group"><label>背景</label><input type="text" id="memFieldBackground" placeholder="适用背景" /></div>
+                  <div class="memory-form-group"><label>目标</label><input type="text" id="memFieldGoal" placeholder="目标" /></div>
+                </div>
+                <div class="memory-form-row">
+                  <div class="memory-form-group"><label>规则要点</label><textarea id="memFieldRules" placeholder="每行一条"></textarea></div>
+                  <div class="memory-form-group"><label>执行步骤</label><textarea id="memFieldSteps" placeholder="每行一条"></textarea></div>
+                </div>
+                <div class="memory-form-group"><label>备注</label><textarea id="memFieldNotes" placeholder="补充说明"></textarea></div>
+              </div>
+
+              <div class="memory-form-group">
+                <label>正文预览</label>
+                <textarea id="memContent" readonly placeholder="自动生成..." style="height: 160px;"></textarea>
+              </div>
+
+              <div class="memory-actions">
+                <button class="btn btn-primary btn-sm" onclick="window.MemoryEditor.saveMemory()">提交审核</button>
+                <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" onclick="window.MemoryEditor.deleteMemory()" style="color:#ef4444;border-color:#ef4444;">提交删除申请</button>
+              </div>
+            </div>
+            <div id="memoryEmptyState" class="empty">从左侧选择一条正式知识，或点击“新建提审”创建新的预审提交。</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="status-bar">
+      <span id="statusText">启动中...</span>
+      <span id="refreshInfo"></span>
+    </footer>
+  </div>
+
+  <script src="js/lib/elk.bundled.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

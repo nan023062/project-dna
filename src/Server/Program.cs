@@ -6,6 +6,7 @@ using Dna.Interfaces.Cli;
 using Dna.Adapters.Game;
 using Dna.Knowledge;
 using Dna.Memory.Models;
+using Dna.Review;
 using Dna.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Logging;
@@ -60,6 +61,12 @@ DnaApp.ConfigureServices(services =>
     services.AddSingleton<UserStore>(sp =>
     {
         var store = new UserStore();
+        store.Initialize(dataPath);
+        return store;
+    });
+    services.AddSingleton<MemoryReviewStore>(sp =>
+    {
+        var store = new MemoryReviewStore();
         store.Initialize(dataPath);
         return store;
     });

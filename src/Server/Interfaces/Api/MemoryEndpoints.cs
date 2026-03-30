@@ -2,6 +2,7 @@ using Dna.Knowledge;
 using Dna.Knowledge.Models;
 using Dna.Memory.Models;
 using Dna.Core.Config;
+using System.Security.Claims;
 
 namespace Dna.Interfaces.Api;
 
@@ -11,16 +12,20 @@ public static class MemoryEndpoints
     {
         var group = app.MapGroup("/api/memory");
 
-        group.MapPost("/remember", async (RememberRequest request, IMemoryEngine memory, ProjectConfig config) =>
+        group.MapPost("/remember", async (RememberRequest request, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
             EnsureReady(memory, config);
+            var guard = RequireAdminForLegacyFormalWrite(principal);
+            if (guard is not null) return guard;
             var entry = await memory.RememberAsync(request);
             return Results.Ok(entry);
         });
 
-        group.MapPost("/batch", async (List<RememberRequest> requests, IMemoryEngine memory, ProjectConfig config) =>
+        group.MapPost("/batch", async (List<RememberRequest> requests, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
             EnsureReady(memory, config);
+            var guard = RequireAdminForLegacyFormalWrite(principal);
+            if (guard is not null) return guard;
             if (requests.Count > 50)
                 return Results.BadRequest(new { error = $"单次最多 50 条，当前 {requests.Count} 条" });
             var entries = await memory.RememberBatchAsync(requests);
@@ -70,11 +75,13 @@ public static class MemoryEndpoints
             return Results.Ok(memory.GetConstraintChain(id));
         });
 
-        group.MapPut("/{id}", async (string id, RememberRequest request, IMemoryEngine memory, ProjectConfig config) =>
+        group.MapPut("/{id}", async (string id, RememberRequest request, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
             try
             {
                 EnsureReady(memory, config);
+                var guard = RequireAdminForLegacyFormalWrite(principal);
+                if (guard is not null) return guard;
                 var updated = await memory.UpdateMemoryAsync(id, request);
                 return Results.Ok(updated);
             }
@@ -93,9 +100,11 @@ public static class MemoryEndpoints
             return Results.Ok(new { message = $"Memory [{id}] verified" });
         });
 
-        group.MapDelete("/{id}", (string id, IMemoryEngine memory, ProjectConfig config) =>
+        group.MapDelete("/{id}", (string id, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
             EnsureReady(memory, config);
+            var guard = RequireAdminForLegacyFormalWrite(principal);
+            if (guard is not null) return guard;
             var deleted = memory.DeleteMemory(id);
             return deleted ? Results.Ok(new { message = $"Deleted [{id}]" }) : Results.NotFound();
         });
@@ -212,5 +221,16 @@ public static class MemoryEndpoints
 
     private static void EnsureReady(IMemoryEngine memory, ProjectConfig config)
     {
+    }
+
+    private static IResult? RequireAdminForLegacyFormalWrite(ClaimsPrincipal principal)
+    {
+        if (principal.IsInRole("admin"))
+            return null;
+
+        return Results.Json(new
+        {
+            error = "Formal memory writes are restricted. Use /api/review/memory/submissions for normal edits, or /api/admin/memory/* for audited admin direct writes."
+        }, statusCode: 403);
     }
 }
