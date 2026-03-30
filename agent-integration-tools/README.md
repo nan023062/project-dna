@@ -8,7 +8,7 @@ Project DNA 作为 AI Agent 的项目认知引擎，通过标准的 MCP (Model C
 
 目前我们提供以下平台的接入工具：
 
-- [**Cursor**](./cursor/README.md) - 深度集成 AI 的现代 IDE，支持通过 Skill 自动化配置 MCP 和 Prompt 模板。
+- [**Cursor**](./cursor-skill/README.md) - 深度集成 AI 的现代 IDE，支持通过 Skill 自动化配置 MCP 和 Prompt 模板。
 - *(即将支持)* **VS Code** - 通过 Cline 等插件支持 MCP。
 - *(即将支持)* **JetBrains IDEs** - 适配相关 AI 插件。
 
