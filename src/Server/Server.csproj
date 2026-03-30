@@ -5,7 +5,7 @@
         <RootNamespace>Dna</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyName>Dna</AssemblyName>
+        <AssemblyName>dna_server</AssemblyName>
         <OutputPath>$(MSBuildThisFileDirectory)../../publish/server/</OutputPath>
         <PublishDir>$(MSBuildThisFileDirectory)../../publish/server/</PublishDir>
         <IntermediateOutputPath>$(MSBuildThisFileDirectory)../../obj/server/</IntermediateOutputPath>
