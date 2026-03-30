@@ -1,41 +1,43 @@
-# Project DNA 服务端工具 (Server Tools)
+# Project DNA Server Tools
 
-这个目录包含了用于独立启动和管理 Project DNA Server 的跨平台脚本。
+跨平台启动脚本，用于以独立进程 (HTTP/SSE) 运行 Project DNA Server。
 
-无论您使用哪种 IDE（Cursor, Cline, Copilot 等），只要您希望以**独立进程 (HTTP/SSE 模式)** 运行 Project DNA，都可以使用这里的工具。
+## 快速开始
 
-## 配置文件
+### 1. 编辑配置
 
-在启动服务器之前，请检查或修改 `server-config.json`：
+打开 `server-config.json`，填入实际路径：
 
 ```json
 {
-  "server": {
-    "mode": "binary",  // "binary" 表示运行可执行文件, "source" 表示通过 dotnet run 运行源码
-    "appPath": "dna",  // 可执行文件的路径，或源码项目的路径
-    "dbPath": ".dna",  // 知识库 SQLite 文件的存储目录（支持相对路径或绝对路径）
-    "port": 5051       // 服务器监听端口
-  }
+  "appPath": "dna",
+  "dbPath": ".dna",
+  "port": 5051
 }
 ```
 
-## 启动服务器
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `appPath` | 可执行文件路径（支持全局命令或绝对路径） | `"dna"` 或 `"D:/path/to/dna.exe"` |
+| `dbPath` | 知识库目录（相对路径基于当前工作目录） | `".dna"` 或 `"C:/my-project/.dna"` |
+| `port` | 监听端口 | `5051` |
 
-### Windows
-在 PowerShell 中运行：
+### 2. 启动服务器
+
+**Windows** — 双击 `start-server.cmd`，或在 PowerShell 中：
+
 ```powershell
 .\start-server.ps1
 ```
 
-### macOS / Linux
-在终端中运行：
+**macOS / Linux**（需要 `jq` 或 `python3`）：
+
 ```bash
 bash start-server.sh
 ```
 
-## 验证运行状态
+### 3. 验证
 
-服务器启动后，您可以通过以下命令验证其是否正常运行：
 ```bash
 curl http://localhost:5051/api/status
 ```

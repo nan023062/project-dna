@@ -1,8 +1,5 @@
 {
-  "server": {
-    "mode": "binary",
-    "appPath": "dna",
-    "dbPath": ".dna",
-    "port": 5051
-  }
+  "appPath": "../publish/dna.exe",
+  "dbPath": ".dna",
+  "port": 5051
 }
