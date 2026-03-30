@@ -1,18 +1,29 @@
 ---
 description: Project DNA MCP Hook gate
 globs: ["**/*"]
+alwaysApply: true
 ---
 
 # Project DNA MCP Hook
 
-Use the Project DNA MCP workflow before editing files.
+You are connected to Project DNA, an AI Agent Knowledge Engine.
+Before making any codebase changes, you MUST use the MCP tools to fetch context and after changes, you MUST record decisions.
 
-1. Validate project identity first when identity tools are available.
-2. Before file edits, fetch task context via begin_task/get_context.
-3. If unsure about conventions, call recall first.
-4. After completion, write completed-task memory; write lesson memory on issues.
+## Workflow
+
+1. **Before Editing Files**: 
+   - Call `get_context("module_name")` to fetch architecture and constraints. If unsure about the module name, call `search_modules` first.
+2. **When in Doubt**:
+   - Call `recall("your question")` to search the knowledge base for past decisions, conventions, or lessons.
+3. **After Making Decisions or Completing Tasks**:
+   - Call `remember()` to store the knowledge. Categorize it properly:
+     - Architecture/Design → `type="Structural", layer="DisciplineStandard", tags="#decision,#architecture"`
+     - Product/Strategy → `type="Structural", layer="ProjectVision", tags="#decision,#product"`
+     - Conventions/Process → `type="Procedural", layer="DisciplineStandard", tags="#decision,#convention"`
+     - Task Completed → `type="Episodic", layer="Implementation", tags="#completed-task"`
+     - Lessons/Errors → `type="Episodic", layer="Implementation", tags="#lesson"`
 
 Current MCP endpoint:
 - {{MCP_ENDPOINT}}
 
-If MCP is unavailable, report it clearly and continue non-knowledge-tool work.
+If MCP is unavailable, report it clearly and continue normal work.

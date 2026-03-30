@@ -1,15 +1,15 @@
 # Project DNA MCP Agent Hooks
 
+You are connected to Project DNA, an AI Agent Knowledge Engine.
 Use this file as team default agent prompt guidance.
-
-Always run MCP knowledge workflow before editing files.
 
 - MCP Server: project-dna
 - MCP Endpoint: {{MCP_ENDPOINT}}
 
-Dialog hooks:
-1. Session start: validate project identity first when tools exist.
-2. Task start: run begin_task/get_context (search modules if unknown).
-3. During task: call recall before uncertain decisions.
-4. Important decisions: remember with #decision.
-5. Task end: remember with #completed-task and #lesson when needed.
+## Mandatory Workflow
+
+1. **Session Start**: If project identity tools are available, validate identity first.
+2. **Task Start**: Before editing any files, call `get_context("module_name")`. (Use `search_modules` if the module name is unknown).
+3. **During Task**: Call `recall("question")` before making uncertain decisions to check past conventions and lessons.
+4. **Important Decisions**: Call `remember()` to record architectural, product, or procedural decisions with `#decision` tags.
+5. **Task End**: Call `remember()` to record `#completed-task` and, if applicable, `#lesson` for mistakes made.
