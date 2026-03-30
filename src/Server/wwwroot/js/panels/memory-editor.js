@@ -81,6 +81,23 @@ function normalizeTypeName(type) {
   return type || 'Semantic';
 }
 
+function parseMemoryTimestamp(memory) {
+  const created = memory?.createdAt ?? memory?.created_at;
+  if (!created) return 0;
+  const timestamp = Date.parse(created);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortMemoriesByRecent(memories) {
+  return memories
+    .map((memory, index) => ({ memory, index, timestamp: parseMemoryTimestamp(memory) }))
+    .sort((a, b) => {
+      if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
+      return a.index - b.index;
+    })
+    .map(item => item.memory);
+}
+
 function getCheckedDisciplines() {
   return Array.from(document.querySelectorAll('#memDisciplines input[type="checkbox"]:checked'))
     .map(i => i.value);
@@ -233,7 +250,9 @@ export async function loadMemories() {
   if (type) url += `&types=${type}`;
 
   try {
-    _memories = await api(url);
+    const result = await api(url);
+    const memories = Array.isArray(result) ? result : [];
+    _memories = sortMemoriesByRecent(memories);
     renderMemoryList();
   } catch (err) {
     $('memoryList').innerHTML = `<div class="empty error">加载失败: ${err.message}</div>`;

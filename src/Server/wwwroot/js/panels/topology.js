@@ -6,6 +6,8 @@ import { $ } from '../utils.js';
 import { renderGraph } from '../graph/graph-renderer.js';
 
 const DEPT_NODE_PREFIX = '__dept__:';
+const ENTRY_NODE_PREFIX = '__entry__:';
+const EXIT_NODE_PREFIX = '__exit__:';
 
 const relationFilter = {
   dependency: true,
@@ -16,6 +18,7 @@ const relationFilter = {
 };
 
 let selectedModule = null;
+let selectedEdge = null;
 
 export function renderTopology(topoData) {
   const grid = $('topoGrid');
@@ -43,13 +46,23 @@ function renderGraphWithSidebar(graphContainer, topoData, sidebar) {
   renderGraph(graphContainer, topoData, {
     relationFilter,
     onModuleClick: moduleName => {
+      selectedEdge = null;
       selectedModule = moduleName;
       renderModuleDetail(sidebar, topoData, moduleName);
+    },
+    onEdgeClick: edge => {
+      selectedModule = null;
+      selectedEdge = edge;
+      renderEdgeDetail(sidebar, topoData, edge);
     }
   });
 
   if (selectedModule && (findModuleByName(topoData, selectedModule) || isDepartmentNodeId(selectedModule))) {
     renderModuleDetail(sidebar, topoData, selectedModule);
+    return;
+  }
+  if (selectedEdge) {
+    renderEdgeDetail(sidebar, topoData, selectedEdge);
     return;
   }
   renderOverview(sidebar, topoData);
@@ -409,6 +422,81 @@ function renderDepartmentDetail(sidebar, topoData, departmentNodeId) {
   });
 }
 
+function renderEdgeDetail(sidebar, topoData, edge) {
+  if (!sidebar || !edge) {
+    renderOverview(sidebar, topoData);
+    return;
+  }
+
+  const relationName = getRelationName(edge);
+  const relationMeaning = getRelationMeaning(edge);
+  const fromName = resolveNodeDisplayName(topoData, edge.from);
+  const toName = resolveNodeDisplayName(topoData, edge.to);
+  const uniqueSources = [...new Set(edge.sources || [])];
+  const uniqueTargets = [...new Set(edge.targets || [])];
+  const isGatewayEdge = isGatewayNodeId(edge.from) || isGatewayNodeId(edge.to);
+
+  sidebar.innerHTML = `
+    <div class="sidebar-header">
+      <div class="sidebar-title">连线详情</div>
+      <button class="sidebar-close" title="返回总览">×</button>
+    </div>
+    <div class="sidebar-meta">
+      <span class="sidebar-badge">${escapeHtml(relationName)}</span>
+      ${edge.isComputed ? '<span class="sidebar-badge">推导边</span>' : '<span class="sidebar-badge">显式边</span>'}
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">当前视图连线</div>
+      <div class="sidebar-kv-list">
+        <div class="sidebar-kv-row"><span class="sidebar-k">起点</span><span class="sidebar-v">${escapeHtml(fromName)}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">终点</span><span class="sidebar-v">${escapeHtml(toName)}</span></div>
+      </div>
+      <div class="sidebar-text" style="margin-top:8px;">${escapeHtml(relationMeaning)}</div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">原始连线端点</div>
+      <div class="sidebar-kv-list">
+        <div class="sidebar-kv-row sidebar-kv-stack">
+          <span class="sidebar-k">${isGatewayNodeId(edge.from) ? '外部来源' : '来源集合'}</span>
+          <div class="sidebar-link-list">
+            ${renderNodeLinksById(uniqueSources, topoData)}
+          </div>
+        </div>
+        <div class="sidebar-kv-row sidebar-kv-stack">
+          <span class="sidebar-k">${isGatewayNodeId(edge.to) ? '外部去向' : '目标集合'}</span>
+          <div class="sidebar-link-list">
+            ${renderNodeLinksById(uniqueTargets, topoData)}
+          </div>
+        </div>
+      </div>
+    </div>
+    ${isGatewayEdge ? `
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">ENTRY/EXIT 说明</div>
+      <div class="sidebar-text">ENTRY 表示“外部模块进入当前层的关系入口”；EXIT 表示“当前层模块流向外部模块的关系出口”。点击连线后可在上方看到具体外部模块集合。</div>
+    </div>` : ''}
+  `;
+
+  const closeBtn = sidebar.querySelector('.sidebar-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      selectedEdge = null;
+      selectedModule = null;
+      renderOverview(sidebar, topoData);
+    });
+  }
+
+  sidebar.querySelectorAll('[data-module-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.moduleId;
+      if (!id) return;
+      selectedEdge = null;
+      selectedModule = id;
+      renderModuleDetail(sidebar, topoData, id);
+    });
+  });
+}
+
 function renderNodeLinks(ids, topoData, prefix = '') {
   const unique = [...new Set(ids || [])];
   if (unique.length === 0) return '<div class="sidebar-empty">暂无</div>';
@@ -417,6 +505,16 @@ function renderNodeLinks(ids, topoData, prefix = '') {
     const title = m?.displayName || id;
     const label = prefix ? `${prefix}: ${title}` : title;
     return `<button class="sidebar-link-btn" data-module-id="${escapeAttr(id)}">${escapeHtml(label)}</button>`;
+  }).join('');
+}
+
+function renderNodeLinksById(ids, topoData) {
+  const unique = [...new Set(ids || [])];
+  if (unique.length === 0) return '<div class="sidebar-empty">暂无</div>';
+  return unique.map(id => {
+    const m = findModuleByName(topoData, id);
+    if (!m) return `<div class="sidebar-empty">${escapeHtml(resolveNodeDisplayName(topoData, id))}</div>`;
+    return `<button class="sidebar-link-btn" data-module-id="${escapeAttr(m.name)}">${escapeHtml(m.displayName || m.name)}</button>`;
   }).join('');
 }
 
@@ -462,6 +560,50 @@ function findModuleByName(topoData, name) {
 
 function isDepartmentNodeId(name) {
   return typeof name === 'string' && name.startsWith(DEPT_NODE_PREFIX);
+}
+
+function isGatewayNodeId(name) {
+  return typeof name === 'string' &&
+    (name.startsWith(ENTRY_NODE_PREFIX) || name.startsWith(EXIT_NODE_PREFIX));
+}
+
+function resolveNodeDisplayName(topoData, id) {
+  if (!id) return '-';
+  if (id.startsWith(DEPT_NODE_PREFIX)) {
+    const disciplineId = id.slice(DEPT_NODE_PREFIX.length);
+    const discipline = (topoData.disciplines || []).find(d => String(d.id || '').toLowerCase() === disciplineId.toLowerCase());
+    return discipline?.displayName || disciplineId;
+  }
+  if (id.startsWith(ENTRY_NODE_PREFIX)) return 'ENTRY';
+  if (id.startsWith(EXIT_NODE_PREFIX)) return 'EXIT';
+  const m = findModuleByName(topoData, id);
+  return m?.displayName || id;
+}
+
+function getRelationName(edge) {
+  if (edge.relation === 'dependency') return '依赖';
+  if (edge.relation === 'collaboration') return '协作';
+  if (edge.relation === 'containment') {
+    if (inferContainmentKind(edge) === 'aggregation') return '聚合';
+    return '组合';
+  }
+  return edge.relation || '关系';
+}
+
+function getRelationMeaning(edge) {
+  if (edge.relation === 'dependency') {
+    return '依赖：起点模块需要调用或依赖终点模块提供的能力。箭头方向=依赖方向。';
+  }
+  if (edge.relation === 'collaboration') {
+    return '协作：两个节点在同一执行链路或协作声明中共同工作。';
+  }
+  if (edge.relation === 'containment') {
+    if (inferContainmentKind(edge) === 'aggregation') {
+      return '聚合：父节点聚合管理子节点，生命周期通常可独立。';
+    }
+    return '组合：父节点强拥有子节点，生命周期更紧耦合。';
+  }
+  return '关系语义未定义。';
 }
 
 function getNodeTypeName(module) {

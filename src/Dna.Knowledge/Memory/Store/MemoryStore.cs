@@ -472,7 +472,7 @@ internal partial class MemoryStore : IDisposable
             LEFT JOIN memory_features f ON e.id = f.memory_id
             LEFT JOIN memory_tags t ON e.id = t.memory_id
             {whereClause}
-            ORDER BY e.importance DESC, e.created_at DESC
+            ORDER BY e.created_at DESC, e.importance DESC
             LIMIT @limit OFFSET @offset
             """;
 

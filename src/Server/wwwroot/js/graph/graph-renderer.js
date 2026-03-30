@@ -30,6 +30,7 @@ let _svgRoot = null;
 let _containerEl = null;
 let _topoData = null;
 let _onModuleClick = null;
+let _onEdgeClick = null;
 
 let _transform = { x: 0, y: 0, scale: 1 };
 let _targetTransform = null;
@@ -41,6 +42,7 @@ let _nodeDrag = null;
 let _boundGlobal = false;
 
 let _selectedNode = null;
+let _selectedEdgeKey = null;
 let _viewRoot = null;
 
 let _lastFingerprint = null;
@@ -332,7 +334,7 @@ function buildRenderModel(topo) {
   const inDetailScope = !!_viewRoot && visibleNodeIds.length > 0;
 
   const scopeChildren = inDetailScope ? [...visibleNodeIds] : [];
-  const gatewayNodes = [];
+  let gatewayNodes = [];
   let entryId = null;
   let exitId = null;
   if (inDetailScope) {
@@ -379,6 +381,8 @@ function buildRenderModel(topo) {
   const mergedEdges = new Map();
   const mergedSourceEdges = allEdges.concat(departmentContainmentEdges);
   const visibleWithGateway = new Set(visibleModules.map(m => m.name));
+  let entryUsed = false;
+  let exitUsed = false;
 
   for (const edge of mergedSourceEdges) {
     if (!shouldKeepEdge(edge, _relationFilter)) continue;
@@ -392,9 +396,11 @@ function buildRenderModel(topo) {
       if (!fromInScope && toInScope) {
         if (!entryId || edge.relation === 'containment') continue;
         from = entryId;
+        entryUsed = true;
       } else if (fromInScope && !toInScope) {
         if (!exitId || edge.relation === 'containment') continue;
         to = exitId;
+        exitUsed = true;
       } else if (!fromInScope && !toInScope) {
         continue;
       }
@@ -408,6 +414,7 @@ function buildRenderModel(topo) {
 
     if (!mergedEdges.has(key)) {
       mergedEdges.set(key, {
+        id: key,
         from,
         to,
         relation: edge.relation || 'dependency',
@@ -434,9 +441,24 @@ function buildRenderModel(topo) {
     crossWorkNames: [...e.crossWorkNames]
   }));
 
+  if (inDetailScope) {
+    gatewayNodes = gatewayNodes.filter(n => {
+      if (n.name === entryId) return entryUsed;
+      if (n.name === exitId) return exitUsed;
+      return true;
+    });
+  }
+
+  const finalModules = visibleNodeIds
+    .map(id => _allNodeMap.get(id))
+    .filter(Boolean)
+    .concat(gatewayNodes);
+  const finalNodeIdSet = new Set(finalModules.map(m => m.name));
+  const finalEdges = visibleEdges.filter(e => finalNodeIdSet.has(e.from) && finalNodeIdSet.has(e.to));
+
   return {
-    modules: visibleModules,
-    edges: visibleEdges,
+    modules: finalModules,
+    edges: finalEdges,
     visibleSet,
     allNodes
   };
@@ -465,6 +487,7 @@ export async function renderGraph(container, topoData, opts = {}) {
   _containerEl = container;
   _topoData = topoData;
   _onModuleClick = opts.onModuleClick || null;
+  _onEdgeClick = opts.onEdgeClick || null;
   _relationFilter = normalizeRelationFilter(opts.relationFilter);
 
   if (!topoData?.modules?.length) {
@@ -496,6 +519,7 @@ export async function renderGraph(container, topoData, opts = {}) {
 
   const savedTransform = _userHasInteracted ? { ..._transform } : null;
   const savedSelection = _selectedNode;
+  const savedEdgeSelection = _selectedEdgeKey;
 
   if (!_svgRoot || !container.contains(_svgRoot)) {
     container.innerHTML = '<div class="graph-loading">布局计算中…</div>';
@@ -511,7 +535,7 @@ export async function renderGraph(container, topoData, opts = {}) {
     if (token !== _renderToken) return;
 
     container.innerHTML = '';
-    renderSvg(container, laid, renderModel, savedTransform, savedSelection);
+    renderSvg(container, laid, renderModel, savedTransform, savedSelection, savedEdgeSelection);
     renderNav(container);
   } catch (e) {
     console.error('Graph render error', e);
@@ -592,7 +616,7 @@ function toElkGraph(modules, edges, containerAspectRatio = 1.6) {
   };
 }
 
-function renderSvg(container, laid, renderModel, savedTransform, savedSelection) {
+function renderSvg(container, laid, renderModel, savedTransform, savedSelection, savedEdgeSelection) {
   const svgNs = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(svgNs, 'svg');
   svg.classList.add('graph-svg');
@@ -659,9 +683,21 @@ function renderSvg(container, laid, renderModel, savedTransform, savedSelection)
   } else if (_selectedNode && !_drawState.nodeEls.has(_selectedNode)) {
     _selectedNode = null;
   }
+
+  if (savedEdgeSelection) {
+    const edgeItem = _drawState.edgeEls.find(x => x.edge?.id === savedEdgeSelection);
+    if (edgeItem) {
+      setEdgeSelected(edgeItem.edge.id, false);
+    } else {
+      _selectedEdgeKey = null;
+    }
+  }
 }
 
 function drawGroups(viewport, groups, ns) {
+  // 进入子层（部门/子状态机）后，隐藏外围分组框，避免与导航层级标题重复。
+  if (_viewRoot) return;
+
   for (const g of groups) {
     if (!g._discipline) continue;
 
@@ -764,16 +800,27 @@ function drawEdges(viewport, laid, ns) {
     const edge = e._edge;
     if (!edge) continue;
 
+    const hitPath = document.createElementNS(ns, 'path');
+    hitPath.classList.add('graph-edge-hit');
+    hitPath.dataset.from = edge.from;
+    hitPath.dataset.to = edge.to;
+    hitPath.dataset.relation = edge.relationKey;
+    hitPath.dataset.edgeId = edge.id || '';
+    viewport.appendChild(hitPath);
+
     const path = document.createElementNS(ns, 'path');
     path.classList.add('graph-edge', `graph-edge-${edge.relationKey}`);
     path.dataset.from = edge.from;
     path.dataset.to = edge.to;
     path.dataset.relation = edge.relationKey;
+    path.dataset.edgeId = edge.id || '';
 
     applyEdgeStyle(path, edge);
     viewport.appendChild(path);
 
-    _drawState.edgeEls.push({ el: path, edge });
+    const item = { el: path, hitEl: hitPath, edge };
+    bindEdgeInteractions(item);
+    _drawState.edgeEls.push(item);
   }
 }
 
@@ -805,6 +852,39 @@ function applyEdgeStyle(path, edge) {
     path.setAttribute('marker-end', 'url(#arrow-containment)');
     path.setAttribute('stroke-dasharray', '6,4');
   }
+}
+
+function bindEdgeInteractions(item) {
+  const clickHandler = e => {
+    e.stopPropagation();
+    const edgeId = item.edge?.id;
+    if (!edgeId) return;
+    setEdgeSelected(edgeId, true);
+  };
+
+  item.el.addEventListener('click', clickHandler);
+  if (item.hitEl) item.hitEl.addEventListener('click', clickHandler);
+}
+
+function setEdgeSelected(edgeId, notify = true) {
+  _selectedEdgeKey = edgeId;
+  _selectedNode = null;
+  _svgRoot?.querySelectorAll('.graph-node.selected').forEach(n => n.classList.remove('selected'));
+
+  for (const item of _drawState.edgeEls) {
+    const isSelected = item.edge?.id === edgeId;
+    item.el.classList.toggle('selected-edge', isSelected);
+    if (item.hitEl) item.hitEl.classList.toggle('selected-edge-hit', isSelected);
+  }
+
+  if (!notify || !_onEdgeClick) return;
+  const edgeItem = _drawState.edgeEls.find(x => x.edge?.id === edgeId);
+  if (!edgeItem) return;
+
+  _onEdgeClick({
+    ...edgeItem.edge,
+    viewRoot: _viewRoot
+  });
 }
 
 function getNodeRect(id) {
@@ -878,11 +958,14 @@ function updateEdgePaths() {
 
     if (!fromRect || !toRect) {
       item.el.setAttribute('d', '');
+      if (item.hitEl) item.hitEl.setAttribute('d', '');
       continue;
     }
 
     const { start, end, horizontal } = getAnchors(fromRect, toRect);
-    item.el.setAttribute('d', smoothPath(start, end, horizontal));
+    const d = smoothPath(start, end, horizontal);
+    item.el.setAttribute('d', d);
+    if (item.hitEl) item.hitEl.setAttribute('d', d);
   }
 }
 
@@ -1112,6 +1195,12 @@ function handleNodeClick(nodeG) {
   if (!name) return;
   if (isScopeGatewayNodeId(name)) return;
 
+  _selectedEdgeKey = null;
+  _drawState.edgeEls.forEach(item => {
+    item.el.classList.remove('selected-edge');
+    if (item.hitEl) item.hitEl.classList.remove('selected-edge-hit');
+  });
+
   _svgRoot?.querySelectorAll('.graph-node.selected').forEach(n => n.classList.remove('selected'));
   nodeG.classList.add('selected');
   _selectedNode = name;
@@ -1191,11 +1280,13 @@ function renderNav(container) {
     : '全貌';
 
   const parent = _viewRoot ? (_hierarchy.parentByChild.get(_viewRoot) || null) : null;
+  const canGoUp = !!_viewRoot;
 
   nav.innerHTML = `
     <button class="graph-nav-btn" data-nav="home">全貌</button>
-    <button class="graph-nav-btn" data-nav="up" ${parent ? '' : 'disabled'}>上一级</button>
+    <button class="graph-nav-btn" data-nav="up" ${canGoUp ? '' : 'disabled'}>上一级</button>
     <span class="graph-nav-path">层级：${escapeHtml(trailText)}</span>
+    ${_viewRoot ? '<span class="graph-nav-hint">ENTRY=外部进入当前层，EXIT=当前层流向外部</span>' : ''}
   `;
 
   nav.onclick = e => {

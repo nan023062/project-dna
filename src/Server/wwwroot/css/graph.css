@@ -193,6 +193,14 @@
   stroke-width: 1.6;
   transition: opacity .15s;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.graph-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  cursor: pointer;
+  vector-effect: non-scaling-stroke;
 }
 .graph-edge-dependency { stroke: #4ade80; }
 .graph-edge-composition { stroke: #f59e0b; opacity: .95; }
@@ -203,6 +211,11 @@
 }
 .graph-edge.dimmed-edge { opacity: 0.12; }
 .graph-edge.highlight-edge { opacity: 1; stroke-width: 2.5; }
+.graph-edge.selected-edge {
+  opacity: 1;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.75));
+}
 
 /* ── 视图切换工具栏 ── */
 .topo-view-toggle {
@@ -268,6 +281,16 @@
   font-size: 11px;
   white-space: nowrap;
   max-width: min(560px, 60vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.graph-nav-hint {
+  color: #93c5fd;
+  font-size: 11px;
+  white-space: nowrap;
+  border-left: 1px solid #36507e;
+  padding-left: 8px;
+  max-width: min(520px, 50vw);
   overflow: hidden;
   text-overflow: ellipsis;
 }
