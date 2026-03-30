@@ -1,0 +1,11 @@
+{
+  "serverIp": "172.26.186.241",
+  "port": 5051,
+  "serverName": "project-dna",
+  "hook": {
+    "enabled": true,
+    "replaceExisting": true,
+    "ruleFileName": "project-dna-mcp-hook.mdc",
+    "agentFileName": "project-dna-mcp-hooks.md"
+  }
+}
