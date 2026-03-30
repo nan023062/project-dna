@@ -1,5 +1,5 @@
 {
-  "appPath": "../publish/dna.exe",
+  "appPath": "../publish/server/dna.exe",
   "dbPath": ".dna",
   "port": 5051
 }

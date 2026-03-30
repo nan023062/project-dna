@@ -6,6 +6,11 @@
     <RootNamespace>Dna.Client</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <OutputPath>$(MSBuildThisFileDirectory)../../publish/client/</OutputPath>
+    <PublishDir>$(MSBuildThisFileDirectory)../../publish/client/</PublishDir>
+    <IntermediateOutputPath>$(MSBuildThisFileDirectory)../../obj/client/</IntermediateOutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeToOutputPath>false</AppendRuntimeToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

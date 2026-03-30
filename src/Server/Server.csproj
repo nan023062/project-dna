@@ -6,7 +6,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <AssemblyName>Dna</AssemblyName>
-        <OutputPath>$(MSBuildThisFileDirectory)../../publish/</OutputPath>
+        <OutputPath>$(MSBuildThisFileDirectory)../../publish/server/</OutputPath>
+        <PublishDir>$(MSBuildThisFileDirectory)../../publish/server/</PublishDir>
         <IntermediateOutputPath>$(MSBuildThisFileDirectory)../../obj/server/</IntermediateOutputPath>
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
         <AppendRuntimeToOutputPath>false</AppendRuntimeToOutputPath>
