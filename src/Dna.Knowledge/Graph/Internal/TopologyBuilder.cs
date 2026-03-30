@@ -105,7 +105,7 @@ internal static class TopologyBuilder
                 {
                     Id = reg.Id,
                     Name = reg.Name,
-                    Type = reg.IsCrossWorkModule ? NodeType.Team : NodeType.Group,
+                    Type = reg.IsCrossWorkModule ? NodeType.Team : NodeType.Technical,
                     RelativePath = reg.Path,
                     Maintainer = reg.Maintainer,
                     Summary = reg.Summary,

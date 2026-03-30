@@ -21,7 +21,7 @@ public sealed class MemoryEntry
 
     // === 知识坐标 ===
 
-    public NodeType NodeType { get; init; } = NodeType.Group;
+    public NodeType NodeType { get; init; } = NodeType.Technical;
 
     /// <summary>关联的职能域：engineering / design / art / ta / audio / devops / qa</summary>
     public List<string> Disciplines { get; init; } = [];

@@ -271,7 +271,7 @@ internal class MemoryRecallEngine
 
     /// <summary>
     /// 核心创新：AI 不只是搜到相关记忆，而是沿治理层级自动展开约束。
-    /// 从 top-K 结果中推断知识坐标，向上召回 Project/Department/Group 的约束。
+    /// 从 top-K 结果中推断知识坐标，向上召回 Project/Department/Technical 的约束。
     /// </summary>
     private List<MemoryEntry> ExpandConstraintChain(List<ScoredMemory> topK, RecallQuery query)
     {
@@ -291,7 +291,7 @@ internal class MemoryRecallEngine
         var disciplines = topK.SelectMany(s => s.Entry.Disciplines).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var features = topK.SelectMany(s => s.Entry.Features).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        foreach (var nodeType in new[] { NodeType.Project, NodeType.Department, NodeType.Group })
+        foreach (var nodeType in new[] { NodeType.Project, NodeType.Department, NodeType.Technical })
         {
             if (chain.Count >= MaxConstraintTotal) break;
 
@@ -327,8 +327,8 @@ internal class MemoryRecallEngine
         var nodeTypes = results.Select(r => r.Entry.NodeType).Distinct().ToList();
         if (!nodeTypes.Contains(NodeType.Department))
             suggestions.Add("可以查看 Department 节点约束，补齐部门级标准");
-        if (!nodeTypes.Contains(NodeType.Group))
-            suggestions.Add("可以查看 Group 节点规范，补齐技术组级约束");
+        if (!nodeTypes.Contains(NodeType.Technical))
+            suggestions.Add("可以查看 Technical 节点规范，补齐技术组级约束");
 
         var types = results.Select(r => r.Entry.Type).Distinct().ToList();
         if (!types.Contains(MemoryType.Episodic))

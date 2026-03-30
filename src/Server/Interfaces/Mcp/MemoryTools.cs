@@ -38,7 +38,7 @@ public class MemoryTools(
         "#active-task: {\"goal\":\"目标\",\"modules\":[\"模块\"],\"status\":\"进行中\"}。" +
         "普通知识用纯文本即可。" +
         "参数 type：记忆类型 — Structural(结构)/Semantic(语义)/Episodic(事件)/Working(工作)/Procedural(过程)。" +
-        "参数 nodeType：节点类型 — Project/Department/Group/Team。" +
+        "参数 nodeType：节点类型 — Project/Department/Technical/Team。" +
         "参数 layer：兼容旧参数（已废弃），会自动映射到 nodeType。" +
         "参数 disciplines：关联职能域（逗号分隔）— engineering/design/art/ta/audio/devops/qa。" +
         "参数 tags：标签（逗号分隔）— 如 #lesson,#bug-fix,#performance。" +
@@ -51,7 +51,7 @@ public class MemoryTools(
         [Description("知识正文（文本或 JSON）")] string content,
         [Description("记忆类型: Structural/Semantic/Episodic/Working/Procedural")] string type,
         [Description("关联职能域，逗号分隔: engineering/design/art/ta/audio/devops/qa")] string disciplines,
-        [Description("节点类型: Project/Department/Group/Team")] string? nodeType = null,
+        [Description("节点类型: Project/Department/Technical/Team")] string? nodeType = null,
         [Description("兼容旧参数，已废弃: ProjectVision/DisciplineStandard/CrossDiscipline/FeatureSystem/Implementation")] string? layer = null,
         [Description("标签，逗号分隔: 如 #lesson,#bug-fix")] string? tags = null,
         [Description("一句话摘要（留空自动生成）")] string? summary = null,
@@ -65,7 +65,7 @@ public class MemoryTools(
         if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
             return $"错误：无效的记忆类型 '{type}'。可选值: Structural, Semantic, Episodic, Working, Procedural";
         if (!NodeTypeCompat.TryParse(nodeType ?? layer, out var parsedNodeType))
-            return $"错误：无效的节点类型 '{nodeType ?? layer}'。可选值: Project, Department, Group, Team";
+            return $"错误：无效的节点类型 '{nodeType ?? layer}'。可选值: Project, Department, Technical, Team";
 
         var request = new RememberRequest
         {
@@ -89,7 +89,7 @@ public class MemoryTools(
     [McpServerTool, Description(
         "语义检索项目记忆。遇到不确定的规范、流程、约定时应主动调用，NEVER 凭猜测行事。" +
         "输入自然语言问题，系统通过向量语义搜索 + 标签匹配 + 全文检索 + 坐标匹配 四通道召回，" +
-        "自动沿治理节点类型展开约束链（Project→Department→Group）。" +
+        "自动沿治理节点类型展开约束链（Project→Department→Technical）。" +
         "参数 question：自然语言问题，如「上次改角色换装遇到什么问题？」。" +
         "参数 disciplines：可选，限定职能域（逗号分隔）。" +
         "参数 features：可选，限定业务系统（逗号分隔）。" +
@@ -106,7 +106,7 @@ public class MemoryTools(
         [Description("限定业务系统，逗号分隔")] string? features = null,
         [Description("限定节点 ID")] string? nodeId = null,
         [Description("精确匹配标签，逗号分隔")] string? tags = null,
-        [Description("限定节点类型，逗号分隔: Project/Department/Group/Team")] string? nodeTypes = null,
+        [Description("限定节点类型，逗号分隔: Project/Department/Technical/Team")] string? nodeTypes = null,
         [Description("兼容旧参数，已废弃")] string? layers = null,
         [Description("是否展开约束链")] bool expandChain = true,
         [Description("最多返回条数")] int maxResults = 10)
@@ -187,7 +187,7 @@ public class MemoryTools(
         }
         catch (Exception ex)
         {
-            return $"错误：entries 解析失败 — {ex.Message}\n期望格式: [{{\n  \"content\": \"...\",\n  \"type\": \"Semantic\",\n  \"nodeType\": \"Group\",\n  \"disciplines\": \"engineering\"\n}}]";
+            return $"错误：entries 解析失败 — {ex.Message}\n期望格式: [{{\n  \"content\": \"...\",\n  \"type\": \"Semantic\",\n  \"nodeType\": \"Technical\",\n  \"disciplines\": \"engineering\"\n}}]";
         }
 
         if (items == null || items.Count == 0)
@@ -249,7 +249,7 @@ public class MemoryTools(
         [Description("新的知识正文（不修改则留空）")] string? content = null,
         [Description("新的摘要（不修改则留空）")] string? summary = null,
         [Description("新的记忆类型: Structural/Semantic/Episodic/Working/Procedural（不修改则留空）")] string? type = null,
-        [Description("新的节点类型: Project/Department/Group/Team（不修改则留空）")] string? nodeType = null,
+        [Description("新的节点类型: Project/Department/Technical/Team（不修改则留空）")] string? nodeType = null,
         [Description("兼容旧参数，已废弃")] string? layer = null,
         [Description("新的标签，逗号分隔（会替换原有标签；不修改则留空）")] string? tags = null,
         [Description("新的关联职能域，逗号分隔（不修改则留空）")] string? disciplines = null,
@@ -313,7 +313,7 @@ public class MemoryTools(
         "query_memories 是结构化过滤（按节点类型/类型/职能/标签等精确筛选）。" +
         "适用于：浏览某节点类型的全部知识、查看某模块关联的所有记忆、统计某类标签的条目数。")]
     public string query_memories(
-        [Description("节点类型过滤，逗号分隔: Project/Department/Group/Team")] string? nodeTypes = null,
+        [Description("节点类型过滤，逗号分隔: Project/Department/Technical/Team")] string? nodeTypes = null,
         [Description("兼容旧参数，已废弃")] string? layers = null,
         [Description("记忆类型过滤，逗号分隔: Structural/Semantic/Episodic/Working/Procedural")] string? types = null,
         [Description("职能域过滤，逗号分隔: engineering/design/art/ta/audio/devops/qa")] string? disciplines = null,

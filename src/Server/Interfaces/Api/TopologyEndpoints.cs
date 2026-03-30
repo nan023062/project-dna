@@ -163,14 +163,16 @@ public static class TopologyEndpoints
 
     private static List<RelationEdgeDto> BuildContainmentEdges(List<ModuleDto> modules)
     {
+        var edges = new List<RelationEdgeDto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        BuildExplicitContainmentEdges(modules, edges, seen);
+
         var candidates = modules
             .Where(m => !IsTeam(m))
             .Select(m => new { Module = m, Path = NormalizePath(m.RelativePath) })
             .Where(x => x.Path != null)
             .ToList();
-
-        var edges = new List<RelationEdgeDto>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var child in candidates)
         {
@@ -185,19 +187,80 @@ public static class TopologyEndpoints
 
             if (parent == null) continue;
 
-            var key = $"{parent.Module.Name}|{child.Module.Name}";
-            if (!seen.Add(key)) continue;
-
-            edges.Add(new RelationEdgeDto
-            {
-                From = parent.Module.Name,
-                To = child.Module.Name,
-                Relation = "containment",
-                IsComputed = true
-            });
+            TryAddContainmentEdge(
+                from: parent.Module.Name,
+                to: child.Module.Name,
+                kind: "aggregation",
+                isComputed: true,
+                edges,
+                seen);
         }
 
         return edges;
+    }
+
+    private static void BuildExplicitContainmentEdges(
+        List<ModuleDto> modules,
+        List<RelationEdgeDto> edges,
+        HashSet<string> seen)
+    {
+        var byNodeId = modules
+            .Where(m => !string.IsNullOrWhiteSpace(m.NodeId))
+            .ToDictionary(m => m.NodeId, m => m, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var child in modules)
+        {
+            if (string.IsNullOrWhiteSpace(child.ParentId)) continue;
+            if (!byNodeId.TryGetValue(child.ParentId, out var parent)) continue;
+            TryAddContainmentEdge(
+                from: parent.Name,
+                to: child.Name,
+                kind: "composition",
+                isComputed: false,
+                edges,
+                seen);
+        }
+
+        foreach (var parent in modules)
+        {
+            if (parent.ChildIds == null || parent.ChildIds.Count == 0) continue;
+            foreach (var childId in parent.ChildIds)
+            {
+                if (string.IsNullOrWhiteSpace(childId)) continue;
+                if (!byNodeId.TryGetValue(childId, out var child)) continue;
+                TryAddContainmentEdge(
+                    from: parent.Name,
+                    to: child.Name,
+                    kind: "composition",
+                    isComputed: false,
+                    edges,
+                    seen);
+            }
+        }
+    }
+
+    private static void TryAddContainmentEdge(
+        string from,
+        string to,
+        string kind,
+        bool isComputed,
+        List<RelationEdgeDto> edges,
+        HashSet<string> seen)
+    {
+        if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to)) return;
+        if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase)) return;
+
+        var key = $"{from}|{to}";
+        if (!seen.Add(key)) return;
+
+        edges.Add(new RelationEdgeDto
+        {
+            From = from,
+            To = to,
+            Relation = "containment",
+            Kind = kind,
+            IsComputed = isComputed
+        });
     }
 
     private static List<RelationEdgeDto> BuildCollaborationEdges(List<ModuleDto> modules, List<CrossWork> crossWorks)
@@ -388,7 +451,7 @@ public static class TopologyEndpoints
         {
             NodeType.Project => "Project",
             NodeType.Department => "Department",
-            _ => "Group"
+            _ => "Technical"
         };
     }
 
@@ -540,8 +603,8 @@ public static class TopologyEndpoints
         public string? RelativePath { get; init; }
         public string Discipline { get; init; } = "root";
         public string DisciplineDisplayName { get; init; } = "root";
-        public string Type { get; init; } = "Group";
-        public string TypeName { get; init; } = "Group";
+        public string Type { get; init; } = "Technical";
+        public string TypeName { get; init; } = "Technical";
         public string TypeLabel { get; init; } = "技术组";
         public string? Summary { get; init; }
         public List<string> Keywords { get; init; } = [];
@@ -568,6 +631,7 @@ public static class TopologyEndpoints
         public string From { get; set; } = string.Empty;
         public string To { get; set; } = string.Empty;
         public string Relation { get; set; } = "dependency";
+        public string? Kind { get; set; }
         public bool IsComputed { get; set; }
         public List<string>? CrossWorkIds { get; set; }
         public List<string>? CrossWorkNames { get; set; }

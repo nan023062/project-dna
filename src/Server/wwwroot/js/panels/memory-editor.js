@@ -6,7 +6,7 @@ let _currentMemoryId = null;
 const NODE_TYPE_NAME_TO_VALUE = {
   Project: 0,
   Department: 1,
-  Group: 2,
+  Technical: 2,
   Team: 3
 };
 
@@ -47,8 +47,8 @@ const TEMPLATE_BY_NODE_TYPE = {
     steps: ['设计规范', '评审通过', '执行落地'],
     notes: ''
   },
-  Group: {
-    summary: 'Group 技术组规范',
+  Technical: {
+    summary: 'Technical 技术组规范',
     background: '技术组负责的业务域',
     goal: '固化工作流、接口与质量标准',
     rules: ['接口协议', '性能规格', '文件责任域', '依赖约束（DAG）'],
@@ -66,13 +66,14 @@ const TEMPLATE_BY_NODE_TYPE = {
 };
 
 function normalizeNodeTypeName(nodeType) {
-  if (typeof nodeType === 'number') return NODE_TYPE_VALUE_TO_NAME[nodeType] ?? 'Group';
+  if (typeof nodeType === 'number') return NODE_TYPE_VALUE_TO_NAME[nodeType] ?? 'Technical';
   if (nodeType === 'ProjectVision') return 'Project';
   if (nodeType === 'DisciplineStandard') return 'Department';
   if (nodeType === 'CrossDiscipline') return 'Team';
-  if (nodeType === 'FeatureSystem') return 'Group';
+  if (nodeType === 'FeatureSystem') return 'Technical';
   if (nodeType === 'Implementation') return 'Team';
-  return nodeType || 'Group';
+  if (nodeType === 'Group') return 'Technical';
+  return nodeType || 'Technical';
 }
 
 function normalizeTypeName(type) {
@@ -196,7 +197,7 @@ function clearStructuredFields() {
 }
 
 function fillTemplate(layerName) {
-  const tpl = TEMPLATE_BY_NODE_TYPE[layerName] ?? TEMPLATE_BY_NODE_TYPE.Group;
+  const tpl = TEMPLATE_BY_NODE_TYPE[layerName] ?? TEMPLATE_BY_NODE_TYPE.Technical;
   $('memSummary').value = tpl.summary;
   $('memFieldBackground').value = tpl.background;
   $('memFieldGoal').value = tpl.goal;
@@ -295,7 +296,7 @@ export function createNew() {
   $('memId').textContent = '新建记忆';
   $('memSummary').value = '';
   $('memType').value = 'Semantic';
-  $('memLayer').value = 'Group';
+  $('memLayer').value = 'Technical';
   $('memImportance').value = 0.8;
 
   setCheckedDisciplines([]);
@@ -304,7 +305,7 @@ export function createNew() {
   renderListEditor('memTagsList', [], '例如：#lesson');
 
   clearStructuredFields();
-  fillTemplate('Group');
+  fillTemplate('Technical');
 
   $('btnDeleteMemory').style.display = 'none';
 }
@@ -331,7 +332,7 @@ export async function saveMemory() {
     source: SOURCE_NAME_TO_VALUE.Human,
     summary: $('memSummary').value.trim() || null,
     type: TYPE_NAME_TO_VALUE[typeName] ?? TYPE_NAME_TO_VALUE.Semantic,
-    nodeType: NODE_TYPE_NAME_TO_VALUE[nodeTypeName] ?? NODE_TYPE_NAME_TO_VALUE.Group,
+    nodeType: NODE_TYPE_NAME_TO_VALUE[nodeTypeName] ?? NODE_TYPE_NAME_TO_VALUE.Technical,
     disciplines: getCheckedDisciplines(),
     features: getListValues('memFeaturesList'),
     nodeId: getListValues('memNodeIdField')[0] || null,

@@ -5,9 +5,13 @@
 import { $ } from '../utils.js';
 import { renderGraph } from '../graph/graph-renderer.js';
 
+const DEPT_NODE_PREFIX = '__dept__:';
+
 const relationFilter = {
   dependency: true,
-  containment: true,
+  composition: true,
+  aggregation: true,
+  parentChild: true,
   collaboration: true
 };
 
@@ -44,7 +48,7 @@ function renderGraphWithSidebar(graphContainer, topoData, sidebar) {
     }
   });
 
-  if (selectedModule && findModuleByName(topoData, selectedModule)) {
+  if (selectedModule && (findModuleByName(topoData, selectedModule) || isDepartmentNodeId(selectedModule))) {
     renderModuleDetail(sidebar, topoData, selectedModule);
     return;
   }
@@ -62,7 +66,9 @@ function ensureRelationToolbar() {
   toolbar.className = 'topo-view-toggle';
   toolbar.innerHTML = `
     <button class="topo-view-btn active" data-rel="dependency">依赖</button>
-    <button class="topo-view-btn active" data-rel="containment">包含</button>
+    <button class="topo-view-btn active" data-rel="composition">组合</button>
+    <button class="topo-view-btn active" data-rel="aggregation">聚合</button>
+    <button class="topo-view-btn active" data-rel="parentChild">父子</button>
     <button class="topo-view-btn active" data-rel="collaboration">协作</button>
   `;
   summaryBar.appendChild(toolbar);
@@ -80,7 +86,11 @@ function bindRelationToolbar(graphContainer, topoData, sidebar) {
     if (!rel || !(rel in relationFilter)) return;
 
     relationFilter[rel] = !relationFilter[rel];
-    if (!relationFilter.dependency && !relationFilter.containment && !relationFilter.collaboration) {
+    if (!relationFilter.dependency &&
+        !relationFilter.composition &&
+        !relationFilter.aggregation &&
+        !relationFilter.parentChild &&
+        !relationFilter.collaboration) {
       relationFilter[rel] = true;
     }
 
@@ -102,7 +112,7 @@ function renderOverview(sidebar, topoData) {
     (a.name || '').localeCompare((b.name || ''), 'zh-CN'));
   const modules = (topoData.modules || []).slice().sort((a, b) =>
     (a.displayName || a.name || '').localeCompare((b.displayName || b.name || ''), 'zh-CN'));
-  const groups = modules.filter(m => getNodeTypeName(m) === 'Group');
+  const groups = modules.filter(m => getNodeTypeName(m) === 'Technical');
   const teams = modules.filter(m => getNodeTypeName(m) === 'Team');
 
   sidebar.innerHTML = `
@@ -161,6 +171,11 @@ function renderOverview(sidebar, topoData) {
 }
 
 function renderModuleDetail(sidebar, topoData, moduleName) {
+  if (isDepartmentNodeId(moduleName)) {
+    renderDepartmentDetail(sidebar, topoData, moduleName);
+    return;
+  }
+
   const module = findModuleByName(topoData, moduleName);
   if (!sidebar || !module) {
     renderOverview(sidebar, topoData);
@@ -170,8 +185,12 @@ function renderModuleDetail(sidebar, topoData, moduleName) {
   const edges = getAllEdges(topoData);
   const depOut = edges.filter(e => e.relation === 'dependency' && e.from === module.name);
   const depIn = edges.filter(e => e.relation === 'dependency' && e.to === module.name);
-  const containOut = edges.filter(e => e.relation === 'containment' && e.from === module.name);
-  const containIn = edges.filter(e => e.relation === 'containment' && e.to === module.name);
+  const containOut = edges.filter(e => isParentChildEdge(e) && e.from === module.name);
+  const containIn = edges.filter(e => isParentChildEdge(e) && e.to === module.name);
+  const compositionOut = containOut.filter(e => edgeKind(e) === 'composition');
+  const compositionIn = containIn.filter(e => edgeKind(e) === 'composition');
+  const aggregationOut = containOut.filter(e => edgeKind(e) === 'aggregation');
+  const aggregationIn = containIn.filter(e => edgeKind(e) === 'aggregation');
   const collab = edges.filter(e =>
     e.relation === 'collaboration' && (e.from === module.name || e.to === module.name));
 
@@ -222,7 +241,9 @@ function renderModuleDetail(sidebar, topoData, moduleName) {
       <div class="sidebar-section-title">关系总览</div>
       <div class="sidebar-kv-list">
         <div class="sidebar-kv-row"><span class="sidebar-k">依赖</span><span class="sidebar-v">出 ${depOut.length} · 入 ${depIn.length}</span></div>
-        <div class="sidebar-kv-row"><span class="sidebar-k">包含</span><span class="sidebar-v">父 ${containIn.length} · 子 ${containOut.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">组合</span><span class="sidebar-v">父 ${compositionIn.length} · 子 ${compositionOut.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">聚合</span><span class="sidebar-v">父 ${aggregationIn.length} · 子 ${aggregationOut.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">父子</span><span class="sidebar-v">父 ${containIn.length} · 子 ${containOut.length}</span></div>
         <div class="sidebar-kv-row"><span class="sidebar-k">协作</span><span class="sidebar-v">${collab.length} 条边 · ${crossWorks.length} 个协作声明</span></div>
       </div>
     </div>
@@ -237,8 +258,12 @@ function renderModuleDetail(sidebar, topoData, moduleName) {
     <div class="sidebar-section">
       <div class="sidebar-section-title">包含关系</div>
       <div class="sidebar-link-list">
-        ${renderNodeLinks(containIn.map(e => e.from), topoData, '父模块')}
-        ${renderNodeLinks(containOut.map(e => e.to), topoData, '子模块')}
+        ${renderNodeLinks(compositionIn.map(e => e.from), topoData, '组合父')}
+        ${renderNodeLinks(compositionOut.map(e => e.to), topoData, '组合子')}
+        ${renderNodeLinks(aggregationIn.map(e => e.from), topoData, '聚合父')}
+        ${renderNodeLinks(aggregationOut.map(e => e.to), topoData, '聚合子')}
+        ${renderNodeLinks(containIn.map(e => e.from), topoData, '父')}
+        ${renderNodeLinks(containOut.map(e => e.to), topoData, '子')}
       </div>
     </div>
 
@@ -316,6 +341,74 @@ function renderModuleDetail(sidebar, topoData, moduleName) {
   });
 }
 
+function renderDepartmentDetail(sidebar, topoData, departmentNodeId) {
+  if (!sidebar) return;
+
+  const disciplineId = departmentNodeId.slice(DEPT_NODE_PREFIX.length);
+  const discipline = (topoData.disciplines || []).find(d =>
+    String(d.id || '').toLowerCase() === disciplineId.toLowerCase());
+
+  const modules = (topoData.modules || []).filter(m =>
+    String(m.discipline || '').toLowerCase() === disciplineId.toLowerCase());
+  const moduleIds = new Set(modules.map(m => m.name));
+
+  const edges = getAllEdges(topoData);
+  const depIn = edges.filter(e => e.relation === 'dependency' && moduleIds.has(e.to) && !moduleIds.has(e.from));
+  const depOut = edges.filter(e => e.relation === 'dependency' && moduleIds.has(e.from) && !moduleIds.has(e.to));
+  const depInner = edges.filter(e => e.relation === 'dependency' && moduleIds.has(e.from) && moduleIds.has(e.to));
+  const collab = edges.filter(e => e.relation === 'collaboration' && (moduleIds.has(e.from) || moduleIds.has(e.to)));
+  const contain = edges.filter(e => e.relation === 'containment' && (moduleIds.has(e.from) || moduleIds.has(e.to)));
+
+  sidebar.innerHTML = `
+    <div class="sidebar-header">
+      <div class="sidebar-title">${escapeHtml(discipline?.displayName || disciplineId)}</div>
+      <button class="sidebar-close" title="返回总览">×</button>
+    </div>
+
+    <div class="sidebar-meta">
+      <span class="sidebar-badge">Department（部门）</span>
+      <span class="sidebar-badge">治理节点</span>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">部门概览</div>
+      <div class="sidebar-kv-list">
+        <div class="sidebar-kv-row"><span class="sidebar-k">部门ID</span><span class="sidebar-v">${escapeHtml(disciplineId)}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">技术组数量</span><span class="sidebar-v">${modules.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">依赖关系</span><span class="sidebar-v">内部 ${depInner.length} · 入 ${depIn.length} · 出 ${depOut.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">协作关系</span><span class="sidebar-v">${collab.length}</span></div>
+        <div class="sidebar-kv-row"><span class="sidebar-k">父子关系</span><span class="sidebar-v">${contain.length}</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">部门内技术组</div>
+      <div class="sidebar-link-list">
+        ${modules.map(m => `
+          <button class="sidebar-link-btn" data-module-id="${escapeAttr(m.name)}">${escapeHtml(m.displayName || m.name)}</button>
+        `).join('') || '<div class="sidebar-empty">暂无技术组</div>'}
+      </div>
+    </div>
+  `;
+
+  const closeBtn = sidebar.querySelector('.sidebar-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      selectedModule = null;
+      renderOverview(sidebar, topoData);
+    });
+  }
+
+  sidebar.querySelectorAll('[data-module-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.moduleId;
+      if (!id) return;
+      selectedModule = id;
+      renderModuleDetail(sidebar, topoData, id);
+    });
+  });
+}
+
 function renderNodeLinks(ids, topoData, prefix = '') {
   const unique = [...new Set(ids || [])];
   if (unique.length === 0) return '<div class="sidebar-empty">暂无</div>';
@@ -329,13 +422,37 @@ function renderNodeLinks(ids, topoData, prefix = '') {
 
 function getAllEdges(topoData) {
   if (Array.isArray(topoData.relationEdges) && topoData.relationEdges.length > 0) {
-    return topoData.relationEdges;
+    return topoData.relationEdges.map(e => ({
+      ...e,
+      kind: e.kind || inferContainmentKind(e)
+    }));
   }
 
   const dep = (topoData.edges || []).map(e => ({ ...e, relation: 'dependency' }));
-  const contain = (topoData.containmentEdges || []).map(e => ({ ...e, relation: 'containment' }));
+  const contain = (topoData.containmentEdges || []).map(e => ({
+    ...e,
+    relation: 'containment',
+    kind: e.kind || inferContainmentKind(e)
+  }));
   const collab = (topoData.collaborationEdges || []).map(e => ({ ...e, relation: 'collaboration' }));
   return dep.concat(contain, collab);
+}
+
+function isParentChildEdge(edge) {
+  return edge?.relation === 'containment';
+}
+
+function edgeKind(edge) {
+  if (!isParentChildEdge(edge)) return '';
+  return inferContainmentKind(edge);
+}
+
+function inferContainmentKind(edge) {
+  if (!edge || edge.relation !== 'containment') return '';
+  const raw = String(edge.kind || '').toLowerCase();
+  if (raw === 'composition' || raw === 'aggregation') return raw;
+  if (edge.isComputed) return 'aggregation';
+  return 'composition';
 }
 
 function findModuleByName(topoData, name) {
@@ -343,11 +460,15 @@ function findModuleByName(topoData, name) {
     m.name === name || m.displayName === name || m.nodeId === name);
 }
 
+function isDepartmentNodeId(name) {
+  return typeof name === 'string' && name.startsWith(DEPT_NODE_PREFIX);
+}
+
 function getNodeTypeName(module) {
-  if (!module) return 'Group';
-  if (module.typeName) return module.typeName;
-  if (module.type) return module.type;
-  return module.isCrossWorkModule ? 'Team' : 'Group';
+  if (!module) return 'Technical';
+  if (module.typeName) return module.typeName === 'Group' ? 'Technical' : module.typeName;
+  if (module.type) return module.type === 'Group' ? 'Technical' : module.type;
+  return module.isCrossWorkModule ? 'Team' : 'Technical';
 }
 
 function getNodeTypeLabel(module) {

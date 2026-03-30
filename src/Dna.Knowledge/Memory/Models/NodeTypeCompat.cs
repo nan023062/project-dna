@@ -4,7 +4,7 @@ namespace Dna.Memory.Models;
 
 /// <summary>
 /// NodeType 兼容工具：
-/// - 解析新语义（Project/Department/Group/Team）
+/// - 解析新语义（Project/Department/Technical/Team）
 /// - 兼容旧层级命名（ProjectVision/DisciplineStandard/...）
 /// </summary>
 public static class NodeTypeCompat
@@ -14,10 +14,11 @@ public static class NodeTypeCompat
         ["ProjectVision"] = NodeType.Project,
         ["DisciplineStandard"] = NodeType.Department,
         ["CrossDiscipline"] = NodeType.Team,
-        ["FeatureSystem"] = NodeType.Group,
+        ["FeatureSystem"] = NodeType.Technical,
         ["Implementation"] = NodeType.Team,
         ["Root"] = NodeType.Project,
-        ["Module"] = NodeType.Group,
+        ["Module"] = NodeType.Technical,
+        ["Group"] = NodeType.Technical,
         ["CrossWork"] = NodeType.Team
     };
 
@@ -42,7 +43,7 @@ public static class NodeTypeCompat
         return false;
     }
 
-    public static NodeType Resolve(NodeType? nodeType, string? legacyLayer = null, NodeType fallback = NodeType.Group)
+    public static NodeType Resolve(NodeType? nodeType, string? legacyLayer = null, NodeType fallback = NodeType.Technical)
     {
         if (nodeType.HasValue) return nodeType.Value;
         return TryParse(legacyLayer, out var parsed) ? parsed : fallback;
@@ -70,7 +71,7 @@ public static class NodeTypeCompat
     {
         NodeType.Project => 0,
         NodeType.Department => 1,
-        NodeType.Group => 2,
+        NodeType.Technical => 2,
         NodeType.Team => 3,
         _ => 99
     };

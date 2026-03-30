@@ -201,10 +201,11 @@ internal partial class MemoryStore : IDisposable
                 WHEN 'projectvision' THEN 'Project'
                 WHEN 'disciplinestandard' THEN 'Department'
                 WHEN 'crossdiscipline' THEN 'Team'
-                WHEN 'featuresystem' THEN 'Group'
+                WHEN 'featuresystem' THEN 'Technical'
                 WHEN 'implementation' THEN 'Team'
                 WHEN 'root' THEN 'Project'
-                WHEN 'module' THEN 'Group'
+                WHEN 'module' THEN 'Technical'
+                WHEN 'group' THEN 'Technical'
                 WHEN 'crosswork' THEN 'Team'
                 ELSE layer
             END
@@ -821,7 +822,7 @@ internal partial class MemoryStore : IDisposable
         Enum.TryParse<MemoryType>(reader.GetString(1), true, out var memType);
         var nodeType = NodeTypeCompat.TryParse(reader.GetString(2), out var parsedNodeType)
             ? parsedNodeType
-            : NodeType.Group;
+            : NodeType.Technical;
         Enum.TryParse<MemorySource>(reader.GetString(3), true, out var source);
         Enum.TryParse<FreshnessStatus>(reader.GetString(7), true, out var freshness);
 

@@ -1,7 +1,7 @@
 namespace Dna.Memory.Models;
 
 /// <summary>
-/// 已废弃：记忆坐标已迁移到 NodeType（Project/Department/Group/Team）。
+/// 已废弃：记忆坐标已迁移到 NodeType（Project/Department/Technical/Team）。
 /// 仅保留此枚举用于历史兼容，请勿在新代码中使用。
 /// </summary>
 [Obsolete("KnowledgeLayer 已废弃，请改用 NodeType。")]
