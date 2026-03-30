@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "Server\server.csproj", "{406DD7E6-75E1-4ACF-9BC3-8496DECA6607}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server", "Server\Server.csproj", "{406DD7E6-75E1-4ACF-9BC3-8496DECA6607}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dna.Core", "Dna.Core\Dna.Core.csproj", "{CB5C000A-A768-4BD1-8D58-00D43068622E}"
 EndProject
