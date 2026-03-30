@@ -1,12 +1,12 @@
-# Project DNA 接入指南 (IDE Integration Guides)
+# Project DNA - Agent 接入工具 (Agent Integration Tools)
 
 Project DNA 作为 AI Agent 的项目认知引擎，通过标准的 MCP (Model Context Protocol) 接口与主流 IDE 深度集成。
 
-本目录包含了各种 IDE 和 AI 助手的接入指南，帮助您快速将 Project DNA 的能力赋予您的开发环境。
+本目录包含了各种 IDE 和 AI 助手的接入指南与自动化配置工具，帮助您快速将 Project DNA 的能力赋予您的开发环境。
 
 ## 支持的 IDE / 平台
 
-目前我们提供以下平台的接入指南与自动化工具：
+目前我们提供以下平台的接入工具：
 
 - [**Cursor**](./cursor/README.md) - 深度集成 AI 的现代 IDE，支持通过 Skill 自动化配置 MCP 和 Prompt 模板。
 - *(即将支持)* **VS Code** - 通过 Cline 等插件支持 MCP。
