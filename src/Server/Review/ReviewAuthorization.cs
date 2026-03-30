@@ -71,10 +71,10 @@ internal static class ReviewAuthorization
     {
         var raw = Environment.GetEnvironmentVariable(AnonymousSubmissionEnv);
         if (string.IsNullOrWhiteSpace(raw))
-            return true;
+            return false;
 
-        return !raw.Equals("0", StringComparison.OrdinalIgnoreCase)
-            && !raw.Equals("false", StringComparison.OrdinalIgnoreCase)
-            && !raw.Equals("no", StringComparison.OrdinalIgnoreCase);
+        return raw.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("yes", StringComparison.OrdinalIgnoreCase);
     }
 }

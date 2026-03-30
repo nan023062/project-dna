@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Auth;
 using Dna.Core.Config;
 using Dna.Knowledge;
 
@@ -18,6 +19,7 @@ public static class GovernanceEndpoints
     public static void MapGovernanceEndpoints(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api/governance");
+        api.RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapGet("/validate", (
             IGraphEngine graph,
@@ -59,7 +61,7 @@ public static class GovernanceEndpoints
                     w.Message
                 })
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapGet("/freshness", (
             IGovernanceEngine governance) =>
@@ -73,7 +75,7 @@ public static class GovernanceEndpoints
                     ? $"已降级 {decayed} 条过期记忆"
                     : "所有记忆鲜活度正常"
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapPost("/condense/node", async (
             CondenseNodeRequest request,
@@ -90,7 +92,7 @@ public static class GovernanceEndpoints
                 request.MaxSourceMemories is > 0 ? request.MaxSourceMemories.Value : 200);
 
             return Results.Json(result, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapPost("/condense/all", async (
             CondenseAllRequest request,
@@ -109,7 +111,7 @@ public static class GovernanceEndpoints
                 archived = results.Sum(r => r.ArchivedCount),
                 results
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
     }
 
     public sealed class CondenseNodeRequest

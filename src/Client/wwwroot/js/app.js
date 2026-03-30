@@ -1,5 +1,13 @@
-import { $ } from './utils.js';
-import { renderTopology } from './panels/topology.js';
+import {
+  $,
+  api,
+  getAuthToken,
+  getAuthUser,
+  setAuthToken,
+  setAuthUser,
+  clearAuthState
+} from './utils.js';
+import { renderTopology } from '/dna-shared/js/panels/topology.js';
 import {
   loadMemories,
   loadSubmissions,
@@ -43,6 +51,7 @@ window.MemoryEditor = {
 };
 
 let activeTab = 'topology';
+let currentUser = null;
 
 function setStatus(text) {
   const statusText = $('statusText');
@@ -66,7 +75,7 @@ function formatCompact(value) {
   }
 }
 
-function applyHealthState(element, value, okText = '正常', degradedText = '降级') {
+function applyHealthState(element, value, okText = 'OK', degradedText = 'Degraded') {
   if (!element) return;
   element.classList.remove('healthy', 'degraded', 'error');
   if (value === 'ok') {
@@ -74,25 +83,123 @@ function applyHealthState(element, value, okText = '正常', degradedText = '降
     element.textContent = okText;
     return;
   }
+
   element.classList.add('degraded');
   element.textContent = degradedText;
 }
 
-async function readJson(url) {
-  const response = await fetch(url);
-  const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
-  if (!response.ok) {
-    throw new Error(payload?.error || `${response.status} ${response.statusText}`);
+function setAuthMessage(text, isError = false) {
+  const element = $('authMessage');
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle('error', isError);
+}
+
+function renderAuthState() {
+  const user = currentUser || getAuthUser();
+  const hasToken = Boolean(getAuthToken());
+  const loginForm = $('authLoginForm');
+  const userBar = $('authUserBar');
+  const authStateText = $('authStateText');
+  const authUserInfo = $('authUserInfo');
+
+  if (loginForm) loginForm.classList.toggle('hidden', hasToken && Boolean(user));
+  if (userBar) userBar.classList.toggle('hidden', !(hasToken && user));
+
+  if (!hasToken || !user) {
+    if (authStateText) authStateText.textContent = 'Not signed in';
+    if (authUserInfo) authUserInfo.textContent = '-';
+    return;
   }
-  return payload;
+
+  if (authStateText) authStateText.textContent = `Signed in as ${user.role}`;
+  if (authUserInfo) authUserInfo.textContent = `${user.username} (${user.role})`;
+}
+
+function resetProtectedOverview(message = 'Sign in required') {
+  $('memoryTotal').textContent = '-';
+  $('memoryFreshness').textContent = message;
+  $('statModules').textContent = '-';
+  $('statEdges').textContent = '-';
+  $('statContainment').textContent = '-';
+  $('statCollaboration').textContent = '-';
+}
+
+async function ensureAuthenticatedUser(options = {}) {
+  if (!getAuthToken()) {
+    currentUser = null;
+    renderAuthState();
+    return null;
+  }
+
+  try {
+    const result = await api('/auth/me');
+    currentUser = result.user || result;
+    setAuthUser(currentUser);
+    renderAuthState();
+    return currentUser;
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      currentUser = null;
+      clearAuthState();
+      renderAuthState();
+      setAuthMessage('Session expired. Please sign in again.', true);
+      if (!options.silent) {
+        setStatus('Session expired. Please sign in again.');
+      }
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function login() {
+  const username = $('authUsername')?.value?.trim() || '';
+  const password = $('authPassword')?.value || '';
+
+  if (!username || !password) {
+    setAuthMessage('Enter both username and password.', true);
+    return;
+  }
+
+  try {
+    setAuthMessage('Signing in...', false);
+    const result = await api('/auth/login', {
+      method: 'POST',
+      body: { username, password },
+      skipAuth: true
+    });
+
+    setAuthToken(result.token);
+    currentUser = result.user || null;
+    setAuthUser(currentUser);
+    if ($('authPassword')) $('authPassword').value = '';
+    renderAuthState();
+    setAuthMessage(`Signed in as ${currentUser?.username || username}`, false);
+    await refreshAll();
+  } catch (error) {
+    setAuthMessage(error.message, true);
+    setStatus(`Sign-in failed: ${error.message}`);
+  }
+}
+
+async function logout() {
+  currentUser = null;
+  clearAuthState();
+  renderAuthState();
+  setAuthMessage('Signed out. Protected data is now hidden.', false);
+  resetProtectedOverview();
+  showMemoryEmptyState();
+  setStatus('Signed out');
+  await loadStatus();
 }
 
 async function loadStatus() {
   try {
-    const clientStatus = await readJson('/api/client/status');
-    applyHealthState($('clientHealth'), clientStatus.client, '正常', '降级');
-    $('clientPort').textContent = '本地端口 5052';
+    const clientStatus = await api('/client/status', { skipAuth: true });
+    applyHealthState($('clientHealth'), clientStatus.client, 'OK', 'Degraded');
+    $('clientPort').textContent = 'Local port 5052';
     $('targetServer').textContent = clientStatus.targetServer || '-';
     $('mcpAddress').textContent = `${window.location.origin}/mcp`;
     $('serverDashboardLink').href = clientStatus.targetServer || 'http://127.0.0.1:5051';
@@ -101,41 +208,72 @@ async function loadStatus() {
     if (serverStatus && !clientStatus.error) {
       $('serverHealth').classList.remove('error');
       $('serverHealth').classList.add('healthy');
-      $('serverHealth').textContent = '在线';
+      $('serverHealth').textContent = 'Online';
       $('serverUptime').textContent = `Uptime: ${serverStatus.uptime || '-'}`;
       $('overviewSummary').textContent =
-        `Client 已连接到 ${clientStatus.targetServer}。Server 启动时间：${serverStatus.startedAt || '未知'}。`;
+        `Client is connected to ${clientStatus.targetServer}. Server started at ${serverStatus.startedAt || 'unknown'}.`;
     } else {
       $('serverHealth').classList.remove('healthy');
       $('serverHealth').classList.add('error');
-      $('serverHealth').textContent = '离线';
-      $('serverUptime').textContent = clientStatus.error || '未能连接到 Server';
+      $('serverHealth').textContent = 'Offline';
+      $('serverUptime').textContent = clientStatus.error || 'Unable to reach server';
       $('overviewSummary').textContent =
-        'Client 已启动，但当前还没有连上 Server。图谱和正式知识读取会受影响，提审也无法进入后端审核流。';
+        'Client is running, but the shared server is currently unavailable.';
+      resetProtectedOverview('Waiting for server');
+      setStatus('Client is running, but server is offline.');
+      setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
+      return;
     }
 
-    const memoryStats = await readJson('/api/memory/stats');
+    const user = await ensureAuthenticatedUser({ silent: true });
+    if (!user) {
+      resetProtectedOverview('Sign in required');
+      $('overviewSummary').textContent =
+        'Client is connected to the server, but no server identity is active yet.';
+      setStatus('Sign in to read formal knowledge and submit reviews.');
+      setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
+      return;
+    }
+
+    const memoryStats = await api('/memory/stats');
     $('memoryTotal').textContent = formatCompact(memoryStats.total ?? 0);
     const freshness = memoryStats.byFreshness || {};
     $('memoryFreshness').textContent =
       `Fresh ${freshness.Fresh ?? freshness.fresh ?? 0} / Aging ${freshness.Aging ?? freshness.aging ?? 0}`;
 
-    setStatus('Client 状态已刷新');
+    setStatus('Client status refreshed');
     setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
   } catch (error) {
     $('clientHealth').classList.add('error');
-    $('clientHealth').textContent = '异常';
+    $('clientHealth').textContent = 'Error';
     $('serverHealth').classList.add('error');
-    $('serverHealth').textContent = '未知';
+    $('serverHealth').textContent = 'Unknown';
     $('overviewSummary').textContent = error.message;
-    setStatus(`状态刷新失败: ${error.message}`);
+    setStatus(`Status refresh failed: ${error.message}`);
   }
 }
 
 async function loadTopology() {
   try {
-    setStatus('正在加载图谱...');
-    const topoData = await readJson('/api/topology');
+    const user = await ensureAuthenticatedUser({ silent: true });
+    if (!user) {
+      resetProtectedOverview('Sign in required');
+      const sidebar = $('archSidebar');
+      if (sidebar) {
+        sidebar.style.display = 'flex';
+        sidebar.innerHTML = `
+          <div class="sidebar-section">
+            <div class="sidebar-title">Sign in required</div>
+            <div class="sidebar-text">Use a server account to load the formal topology.</div>
+          </div>
+        `;
+      }
+      setStatus('Sign in before loading topology.');
+      return;
+    }
+
+    setStatus('Loading topology...');
+    const topoData = await api('/topology');
     renderTopology(topoData);
 
     const modulesCount = topoData.modules ? topoData.modules.length : 0;
@@ -147,15 +285,15 @@ async function loadTopology() {
     $('statEdges').textContent = formatCompact(edgesCount);
     $('statContainment').textContent = formatCompact(containmentCount);
     $('statCollaboration').textContent = formatCompact(collaborationCount);
-    setStatus('图谱已刷新');
+    setStatus('Topology refreshed');
   } catch (error) {
-    setStatus(`图谱加载失败: ${error.message}`);
+    setStatus(`Topology load failed: ${error.message}`);
     const sidebar = $('archSidebar');
     if (sidebar) {
       sidebar.style.display = 'flex';
       sidebar.innerHTML = `
         <div class="sidebar-section">
-          <div class="sidebar-title">图谱加载失败</div>
+          <div class="sidebar-title">Topology load failed</div>
           <div class="sidebar-text">${error.message}</div>
         </div>
       `;
@@ -165,13 +303,20 @@ async function loadTopology() {
 
 async function loadKnowledge() {
   try {
-    setStatus('正在加载知识工作台...');
+    const user = await ensureAuthenticatedUser({ silent: true });
+    if (!user) {
+      showMemoryEmptyState();
+      setStatus('Sign in before using the knowledge workspace.');
+      return;
+    }
+
+    setStatus('Loading knowledge workspace...');
     await Promise.all([loadMemories(), loadSubmissions()]);
     if ($('memoryEditorForm').style.display !== 'none') hideMemoryEmptyState();
     else showMemoryEmptyState();
-    setStatus('知识工作台已刷新');
+    setStatus('Knowledge workspace refreshed');
   } catch (error) {
-    setStatus(`知识工作台加载失败: ${error.message}`);
+    setStatus(`Knowledge workspace failed: ${error.message}`);
   }
 }
 
@@ -189,6 +334,7 @@ async function refreshActiveTab() {
     await loadKnowledge();
     return;
   }
+
   await loadTopology();
 }
 
@@ -206,8 +352,18 @@ window.switchTab = switchTab;
 window.refreshAll = refreshAll;
 window.refreshTopology = loadTopology;
 window.refreshMemories = loadKnowledge;
+window.login = login;
+window.logout = logout;
 
 document.addEventListener('DOMContentLoaded', async () => {
+  currentUser = getAuthUser();
+  renderAuthState();
+  $('authPassword')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      login();
+    }
+  });
   setActiveTab('topology');
   await refreshAll();
 });

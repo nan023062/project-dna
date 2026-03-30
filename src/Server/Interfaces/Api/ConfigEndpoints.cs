@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Auth;
 using Dna.Core.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Dna.Core.Config;
@@ -18,6 +19,7 @@ public static class ConfigEndpoints
     public static void MapConfigEndpoints(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api");
+        api.RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapGet("/config", (ProjectConfig config) =>
         {
@@ -42,7 +44,7 @@ public static class ConfigEndpoints
                     p.LastOpened
                 })
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapPost("/config/governance/condense-schedule", (
             SetCondenseScheduleRequest req,
@@ -66,7 +68,7 @@ public static class ConfigEndpoints
                     maxSourceMemories = updated.MaxSourceMemories
                 }
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapPost("/config/project", (
             SetProjectRequest req,
@@ -86,7 +88,7 @@ public static class ConfigEndpoints
                 projectRoot = config.DefaultProjectRoot,
                 storePath = config.DnaStorePath
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         api.MapGet("/browse", ([FromQuery] string? path) =>
         {
@@ -142,7 +144,7 @@ public static class ConfigEndpoints
                 entries,
                 atDriveRoot
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
     }
 }
 

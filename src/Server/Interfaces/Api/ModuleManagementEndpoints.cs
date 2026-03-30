@@ -1,3 +1,4 @@
+using Dna.Auth;
 using Dna.Core.Config;
 using Dna.Knowledge;
 using Dna.Knowledge.Models;
@@ -10,6 +11,7 @@ public static class ModuleManagementEndpoints
     public static void MapModuleManagementEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/modules");
+        group.RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/manifest", (IGraphEngine graph, ProjectConfig config) =>
         {
@@ -30,7 +32,7 @@ public static class ModuleManagementEndpoints
                 crossWorks = manifest.CrossWorks,
                 features = manifest.Features
             });
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         // ── Module CRUD ──
 
@@ -72,7 +74,7 @@ public static class ModuleManagementEndpoints
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapDelete("/{moduleName}", (string moduleName, IGraphEngine graph, ProjectConfig config) =>
         {
@@ -81,7 +83,7 @@ public static class ModuleManagementEndpoints
             if (!ok) return Results.NotFound(new { error = $"未找到模块: {moduleName}" });
             graph.BuildTopology();
             return Results.Ok(new { message = $"模块已删除: {moduleName}" });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         // ── Discipline CRUD ──
 
@@ -99,7 +101,7 @@ public static class ModuleManagementEndpoints
                 moduleCount = manifest.Disciplines.GetValueOrDefault(kv.Key, []).Count
             }).OrderBy(d => d.id);
             return Results.Ok(result);
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapPost("/disciplines", (UpsertDisciplineRequest request, IGraphEngine graph, ProjectConfig config) =>
         {
@@ -117,7 +119,7 @@ public static class ModuleManagementEndpoints
 
             graph.UpsertDiscipline(id, request.DisplayName, request.RoleId ?? "coder", request.Layers);
             return Results.Ok(new { message = $"部门 '{id}' 已保存", id });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapDelete("/disciplines/{disciplineId}", (string disciplineId, IGraphEngine graph, ProjectConfig config) =>
         {
@@ -130,7 +132,7 @@ public static class ModuleManagementEndpoints
             var ok = graph.RemoveDiscipline(disciplineId);
             if (!ok) return Results.NotFound(new { error = $"未找到部门: {disciplineId}" });
             return Results.Ok(new { message = $"部门已删除: {disciplineId}" });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         // ── CrossWork CRUD ──
 
@@ -139,7 +141,7 @@ public static class ModuleManagementEndpoints
             EnsureReady(graph, config);
             var manifest = graph.GetModulesManifest();
             return Results.Ok(manifest.CrossWorks);
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapPost("/crossworks", (CrossWorkRegistration request, IGraphEngine graph, ProjectConfig config) =>
         {
@@ -155,7 +157,7 @@ public static class ModuleManagementEndpoints
             graph.SaveCrossWork(request);
             graph.BuildTopology();
             return Results.Ok(new { message = "CrossWork 保存成功", id = request.Id });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapDelete("/crossworks/{id}", (string id, IGraphEngine graph, ProjectConfig config) =>
         {
@@ -164,7 +166,7 @@ public static class ModuleManagementEndpoints
             if (!ok) return Results.NotFound(new { error = $"未找到 CrossWork: {id}" });
             graph.BuildTopology();
             return Results.Ok(new { message = $"CrossWork 已删除: {id}" });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
     }
 
     private static (string discipline, int layer) ComputeCwOwnership(

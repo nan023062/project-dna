@@ -17,6 +17,7 @@ public static class ReviewEndpoints
     private static void MapSubmissionEndpoints(WebApplication app)
     {
         var review = app.MapGroup("/api/review/memory/submissions");
+        review.RequireAuthorization(ServerPolicies.EditorOrAbove);
 
         review.MapPost("/", async (
             MemoryReviewSubmissionRequest request,
@@ -219,7 +220,7 @@ public static class ReviewEndpoints
     private static void MapAdminEndpoints(WebApplication app)
     {
         var admin = app.MapGroup("/api/admin");
-        admin.RequireAuthorization();
+        admin.RequireAuthorization(ServerPolicies.AdminOnly);
 
         admin.MapGet("/review/submissions", (
             string? status,

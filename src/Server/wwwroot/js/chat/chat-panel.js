@@ -5,8 +5,8 @@
  * - 渲染用户/助手消息、工具调用状态
  */
 
-import { $ } from '../utils.js';
-import { getProviderList, getActiveProviderId, switchProvider, loadProviders, openLlmSettings } from './llm-settings.js';
+import { $, api, apiFetch } from '../utils.js';
+import { getProviderList, getActiveProviderId, switchProvider, openLlmSettings } from './llm-settings.js';
 
 let chatOpen = true;
 let messages = [];
@@ -55,9 +55,7 @@ export function newChat() {
 
 export async function loadSession(id) {
   try {
-    const resp = await fetch(`/api/agent/sessions/${id}`);
-    if (!resp.ok) return;
-    const session = await resp.json();
+    const session = await api(`/agent/sessions/${encodeURIComponent(id)}`);
     sessionId = session.id;
     chatMode = (session.mode || 'agent').toLowerCase();
     messages = session.messages || [];
@@ -87,12 +85,12 @@ export async function showSessionList() {
   container.innerHTML = '<div class="session-list-loading">加载中...</div>';
 
   try {
-    const resp = await fetch('/api/agent/sessions');
+    const data = await api('/agent/sessions');
+    const resp = { ok: true };
     if (!resp.ok) {
       container.innerHTML = '<div class="chat-welcome"><p>无法加载历史会话</p></div>';
       return;
     }
-    const data = await resp.json();
     const sessions = data.sessions || [];
 
     let html = `<div class="session-list-header">
@@ -1338,10 +1336,9 @@ export async function undoEdit(encodedEditId, encodedPath, btn) {
 
 async function postEditAction(url, editId) {
   try {
-    const resp = await fetch(url, {
+    const resp = await apiFetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ editId })
+      body: { editId }
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
@@ -1431,10 +1428,9 @@ async function streamAssistantResponse(options = {}) {
   let toolResults = [];
 
   try {
-    const resp = await fetch('/api/agent/chat', {
+    const resp = await apiFetch('/agent/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages, mode: chatMode, sessionId, resume }),
+      body: { messages, mode: chatMode, sessionId, resume },
       signal: currentController.signal
     });
 
@@ -1673,10 +1669,9 @@ function extractTitleFromMessages(msgs) {
 function saveCurrentSession() {
   if (messages.length === 0) return;
   const title = extractTitleFromMessages(messages);
-  fetch('/api/agent/sessions/save', {
+  apiFetch('/agent/sessions/save', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: sessionId, mode: chatMode, title, messages })
+    body: { id: sessionId, mode: chatMode, title, messages }
   }).then(resp => {
     if (!resp.ok) resp.text().then(t => console.warn('[chat] save session failed:', resp.status, t));
   }).catch(err => console.warn('[chat] save session error:', err));

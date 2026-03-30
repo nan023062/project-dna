@@ -33,6 +33,10 @@ body {
   backdrop-filter: blur(16px);
 }
 
+.client-header-main {
+  min-width: 0;
+}
+
 .client-brand {
   font-size: 24px;
   font-weight: 700;
@@ -49,6 +53,77 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.client-auth-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(74, 222, 128, 0.18);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.client-auth-summary {
+  min-width: 180px;
+}
+
+.client-auth-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.client-auth-state {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.client-auth-message {
+  margin-top: 4px;
+  max-width: 300px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.client-auth-form,
+.client-user-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.client-auth-form input {
+  width: 132px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(10, 10, 20, 0.65);
+  color: var(--text-primary);
+}
+
+.client-auth-form input::placeholder {
+  color: #64748b;
+}
+
+.client-user-bar.hidden {
+  display: none;
+}
+
+.client-user-info {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.hidden {
+  display: none;
 }
 
 .client-main {
@@ -439,6 +514,26 @@ body {
 
   .client-header {
     flex-direction: column;
+  }
+
+  .client-actions,
+  .client-auth-panel,
+  .client-auth-form,
+  .client-user-bar {
+    width: 100%;
+  }
+
+  .client-auth-panel {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .client-auth-form {
+    flex-wrap: wrap;
+  }
+
+  .client-auth-form input {
+    width: 100%;
   }
 
   .overview-strip,

@@ -19,6 +19,6 @@ public static class StatusEndpoints
                 startedAt,
                 uptime = (DateTime.UtcNow - startedAt).ToString(@"d\.hh\:mm\:ss")
             });
-        });
+        }).AllowAnonymous();
     }
 }

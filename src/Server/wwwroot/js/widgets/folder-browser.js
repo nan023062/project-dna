@@ -10,7 +10,7 @@
  *   browser.open('/initial/path');
  */
 
-import { escapeAttr } from '../utils.js';
+import { api, escapeAttr } from '../utils.js';
 
 let _instanceCounter = 0;
 
@@ -99,10 +99,8 @@ export class FolderBrowser {
     const pathInput = this._q('pathInput');
 
     try {
-      const url = '/api/browse' + (path ? '?path=' + encodeURIComponent(path) : '');
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.error) return;
+      const query = path ? `?path=${encodeURIComponent(path)}` : '';
+      const data = await api(`/browse${query}`);
 
       if (!this._isWithinRoot(data.current)) {
         return this.browseTo(this._rootPath);

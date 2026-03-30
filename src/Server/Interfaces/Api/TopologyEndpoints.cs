@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Auth;
 using Dna.Knowledge;
 using Dna.Knowledge.Project.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,7 @@ public static class TopologyEndpoints
     public static void MapTopologyEndpoints(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api");
+        api.RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapGet("/topology", (IGraphEngine graph) =>
         {
@@ -79,7 +81,7 @@ public static class TopologyEndpoints
                 summary = $"共 {topo.Nodes.Count} 个图节点（技术组 {groupCount} · 执行团队 {teamCount}），依赖 {dependencyEdges.Count} · 包含 {containmentEdges.Count} · 协作 {collaborationEdges.Count} · {topo.BuiltAt:yyyy-MM-dd HH:mm}",
                 scannedAt = topo.BuiltAt
             });
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapGet("/plan", (
             [FromQuery] string modules,
@@ -97,7 +99,7 @@ public static class TopologyEndpoints
                 plan.CycleDescription,
                 executionOrder = string.Join(" → ", plan.OrderedModules)
             }, JsonOpts);
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapPost("/reload", (IGraphEngine graph) =>
         {
@@ -109,7 +111,7 @@ public static class TopologyEndpoints
                 message = $"已重载，{topo.Nodes.Count} 个图节点",
                 moduleCount = topo.Nodes.Count
             });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
     }
 
     private static ModuleDto ToModuleDto(

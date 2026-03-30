@@ -16,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Dna.Core\Dna.Core.csproj" />
     <ProjectReference Include="..\Dna.Knowledge\Dna.Knowledge.csproj" />
+    <ProjectReference Include="..\Dna.Web.Shared\Dna.Web.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

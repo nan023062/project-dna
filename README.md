@@ -202,6 +202,7 @@ Client now provides a configurable execution pipeline with default order "retros
 - `Server` is now a standalone knowledge service (`REST API + Dashboard + SQLite`).
 - `Client` is now a standalone MCP gateway and execution entry.
 - Why split: multi-end knowledge writes need online conflict-safe coordination; Git/P4 are great for source control, but not ideal as the runtime knowledge write arbiter.
+- Transport, auth, and real-time delivery decision: [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
 
 ## Ecosystem (Planned)
 

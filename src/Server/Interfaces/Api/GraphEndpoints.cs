@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Auth;
 using Dna.Knowledge;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,6 +19,7 @@ public static class GraphEndpoints
     public static void MapGraphEndpoints(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api/graph");
+        api.RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         api.MapGet("/identity", (IGraphEngine graph) =>
         {

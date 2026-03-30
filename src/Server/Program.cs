@@ -73,7 +73,7 @@ DnaApp.ConfigureServices(services =>
 
     services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(opts => opts.TokenValidationParameters = jwtService.GetValidationParameters());
-    services.AddAuthorization();
+    services.AddAuthorization(ServerPolicies.Configure);
 
     var personaName = ResolvePersonaName(dataPath);
     _ = personaName;

@@ -1,3 +1,4 @@
+using Dna.Auth;
 using Dna.Knowledge;
 using Dna.Knowledge.Models;
 using Dna.Memory.Models;
@@ -11,6 +12,7 @@ public static class MemoryEndpoints
     public static void MapMemoryEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/memory");
+        group.RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapPost("/remember", async (RememberRequest request, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
@@ -19,7 +21,7 @@ public static class MemoryEndpoints
             if (guard is not null) return guard;
             var entry = await memory.RememberAsync(request);
             return Results.Ok(entry);
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/batch", async (List<RememberRequest> requests, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
@@ -30,14 +32,14 @@ public static class MemoryEndpoints
                 return Results.BadRequest(new { error = $"单次最多 50 条，当前 {requests.Count} 条" });
             var entries = await memory.RememberBatchAsync(requests);
             return Results.Ok(new { success = entries.Count, ids = entries.Select(e => e.Id).ToList() });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/recall", async (RecallQuery query, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var result = await memory.RecallAsync(query);
             return Results.Ok(result);
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/query", (
             string? nodeTypes, string? layers, string? disciplines, string? features,
@@ -60,20 +62,20 @@ public static class MemoryEndpoints
                 Offset = Math.Max(offset ?? 0, 0)
             };
             return Results.Ok(memory.QueryMemories(filter));
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/{id}", (string id, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var entry = memory.GetMemoryById(id);
             return entry != null ? Results.Ok(entry) : Results.NotFound();
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/{id}/chain", (string id, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             return Results.Ok(memory.GetConstraintChain(id));
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapPut("/{id}", async (string id, RememberRequest request, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
@@ -89,7 +91,7 @@ public static class MemoryEndpoints
             {
                 return Results.NotFound(new { error = ex.Message });
             }
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/{id}/verify", (string id, IMemoryEngine memory, ProjectConfig config) =>
         {
@@ -98,7 +100,7 @@ public static class MemoryEndpoints
             if (entry == null) return Results.NotFound();
             memory.VerifyMemory(id);
             return Results.Ok(new { message = $"Memory [{id}] verified" });
-        });
+        }).RequireAuthorization(ServerPolicies.EditorOrAbove);
 
         group.MapDelete("/{id}", (string id, IMemoryEngine memory, ProjectConfig config, ClaimsPrincipal principal) =>
         {
@@ -107,46 +109,46 @@ public static class MemoryEndpoints
             if (guard is not null) return guard;
             var deleted = memory.DeleteMemory(id);
             return deleted ? Results.Ok(new { message = $"Deleted [{id}]" }) : Results.NotFound();
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapGet("/feature/{featureId}", (string featureId, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             return Results.Ok(memory.GetFeatureSummary(featureId));
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/discipline/{disciplineId}", (string disciplineId, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             return Results.Ok(memory.GetDisciplineSummary(disciplineId));
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapGet("/stats", (IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             return Results.Ok(memory.GetMemoryStats());
-        });
+        }).RequireAuthorization(ServerPolicies.ViewerOrAbove);
 
         group.MapPost("/governance/check-freshness", (IGovernanceEngine governance, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var decayed = governance.CheckFreshness();
             return Results.Ok(new { message = $"完成鲜活度检查，降级了 {decayed} 条记忆", decayedCount = decayed });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/governance/detect-conflicts", (IGovernanceEngine governance, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var conflicts = governance.DetectMemoryConflicts();
             return Results.Ok(new { message = $"完成冲突检测，标记了 {conflicts} 处冲突", conflictCount = conflicts });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/governance/archive-stale", (IGovernanceEngine governance, IMemoryEngine memory, ProjectConfig config) =>
         {
             EnsureReady(memory, config);
             var archived = governance.ArchiveStaleMemories(TimeSpan.FromDays(30));
             return Results.Ok(new { message = $"完成归档操作，归档了 {archived} 条陈旧记忆", archivedCount = archived });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/index/rebuild", (bool? rewriteJson, IMemoryEngine memory, ProjectConfig config) =>
         {
@@ -159,7 +161,7 @@ public static class MemoryEndpoints
                 skipped,
                 rewriteJson = rewriteJson ?? false
             });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/index/sync", (IMemoryEngine memory, ProjectConfig config) =>
         {
@@ -172,7 +174,7 @@ public static class MemoryEndpoints
                 removed,
                 skipped
             });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
 
         group.MapPost("/index/export", (IMemoryEngine memory, ProjectConfig config) =>
         {
@@ -184,7 +186,7 @@ public static class MemoryEndpoints
                 exported,
                 skipped
             });
-        });
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
     }
 
     private static List<string>? SplitOrNull(string? csv) =>

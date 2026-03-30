@@ -18,9 +18,19 @@ public static class AuthEndpoints
     {
         var api = app.MapGroup("/api/auth");
 
-        api.MapPost("/register", (RegisterRequest req, UserStore users, JwtService jwt) =>
+        api.MapPost("/register", (RegisterRequest req, ClaimsPrincipal principal, UserStore users, JwtService jwt) =>
         {
-            var (success, message, user) = users.Register(req.Username, req.Password, req.Role ?? "editor");
+            var isAdmin = principal.IsInRole(ServerRoles.Admin);
+            if (!isAdmin && !AllowsSelfRegistration())
+            {
+                return Results.Json(new
+                {
+                    error = "Self-registration is disabled. Ask an admin to create your account."
+                }, statusCode: 403);
+            }
+
+            var requestedRole = NormalizeRequestedRole(req.Role, isAdmin);
+            var (success, message, user) = users.Register(req.Username, req.Password, requestedRole);
             if (!success)
                 return Results.Json(new { error = message }, statusCode: 400);
 
@@ -76,6 +86,31 @@ public static class AuthEndpoints
             });
             return Results.Json(new { users = list }, JsonOpts);
         }).RequireAuthorization();
+    }
+
+    private static bool AllowsSelfRegistration()
+    {
+        var raw = Environment.GetEnvironmentVariable("DNA_ALLOW_SELF_REGISTER");
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        return raw.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || raw.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeRequestedRole(string? requestedRole, bool isAdmin)
+    {
+        var normalized = string.IsNullOrWhiteSpace(requestedRole)
+            ? ServerRoles.Editor
+            : requestedRole.Trim().ToLowerInvariant();
+
+        if (isAdmin)
+            return normalized;
+
+        return normalized == ServerRoles.Viewer
+            ? ServerRoles.Viewer
+            : ServerRoles.Editor;
     }
 }
 

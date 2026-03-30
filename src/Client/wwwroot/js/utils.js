@@ -1,44 +1,62 @@
-/**
- * 通用工具模块
- * - DOM 选择器
- * - HTML 转义
- * - API 请求封装
- */
+import {
+  $,
+  escapeHtml,
+  escapeAttr,
+  createApiClient,
+  createSessionStorageStore
+} from '/dna-shared/js/core/web-utils.js';
 
-export const $ = id => document.getElementById(id);
+const authTokenStore = createSessionStorageStore('dna.client.token');
+const authUserStore = createSessionStorageStore('dna.client.user', {
+  parse: raw => JSON.parse(raw),
+  serialize: value => JSON.stringify(value)
+});
+const sharedApi = createApiClient({
+  getAuthToken: () => authTokenStore.get(),
+  textFallbackField: 'error'
+});
 
-export function escapeHtml(text) {
-  const d = document.createElement('div');
-  d.textContent = text;
-  return d.innerHTML;
+export { $, escapeHtml, escapeAttr };
+
+export function getAuthToken() {
+  return authTokenStore.get();
 }
 
-/** 转义字符串用于 HTML 属性值（双引号上下文） */
-export function escapeAttr(str) {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+export function setAuthToken(token) {
+  if (!token) {
+    authTokenStore.clear();
+    return;
+  }
+
+  authTokenStore.set(token);
 }
 
-export async function api(path, options = {}) {
-  const init = { ...options };
-  if (options.body && typeof options.body === 'object') {
-    init.headers = { 'Content-Type': 'application/json', ...options.headers };
-    init.body = JSON.stringify(options.body);
-  }
-  const res = await fetch('/api' + path, init);
-  const text = await res.text();
-  let payload = {};
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      payload = { error: text };
-    }
-  }
-
-  if (!res.ok) {
-    const message = payload?.error || payload?.message || `${res.status} ${res.statusText}`;
-    throw new Error(message);
-  }
-
-  return payload;
+export function clearAuthToken() {
+  authTokenStore.clear();
 }
+
+export function getAuthUser() {
+  return authUserStore.get();
+}
+
+export function setAuthUser(user) {
+  if (!user) {
+    authUserStore.clear();
+    return;
+  }
+
+  authUserStore.set(user);
+}
+
+export function clearAuthUser() {
+  authUserStore.clear();
+}
+
+export function clearAuthState() {
+  clearAuthToken();
+  clearAuthUser();
+}
+
+export const buildApiUrl = sharedApi.buildApiUrl;
+export const apiFetch = sharedApi.apiFetch;
+export const api = sharedApi.api;

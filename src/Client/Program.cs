@@ -30,11 +30,13 @@ DnaApp.AddCliCommand(new DefaultCliCommand());
 DnaApp.ConfigureServices(services =>
 {
     services.AddSingleton(new ClientRuntimeOptions { ServerBaseUrl = serverBaseUrl });
+    services.AddHttpContextAccessor();
+    services.AddTransient<ForwardAuthHeaderHandler>();
     services.AddHttpClient<DnaServerApi>((_, client) =>
     {
         client.BaseAddress = new Uri(serverBaseUrl.TrimEnd('/'));
         client.Timeout = TimeSpan.FromSeconds(30);
-    });
+    }).AddHttpMessageHandler<ForwardAuthHeaderHandler>();
     services.AddSingleton<ClientPipelineStore>();
     services.AddSingleton<AgentPipelineRunner>();
 
@@ -84,6 +86,54 @@ DnaApp.ConfigureWebApp(web =>
         try
         {
             return Results.Json(await api.GetAsync("/api/status"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPost("/api/auth/login", async (JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PostAsync("/api/auth/login", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapPost("/api/auth/register", async (JsonElement request, DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.PostAsync("/api/auth/register", request));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/auth/me", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/auth/me"));
+        }
+        catch (Exception ex)
+        {
+            return HandleProxyError(ex, api.BaseUrl);
+        }
+    });
+
+    web.MapGet("/api/auth/users", async (DnaServerApi api) =>
+    {
+        try
+        {
+            return Results.Json(await api.GetAsync("/api/auth/users"));
         }
         catch (Exception ex)
         {
