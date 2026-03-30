@@ -30,6 +30,13 @@ const SOURCE_NAME_TO_VALUE = {
   Human: 2
 };
 
+const NODE_TYPE_OPTIONS = [
+  { value: 'Project', label: 'Project（项目）' },
+  { value: 'Department', label: 'Department（部门）' },
+  { value: 'Technical', label: 'Technical（技术组）' },
+  { value: 'Team', label: 'Team（执行团队）' }
+];
+
 const TEMPLATE_BY_NODE_TYPE = {
   Project: {
     summary: 'Project 全局愿景与边界',
@@ -79,6 +86,27 @@ function normalizeNodeTypeName(nodeType) {
 function normalizeTypeName(type) {
   if (typeof type === 'number') return TYPE_VALUE_TO_NAME[type] ?? 'Semantic';
   return type || 'Semantic';
+}
+
+function syncNodeTypeSelectOptions() {
+  const filterSelect = $('memFilterLayer');
+  if (filterSelect) {
+    const current = normalizeNodeTypeName(filterSelect.value || '');
+    filterSelect.innerHTML = [
+      '<option value="">所有节点类型</option>',
+      ...NODE_TYPE_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`)
+    ].join('');
+    filterSelect.value = NODE_TYPE_OPTIONS.some(opt => opt.value === current) ? current : '';
+  }
+
+  const editorSelect = $('memLayer');
+  if (editorSelect) {
+    const current = normalizeNodeTypeName(editorSelect.value || '');
+    editorSelect.innerHTML = NODE_TYPE_OPTIONS
+      .map(opt => `<option value="${opt.value}">${opt.label}</option>`)
+      .join('');
+    editorSelect.value = NODE_TYPE_OPTIONS.some(opt => opt.value === current) ? current : 'Technical';
+  }
 }
 
 function parseMemoryTimestamp(memory) {
@@ -242,6 +270,7 @@ export function onLayerTypeChanged() {
 }
 
 export async function loadMemories() {
+  syncNodeTypeSelectOptions();
   const nodeType = $('memFilterLayer').value;
   const type = $('memFilterType').value;
 
@@ -308,6 +337,7 @@ export function selectMemory(id) {
 }
 
 export function createNew() {
+  syncNodeTypeSelectOptions();
   _currentMemoryId = null;
   renderMemoryList();
 
@@ -452,3 +482,4 @@ export function applyTemplate() {
 }
 
 bindStructuredFieldListeners();
+syncNodeTypeSelectOptions();
