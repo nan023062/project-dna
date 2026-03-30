@@ -1,0 +1,8 @@
+{
+  "server": {
+    "mode": "binary",
+    "appPath": "dna",
+    "dbPath": ".dna",
+    "port": 5051
+  }
+}

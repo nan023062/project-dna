@@ -9,11 +9,5 @@
       "ruleFileName": "project-dna-mcp-hook.mdc",
       "agentFileName": "project-dna-mcp-hooks.md"
     }
-  },
-  "server": {
-    "mode": "binary",
-    "appPath": "dna",
-    "dbPath": ".dna",
-    "port": 5051
   }
 }

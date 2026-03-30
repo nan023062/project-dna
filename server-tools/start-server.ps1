@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $ConfigPath = Join-Path $PSScriptRoot "..\config.json"
+    $ConfigPath = Join-Path $PSScriptRoot "..\server-config.json"
 }
 
 if (-not (Test-Path $ConfigPath)) {

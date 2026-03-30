@@ -3,7 +3,7 @@
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CONFIG_PATH="${1:-$SCRIPT_DIR/../config.json}"
+CONFIG_PATH="${1:-$SCRIPT_DIR/../server-config.json}"
 
 if [ ! -f "$CONFIG_PATH" ]; then
     echo "Error: Config file not found: $CONFIG_PATH"
