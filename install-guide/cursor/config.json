@@ -1,5 +1,5 @@
 {
-  "serverIp": "172.26.186.241",
+  "serverIp": "127.0.0.1",
   "port": 5051,
   "serverName": "project-dna",
   "hook": {

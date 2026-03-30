@@ -13,6 +13,6 @@ Use the Project DNA MCP workflow before editing files.
 4. After completion, write completed-task memory; write lesson memory on issues.
 
 Current MCP endpoint:
-- http://172.26.186.241:5051/mcp
+- {{MCP_ENDPOINT}}
 
 If MCP is unavailable, report it clearly and continue non-knowledge-tool work.

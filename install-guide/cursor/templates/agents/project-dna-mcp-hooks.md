@@ -5,7 +5,7 @@ Use this file as team default agent prompt guidance.
 Always run MCP knowledge workflow before editing files.
 
 - MCP Server: project-dna
-- MCP Endpoint: http://172.26.186.241:5051/mcp
+- MCP Endpoint: {{MCP_ENDPOINT}}
 
 Dialog hooks:
 1. Session start: validate project identity first when tools exist.

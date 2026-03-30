@@ -152,7 +152,8 @@ Dialog hooks:
 $finalConfig = @{
     mcpServers = @{
         $effectiveServerName = @{
-            url = $endpoint
+            command = "curl"
+            args = @("-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $endpoint)
         }
     }
 }
@@ -167,7 +168,10 @@ if (Test-Path $mcpFile) {
                 foreach ($prop in $existing.mcpServers.PSObject.Properties) {
                     $mergedServers[$prop.Name] = $prop.Value
                 }
-                $mergedServers[$effectiveServerName] = @{ url = $endpoint }
+                $mergedServers[$effectiveServerName] = @{
+                    command = "curl"
+                    args = @("-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $endpoint)
+                }
                 $finalConfig = @{ mcpServers = $mergedServers }
             }
         }
@@ -190,13 +194,13 @@ if ($effectiveHookEnabled) {
     if (Test-Path (Join-Path $templateRulesDir $effectiveRuleFileName)) {
         $ruleContent = Get-Content -Path (Join-Path $templateRulesDir $effectiveRuleFileName) -Raw -Encoding UTF8
         # 替换端点占位符
-        $ruleContent = $ruleContent -replace "http://172.26.186.241:5051/mcp", $endpoint
+        $ruleContent = $ruleContent -replace "\{\{MCP_ENDPOINT\}\}", $endpoint
     }
     
     if (Test-Path (Join-Path $templateAgentsDir $effectiveAgentFileName)) {
         $agentContent = Get-Content -Path (Join-Path $templateAgentsDir $effectiveAgentFileName) -Raw -Encoding UTF8
         # 替换端点占位符
-        $agentContent = $agentContent -replace "http://172.26.186.241:5051/mcp", $endpoint
+        $agentContent = $agentContent -replace "\{\{MCP_ENDPOINT\}\}", $endpoint
     }
 
     Write-ManagedFile -Path $ruleFile -Content $ruleContent -ReplaceExisting $effectiveHookReplaceExisting
