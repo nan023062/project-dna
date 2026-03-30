@@ -153,8 +153,7 @@ Dialog hooks:
 $finalConfig = @{
     mcpServers = @{
         $effectiveServerName = @{
-            command = "curl"
-            args = @("-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $endpoint)
+            url = $endpoint
         }
     }
 }
@@ -170,8 +169,7 @@ if (Test-Path $mcpFile) {
                     $mergedServers[$prop.Name] = $prop.Value
                 }
                 $mergedServers[$effectiveServerName] = @{
-                    command = "curl"
-                    args = @("-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $endpoint)
+                    url = $endpoint
                 }
                 $finalConfig = @{ mcpServers = $mergedServers }
             }

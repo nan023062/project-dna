@@ -70,22 +70,11 @@ bash ./scripts/install-client.sh
 {
   "mcpServers": {
     "project-dna-mcp": {
-      "command": "curl",
-      "args": [
-        "-s",
-        "-X",
-        "POST",
-        "-H",
-        "Content-Type: application/json",
-        "-d",
-        "{}",
-        "http://127.0.0.1:5051/mcp"
-      ]
+      "url": "http://127.0.0.1:5051/mcp"
     }
   }
 }
 ```
-*(注：具体 command 和 args 根据您的操作系统和网络环境可能有所不同，通常推荐使用 SSE 或 stdio 桥接工具)*
 
 ### 2. 引入工作流规则
 为了让 Cursor 的 AI 知道如何使用 DNA MCP，建议将 `templates/rules/project-dna-mcp-hook.mdc` 复制到您项目的 `.cursor/rules/` 目录下。

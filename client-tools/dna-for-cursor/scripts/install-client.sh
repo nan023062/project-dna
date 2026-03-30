@@ -78,16 +78,16 @@ if [ -f "$MCP_FILE" ]; then
     # 尝试合并现有配置
     if jq -e . "$MCP_FILE" >/dev/null 2>&1; then
         jq --arg name "$SERVER_NAME" --arg url "$ENDPOINT" \
-           '.mcpServers[$name] = {"command": "curl", "args": ["-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $url]}' \
+           '.mcpServers[$name] = {"url": $url}' \
            "$MCP_FILE" > "${MCP_FILE}.tmp" && mv "${MCP_FILE}.tmp" "$MCP_FILE"
     else
         echo "Warning: Existing mcp.json parse failed, fallback to overwrite."
         jq -n --arg name "$SERVER_NAME" --arg url "$ENDPOINT" \
-           '{"mcpServers": {($name): {"command": "curl", "args": ["-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $url]}}}' > "$MCP_FILE"
+           '{"mcpServers": {($name): {"url": $url}}}' > "$MCP_FILE"
     fi
 else
     jq -n --arg name "$SERVER_NAME" --arg url "$ENDPOINT" \
-       '{"mcpServers": {($name): {"command": "curl", "args": ["-s", "-X", "POST", "-H", "Content-Type: application/json", "-d", "{}", $url]}}}' > "$MCP_FILE"
+       '{"mcpServers": {($name): {"url": $url}}}' > "$MCP_FILE"
 fi
 
 echo "Updated   : $MCP_FILE"
