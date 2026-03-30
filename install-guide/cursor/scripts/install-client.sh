@@ -20,23 +20,23 @@ if ! command -v jq &> /dev/null; then
 fi
 
 # 读取配置
-SERVER_IP=$(jq -r '.serverIp // empty' "$CONFIG_PATH")
-PORT=$(jq -r '.port // empty' "$CONFIG_PATH")
-SERVER_NAME=$(jq -r '.serverName // empty' "$CONFIG_PATH")
-HOOK_ENABLED=$(jq -r '.hook.enabled // empty' "$CONFIG_PATH")
-HOOK_REPLACE=$(jq -r '.hook.replaceExisting // empty' "$CONFIG_PATH")
-RULE_FILE=$(jq -r '.hook.ruleFileName // empty' "$CONFIG_PATH")
-AGENT_FILE=$(jq -r '.hook.agentFileName // empty' "$CONFIG_PATH")
+SERVER_IP=$(jq -r '.client.serverIp // empty' "$CONFIG_PATH")
+PORT=$(jq -r '.client.port // empty' "$CONFIG_PATH")
+SERVER_NAME=$(jq -r '.client.serverName // empty' "$CONFIG_PATH")
+HOOK_ENABLED=$(jq -r '.client.hook.enabled // empty' "$CONFIG_PATH")
+HOOK_REPLACE=$(jq -r '.client.hook.replaceExisting // empty' "$CONFIG_PATH")
+RULE_FILE=$(jq -r '.client.hook.ruleFileName // empty' "$CONFIG_PATH")
+AGENT_FILE=$(jq -r '.client.hook.agentFileName // empty' "$CONFIG_PATH")
 
 # 检查必填项
 MISSING_FIELDS=()
-[ -z "$SERVER_IP" ] && MISSING_FIELDS+=("serverIp")
-[ -z "$PORT" ] && MISSING_FIELDS+=("port")
-[ -z "$SERVER_NAME" ] && MISSING_FIELDS+=("serverName")
-[ -z "$HOOK_ENABLED" ] && MISSING_FIELDS+=("hook.enabled")
-[ -z "$HOOK_REPLACE" ] && MISSING_FIELDS+=("hook.replaceExisting")
-[ -z "$RULE_FILE" ] && MISSING_FIELDS+=("hook.ruleFileName")
-[ -z "$AGENT_FILE" ] && MISSING_FIELDS+=("hook.agentFileName")
+[ -z "$SERVER_IP" ] && MISSING_FIELDS+=("client.serverIp")
+[ -z "$PORT" ] && MISSING_FIELDS+=("client.port")
+[ -z "$SERVER_NAME" ] && MISSING_FIELDS+=("client.serverName")
+[ -z "$HOOK_ENABLED" ] && MISSING_FIELDS+=("client.hook.enabled")
+[ -z "$HOOK_REPLACE" ] && MISSING_FIELDS+=("client.hook.replaceExisting")
+[ -z "$RULE_FILE" ] && MISSING_FIELDS+=("client.hook.ruleFileName")
+[ -z "$AGENT_FILE" ] && MISSING_FIELDS+=("client.hook.agentFileName")
 
 if [ ${#MISSING_FIELDS[@]} -ne 0 ]; then
     echo "Error: config.json has empty required values. Fill these fields first: ${MISSING_FIELDS[*]}"

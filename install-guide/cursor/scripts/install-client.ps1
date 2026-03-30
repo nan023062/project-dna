@@ -24,27 +24,28 @@ catch {
 }
 
 $missingFields = @()
-if ($null -eq $config.serverIp -or [string]::IsNullOrWhiteSpace([string]$config.serverIp)) { $missingFields += "serverIp" }
-if ($null -eq $config.port -or [int]$config.port -le 0) { $missingFields += "port" }
-if ($null -eq $config.serverName -or [string]::IsNullOrWhiteSpace([string]$config.serverName)) { $missingFields += "serverName" }
-if ($null -eq $config.hook) { $missingFields += "hook" }
-if ($null -eq $config.hook.enabled) { $missingFields += "hook.enabled" }
-if ($null -eq $config.hook.replaceExisting) { $missingFields += "hook.replaceExisting" }
-if ($null -eq $config.hook.ruleFileName -or [string]::IsNullOrWhiteSpace([string]$config.hook.ruleFileName)) { $missingFields += "hook.ruleFileName" }
-if ($null -eq $config.hook.agentFileName -or [string]::IsNullOrWhiteSpace([string]$config.hook.agentFileName)) { $missingFields += "hook.agentFileName" }
+if ($null -eq $config.client) { throw "config.json missing 'client' section." }
+if ($null -eq $config.client.serverIp -or [string]::IsNullOrWhiteSpace([string]$config.client.serverIp)) { $missingFields += "client.serverIp" }
+if ($null -eq $config.client.port -or [int]$config.client.port -le 0) { $missingFields += "client.port" }
+if ($null -eq $config.client.serverName -or [string]::IsNullOrWhiteSpace([string]$config.client.serverName)) { $missingFields += "client.serverName" }
+if ($null -eq $config.client.hook) { $missingFields += "client.hook" }
+if ($null -eq $config.client.hook.enabled) { $missingFields += "client.hook.enabled" }
+if ($null -eq $config.client.hook.replaceExisting) { $missingFields += "client.hook.replaceExisting" }
+if ($null -eq $config.client.hook.ruleFileName -or [string]::IsNullOrWhiteSpace([string]$config.client.hook.ruleFileName)) { $missingFields += "client.hook.ruleFileName" }
+if ($null -eq $config.client.hook.agentFileName -or [string]::IsNullOrWhiteSpace([string]$config.client.hook.agentFileName)) { $missingFields += "client.hook.agentFileName" }
 
 if ($missingFields.Count -gt 0) {
     $fields = $missingFields -join ", "
     throw "config.json has empty required values. Fill these fields first: $fields"
 }
 
-$effectiveServerIp = [string]$config.serverIp
-$effectivePort = [int]$config.port
-$effectiveServerName = [string]$config.serverName
-$effectiveHookEnabled = [bool]$config.hook.enabled
-$effectiveHookReplaceExisting = [bool]$config.hook.replaceExisting
-$effectiveRuleFileName = [string]$config.hook.ruleFileName
-$effectiveAgentFileName = [string]$config.hook.agentFileName
+$effectiveServerIp = [string]$config.client.serverIp
+$effectivePort = [int]$config.client.port
+$effectiveServerName = [string]$config.client.serverName
+$effectiveHookEnabled = [bool]$config.client.hook.enabled
+$effectiveHookReplaceExisting = [bool]$config.client.hook.replaceExisting
+$effectiveRuleFileName = [string]$config.client.hook.ruleFileName
+$effectiveAgentFileName = [string]$config.client.hook.agentFileName
 
 $workspace = (Get-Location).Path
 $cursorDir = Join-Path $workspace ".cursor"
