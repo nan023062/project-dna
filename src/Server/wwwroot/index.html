@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/chat.css" />
   <link rel="stylesheet" href="css/governance.css" />
   <link rel="stylesheet" href="css/memory.css" />
+  <link rel="stylesheet" href="css/review-admin.css" />
   <link rel="stylesheet" href="css/module-management.css" />
   <link rel="stylesheet" href="css/file-tree.css" />
   <link rel="stylesheet" href="css/ui-framework.css" />
@@ -44,6 +45,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="topology" onclick="switchTab('topology')">架构总览</div>
     <div class="tab" data-tab="memoryMgmt" onclick="switchTab('memoryMgmt')">记忆管理</div>
+    <div class="tab" data-tab="reviewQueue" onclick="switchTab('reviewQueue')">审核队列</div>
   </div>
   <div class="panels">
 
@@ -204,6 +206,46 @@
               <button class="btn btn-primary btn-sm" onclick="window.MemoryEditor.saveMemory()">保存</button>
               <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" onclick="window.MemoryEditor.deleteMemory()" style="color: #ef4444; border-color: #ef4444;">删除</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="panelReviewQueue" class="panel">
+      <div class="review-admin-page">
+        <div id="reviewAuthSection"></div>
+        <div id="reviewStats" class="review-stats"></div>
+
+        <div class="review-layout">
+          <div class="review-sidebar">
+            <div class="review-sidebar-toolbar">
+              <div class="review-filter-row">
+                <select id="reviewFilterStatus" onchange="window.ReviewAdmin.loadReviewQueue()">
+                  <option value="">全部状态</option>
+                  <option value="pending">待审核</option>
+                  <option value="approved">已通过</option>
+                  <option value="rejected">已驳回</option>
+                  <option value="published">已发布</option>
+                  <option value="withdrawn">已撤回</option>
+                  <option value="superseded">已过期</option>
+                </select>
+                <input
+                  id="reviewFilterSubmitter"
+                  type="text"
+                  placeholder="按提交人筛选"
+                  onkeydown="if(event.key==='Enter'){window.ReviewAdmin.loadReviewQueue()}"
+                />
+              </div>
+              <div class="review-filter-actions">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('reviewFilterStatus').value=''; document.getElementById('reviewFilterSubmitter').value=''; window.ReviewAdmin.loadReviewQueue();">清空筛选</button>
+                <button class="btn btn-primary btn-sm" onclick="window.ReviewAdmin.loadReviewQueue()">刷新队列</button>
+              </div>
+            </div>
+            <div id="reviewSubmissionList" class="review-submission-list"></div>
+          </div>
+
+          <div class="review-content">
+            <div id="reviewDetailContent" class="review-detail-content"></div>
           </div>
         </div>
       </div>

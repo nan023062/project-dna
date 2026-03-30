@@ -12,6 +12,7 @@ import { initSetup, showSetup, setProject, openProjectBrowser } from './setup.js
 import { renderTopology } from './panels/topology.js';
 import { loadGovernanceStats, checkFreshness, detectConflicts, archiveStale, condenseNodeKnowledge, condenseAllKnowledge, configureCondenseSchedule } from './panels/governance.js';
 import { loadMemories, selectMemory, createNew, saveMemory, deleteMemory, applyTemplate, onLayerTypeChanged, addFeature, addNodeId, addTag } from './panels/memory-editor.js';
+import { loadReviewQueue, selectSubmission as selectReviewSubmission, reloadSelection as reloadReviewSelection, login as loginReviewAdmin, logout as logoutReviewAdmin, approve as approveReviewSubmission, reject as rejectReviewSubmission, publish as publishReviewSubmission } from './panels/review-admin.js';
 import { loadModuleManagement, saveModule, deleteModule, saveCrosswork, deleteCrosswork, newModule, newCrosswork, onDisciplineChanged, addCrossworkParticipant, newDiscipline, saveDiscipline, deleteDiscipline, addLayerRow } from './panels/arch-config.js';
 import { loadFileTree, refreshFileTree } from './panels/file-tree.js';
 import { initEditSidebar, openEditSidebar, closeEditSidebar, onEditDisciplineChanged, saveFromSidebar, deleteFromSidebar, onDepSearchInput, onDepSearchKeydown } from './dialogs/module-editor.js';
@@ -23,6 +24,7 @@ import { openLlmSettings, closeLlmSettings, loadProviders } from './chat/llm-set
 // ── Window bridges ──
 window.Governance = { checkFreshness, detectConflicts, archiveStale, condenseNodeKnowledge, condenseAllKnowledge, configureCondenseSchedule };
 window.MemoryEditor = { loadMemories, selectMemory, createNew, saveMemory, deleteMemory, applyTemplate, onLayerTypeChanged, addFeature, addNodeId, addTag };
+window.ReviewAdmin = { loadReviewQueue, selectSubmission: selectReviewSubmission, reloadSelection: reloadReviewSelection, login: loginReviewAdmin, logout: logoutReviewAdmin, approve: approveReviewSubmission, reject: rejectReviewSubmission, publish: publishReviewSubmission };
 window.ModuleAdmin = { loadModuleManagement, saveModule, deleteModule, saveCrosswork, deleteCrosswork, newModule, newCrosswork, onDisciplineChanged, addCrossworkParticipant, newDiscipline, saveDiscipline, deleteDiscipline, addLayerRow };
 window.FileTree = { loadFileTree, refreshFileTree };
 window.EditSidebar = { openEditSidebar, closeEditSidebar, onEditDisciplineChanged, saveFromSidebar, deleteFromSidebar, onDepSearchInput, onDepSearchKeydown };
@@ -61,6 +63,7 @@ function initUI() {
     { id: 'topology', onActivate: null },
     { id: 'fileTree', onActivate: () => initEditSidebar().then(() => loadFileTree({ preserveState: true, showLoading: !_rootsHasRendered() })) },
     { id: 'memoryMgmt', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
+    { id: 'reviewQueue', onActivate: () => loadReviewQueue() },
   ];
 
   for (const def of tabDefs) {
@@ -206,6 +209,13 @@ async function refresh(activeForce = true) {
     if (activeTab === 'memoryMgmt') {
       await Promise.allSettled([loadGovernanceStats(), loadMemories()]);
       $('statusText').textContent = '记忆面板已刷新 · ' + new Date().toLocaleTimeString();
+      $('refreshInfo').textContent = '自动刷新中';
+      return;
+    }
+
+    if (activeTab === 'reviewQueue') {
+      await loadReviewQueue();
+      $('statusText').textContent = '审核队列已刷新 · ' + new Date().toLocaleTimeString();
       $('refreshInfo').textContent = '自动刷新中';
       return;
     }
