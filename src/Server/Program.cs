@@ -28,7 +28,6 @@ DnaApp.Create(args, new AppOptions
         return new List<(string, string)>
         {
             ("REST API:    ", $"http://{host}:{port}/api/"),
-            ("MCP Server:  ", $"http://{host}:{port}/mcp"),
             ("Dashboard:   ", $"http://{host}:{port}"),
             ("知识存储:    ", dataPath)
         };
@@ -70,20 +69,7 @@ DnaApp.ConfigureServices(services =>
     services.AddAuthorization();
 
     var personaName = ResolvePersonaName(dataPath);
-    if (DnaApp.Mode == AppRunMode.Stdio)
-    {
-        services.AddMcpServer(opts =>
-        {
-            opts.ServerInfo = new() { Name = personaName, Version = "1.0.0" };
-        }).WithStdioServerTransport().WithToolsFromAssembly();
-    }
-    else
-    {
-        services.AddMcpServer(opts =>
-        {
-            opts.ServerInfo = new() { Name = personaName, Version = "1.0.0" };
-        }).WithHttpTransport().WithToolsFromAssembly();
-    }
+    _ = personaName;
 });
 
 // ── Web 管道 ──
@@ -94,7 +80,6 @@ DnaApp.ConfigureWebApp(web =>
     web.UseAuthorization();
     web.MapAuthEndpoints();
     web.MapApiEndpoints(DateTime.UtcNow);
-    web.MapMcp("/mcp");
 });
 
 return await DnaApp.RunAsync();

@@ -22,14 +22,18 @@ AI agents are getting better at writing code. But they still lack **project-leve
 
 ## The Solution
 
-Project DNA is a **knowledge server** that stores structure, knowledge, and relationships as a queryable graph. Agents query the server before touching any file.
+Project DNA now uses a **server + client split**:
+- Server stores structure, memory, and relationships as a queryable knowledge graph.
+- Client hosts MCP and decision/execution entry points, and proxies requests to the server.
 
 ```
-Clients (IDE / CLI / Dashboard)
-        ↓ MCP / HTTP API
+AI Agents / IDEs
+        ↓ MCP
+Project DNA Client (MCP + agent entry)
+        ↓ HTTP API
 Project DNA Server (knowledge graph + memory)
         ↓
-AI Agent makes context-aware modifications
+Context-aware modifications
 ```
 
 ## Key Concepts
@@ -63,14 +67,15 @@ Circular dependencies are not violations — they're **restructuring suggestions
 
 ## Architecture
 
-The server is a pure knowledge service — it does **not** access project source code. Clients write knowledge via MCP or HTTP API.
+The server is a pure knowledge service — it does **not** access project source code.  
+MCP now lives in the client app, which forwards requests to server APIs.
 
 ```
 ┌──────────────────────────────────────────────────┐
 │                DNA Server                          │
 │                                                    │
-│  HTTP API    MCP Server    CLI        Dashboard   │
-│  /api/*      /mcp          dna cli    browser     │
+│  HTTP API    CLI          Dashboard               │
+│  /api/*      dna cli      browser                 │
 │                                                    │
 │  GraphEngine    MemoryEngine    GovernanceEngine   │
 │                                                    │
@@ -103,10 +108,14 @@ dotnet build
 ### 2. Run
 
 ```bash
+# 1) Start knowledge server
 cd /path/to/knowledge-store && dna --db       # current dir as store
 dna --db /path/to/knowledge-store             # specify store path
-dna --db /path/to/store --port 5052           # custom port
-dna --stdio --db /path/to/store               # stdio mode for IDE
+dna --db /path/to/store --port 5051           # custom port example
+
+# 2) Start client (MCP + agent entry)
+Client --server http://localhost:5051 --port 5052
+Client --stdio --server http://localhost:5051    # stdio mode for IDE
 ```
 
 `--db` is required. The server stores all data (SQLite) in this directory.
@@ -119,13 +128,14 @@ dna --stdio --db /path/to/store               # stdio mode for IDE
 {
   "mcpServers": {
     "project-dna": {
-      "url": "http://localhost:5051/mcp"
+      "url": "http://localhost:5052/mcp"
     }
   }
 }
 ```
 
-The server prints its LAN IP on startup — use that for remote connections.
+Use the Client MCP endpoint for IDE connections.  
+Recommended topology: `Server(5051)` + `Client(5052)`.
 
 ### 4. Dashboard
 
@@ -143,6 +153,15 @@ dna cli search combat                   # Search modules
 dna cli recall "what constraints apply" # Semantic memory search
 dna cli stats                           # Knowledge base statistics
 ```
+
+### 6. Client Execution Pipeline (Architect -> Developer)
+
+Client now provides a configurable execution pipeline with default order "retrospect first, then develop":
+
+- Read config: `GET /api/client/pipeline/config`
+- Update config: `PUT /api/client/pipeline/config`
+- Run pipeline: `POST /api/client/pipeline/run`
+- Latest run: `GET /api/client/pipeline/runs/latest`
 
 ## MCP Tools
 
@@ -173,6 +192,16 @@ dna cli stats                           # Knowledge base statistics
 | `delete_memory` | Delete a memory |
 | `condense_module_knowledge` | Condense one module's knowledge into `NodeKnowledge` |
 | `condense_all_module_knowledge` | Run full condensation for all modules |
+| `get_execution_pipeline_config` | Get client execution pipeline config |
+| `update_execution_pipeline_config` | Update client execution pipeline config |
+| `run_execution_pipeline` | Run architect->developer pipeline |
+| `get_latest_pipeline_run` | Get latest pipeline run result |
+
+## 2026-03 Client/Server Split Notes
+
+- `Server` is now a standalone knowledge service (`REST API + Dashboard + SQLite`).
+- `Client` is now a standalone MCP gateway and execution entry.
+- Why split: multi-end knowledge writes need online conflict-safe coordination; Git/P4 are great for source control, but not ideal as the runtime knowledge write arbiter.
 
 ## Ecosystem (Planned)
 
