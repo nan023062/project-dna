@@ -64,6 +64,21 @@ Server 不访问项目源码，只负责知识数据一致性与多端共享；C
 - MCP 工具清单、外置 Agent 使用说明与治理流程图
 - Cursor / Codex 一键安装（先选择目标项目目录，再写入工作流配置）
 
+### 4.1 桌面窗口壳（预览）
+
+已提供 `Avalonia` 桌面壳项目，可用于窗口化启动和管理本地 Client：
+
+```bash
+dotnet run --project src/Client.Desktop
+```
+
+当前版本能力：
+- 在桌面窗口内配置 `Server` 地址与工作区路径
+- 启动/停止本地 `Client` 服务
+- 打开工作台页面、复制 MCP 地址
+
+说明：当前仍复用现有 Web 工作台（通过浏览器打开），后续可迭代为内嵌 WebView。
+
 ### 5. CLI
 
 ```bash

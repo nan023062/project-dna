@@ -151,6 +151,21 @@ Open `http://localhost:5052` for the client workbench:
 - MCP tool inventory, external agent usage guide, and governance flow diagram
 - One-click Cursor/Codex setup (choose target folder first, then install files)
 
+### 4.1 Desktop Window Shell (Preview)
+
+An `Avalonia` desktop shell is now available for window-based local client control:
+
+```bash
+dotnet run --project src/Client.Desktop
+```
+
+Current shell capabilities:
+- Configure server URL and workspace path in a desktop window
+- Start/stop local `Client` service
+- Open workbench page and copy MCP endpoint
+
+Note: the shell currently reuses the existing web workbench (opens in browser); embedded WebView can be added in a later iteration.
+
 ### 5. CLI
 
 ```bash

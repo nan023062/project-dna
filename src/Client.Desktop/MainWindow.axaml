@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="620"
+        x:Class="Client.Desktop.MainWindow"
+        Title="Project DNA Client Desktop"
+        MinWidth="780"
+        MinHeight="520">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="18">
+        <Border Background="#122033" CornerRadius="12" Padding="16">
+            <StackPanel Spacing="8">
+                <TextBlock FontSize="20" FontWeight="Bold" Text="Project DNA Client Desktop" />
+                <TextBlock Opacity="0.85" Text="桌面壳负责启动/停止本地 Client 服务，并提供 MCP 入口与工作台快捷操作。" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,14,0,10">
+            <StackPanel Spacing="14">
+                <Border CornerRadius="10" BorderBrush="#30455f" BorderThickness="1" Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="连接配置" />
+                        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
+                            <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Server 地址" />
+                            <TextBox Grid.Row="0" Grid.Column="1" x:Name="ServerBaseUrlBox" Watermark="http://127.0.0.1:5051" />
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="工作区路径" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="WorkspaceRootBox" Watermark="/path/to/workspace" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Client 地址" />
+                            <TextBox Grid.Row="2" Grid.Column="1" x:Name="ClientAddressBox" IsReadOnly="True" />
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="MCP 地址" />
+                            <TextBox Grid.Row="3" Grid.Column="1" x:Name="McpAddressBox" IsReadOnly="True" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border CornerRadius="10" BorderBrush="#30455f" BorderThickness="1" Padding="14">
+                    <StackPanel Spacing="10">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="操作" />
+                        <WrapPanel ItemHeight="36" ItemWidth="160" Orientation="Horizontal">
+                            <Button Content="启动 Client" Click="StartClient_OnClick" />
+                            <Button Content="停止 Client" Click="StopClient_OnClick" Margin="8,0,0,0" />
+                            <Button Content="打开工作台" Click="OpenWorkbench_OnClick" Margin="8,0,0,0" />
+                            <Button Content="复制 MCP 地址" Click="CopyMcp_OnClick" Margin="8,0,0,0" />
+                            <Button Content="刷新状态" Click="RefreshStatus_OnClick" Margin="8,0,0,0" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border CornerRadius="10" BorderBrush="#30455f" BorderThickness="1" Padding="14">
+                    <StackPanel Spacing="8">
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="运行状态" />
+                        <TextBlock x:Name="ClientStateText" Text="Client: 检查中..." />
+                        <TextBlock x:Name="ServerStateText" Text="Server: 检查中..." />
+                        <TextBlock x:Name="LaunchModeText" Opacity="0.85" Text="启动方式: 检查中..." />
+                        <TextBlock x:Name="StatusText" TextWrapping="Wrap" Opacity="0.9" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="2"
+                   Opacity="0.78"
+                   Text="MVP 说明：当前是桌面控制壳，Web 工作台仍复用既有 Client 页面；后续可迭代内嵌 WebView。"
+                   TextWrapping="Wrap" />
+    </Grid>
+</Window>
