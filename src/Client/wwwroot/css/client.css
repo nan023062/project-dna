@@ -209,7 +209,7 @@ body {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 
@@ -237,6 +237,23 @@ body {
   color: var(--text-secondary);
   line-height: 1.6;
   font-size: 13px;
+}
+
+.tooling-list {
+  margin-top: 10px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.tooling-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-state {
+  font-weight: 700;
 }
 
 .workspace-tabs {

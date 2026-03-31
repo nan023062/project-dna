@@ -31,7 +31,7 @@ if ($null -eq $config.client.serverName -or [string]::IsNullOrWhiteSpace([string
 if ($null -eq $config.client.hook) { $missingFields += "client.hook" }
 if ($null -eq $config.client.hook.enabled) { $missingFields += "client.hook.enabled" }
 if ($null -eq $config.client.hook.replaceExisting) { $missingFields += "client.hook.replaceExisting" }
-if ($null -eq $config.client.hook.ruleFileName -or [string]::IsNullOrWhiteSpace([string]$config.client.hook.ruleFileName)) { $missingFields += "client.hook.ruleFileName" }
+if ($null -eq $config.client.hook.promptFileName -or [string]::IsNullOrWhiteSpace([string]$config.client.hook.promptFileName)) { $missingFields += "client.hook.promptFileName" }
 if ($null -eq $config.client.hook.agentFileName -or [string]::IsNullOrWhiteSpace([string]$config.client.hook.agentFileName)) { $missingFields += "client.hook.agentFileName" }
 
 if ($missingFields.Count -gt 0) {
@@ -44,15 +44,15 @@ $effectivePort = [int]$config.client.port
 $effectiveServerName = [string]$config.client.serverName
 $effectiveHookEnabled = [bool]$config.client.hook.enabled
 $effectiveHookReplaceExisting = [bool]$config.client.hook.replaceExisting
-$effectiveRuleFileName = [string]$config.client.hook.ruleFileName
+$effectivePromptFileName = [string]$config.client.hook.promptFileName
 $effectiveAgentFileName = [string]$config.client.hook.agentFileName
 
 $workspace = (Get-Location).Path
-$cursorDir = Join-Path $workspace ".cursor"
-$rulesDir = Join-Path $cursorDir "rules"
-$agentsDir = Join-Path $cursorDir "agents"
-$mcpFile = Join-Path $cursorDir "mcp.json"
-$ruleFile = Join-Path $rulesDir $effectiveRuleFileName
+$codexDir = Join-Path $workspace ".codex"
+$promptsDir = Join-Path $codexDir "prompts"
+$agentsDir = Join-Path $codexDir "agents"
+$mcpFile = Join-Path $codexDir "mcp.json"
+$promptFile = Join-Path $promptsDir $effectivePromptFileName
 $agentFile = Join-Path $agentsDir $effectiveAgentFileName
 $endpoint = "http://{0}:{1}/mcp" -f $effectiveServerIp, $effectivePort
 
@@ -62,14 +62,14 @@ Write-Host "MCP Name  : $effectiveServerName"
 Write-Host "MCP URL   : $endpoint"
 Write-Host "Hook      : $effectiveHookEnabled"
 
-if (-not (Test-Path $cursorDir)) {
-    New-Item -ItemType Directory -Path $cursorDir | Out-Null
-    Write-Host "Created   : $cursorDir"
+if (-not (Test-Path $codexDir)) {
+    New-Item -ItemType Directory -Path $codexDir | Out-Null
+    Write-Host "Created   : $codexDir"
 }
 
-if (-not (Test-Path $rulesDir)) {
-    New-Item -ItemType Directory -Path $rulesDir | Out-Null
-    Write-Host "Created   : $rulesDir"
+if (-not (Test-Path $promptsDir)) {
+    New-Item -ItemType Directory -Path $promptsDir | Out-Null
+    Write-Host "Created   : $promptsDir"
 }
 
 if (-not (Test-Path $agentsDir)) {
@@ -105,15 +105,10 @@ function Write-ManagedFile {
     Write-Host "Updated   : $Path"
 }
 
-function New-RuleContent {
+function New-PromptContent {
     param([string]$Endpoint)
 @"
----
-description: Project DNA MCP Hook gate
-globs: ["**/*"]
----
-
-# Project DNA MCP Hook
+# Project DNA MCP Hook (Codex)
 
 Use the Project DNA MCP workflow before editing files.
 
@@ -184,37 +179,33 @@ $json = $finalConfig | ConvertTo-Json -Depth 20
 Set-Content -Path $mcpFile -Value $json -Encoding UTF8
 
 if ($effectiveHookEnabled) {
-    $ruleContent = New-RuleContent -Endpoint $endpoint
+    $promptContent = New-PromptContent -Endpoint $endpoint
     $agentContent = New-AgentContent -Endpoint $endpoint -ServerName $effectiveServerName
 
-    $templateRulesDir = Join-Path $PSScriptRoot "..\templates\rules"
+    $templatePromptsDir = Join-Path $PSScriptRoot "..\templates\prompts"
     $templateAgentsDir = Join-Path $PSScriptRoot "..\templates\agents"
 
-    if (Test-Path (Join-Path $templateRulesDir $effectiveRuleFileName)) {
-        $ruleContent = Get-Content -Path (Join-Path $templateRulesDir $effectiveRuleFileName) -Raw -Encoding UTF8
-        # 替换端点占位符
-        $ruleContent = $ruleContent -replace "\{\{MCP_ENDPOINT\}\}", $endpoint
+    if (Test-Path (Join-Path $templatePromptsDir $effectivePromptFileName)) {
+        $promptContent = Get-Content -Path (Join-Path $templatePromptsDir $effectivePromptFileName) -Raw -Encoding UTF8
+        $promptContent = $promptContent -replace "\{\{MCP_ENDPOINT\}\}", $endpoint
     }
     
     if (Test-Path (Join-Path $templateAgentsDir $effectiveAgentFileName)) {
         $agentContent = Get-Content -Path (Join-Path $templateAgentsDir $effectiveAgentFileName) -Raw -Encoding UTF8
-        # 替换端点占位符
         $agentContent = $agentContent -replace "\{\{MCP_ENDPOINT\}\}", $endpoint
     }
 
-    Write-ManagedFile -Path $ruleFile -Content $ruleContent -ReplaceExisting $effectiveHookReplaceExisting
+    Write-ManagedFile -Path $promptFile -Content $promptContent -ReplaceExisting $effectiveHookReplaceExisting
     Write-ManagedFile -Path $agentFile -Content $agentContent -ReplaceExisting $effectiveHookReplaceExisting
 
-    # 复制 templates/rules 下的其他规则
-    if (Test-Path $templateRulesDir) {
-        Get-ChildItem -Path $templateRulesDir -Filter "*.mdc" | Where-Object { $_.Name -ne $effectiveRuleFileName } | ForEach-Object {
-            $targetPath = Join-Path $rulesDir $_.Name
+    if (Test-Path $templatePromptsDir) {
+        Get-ChildItem -Path $templatePromptsDir -Filter "*.md" | Where-Object { $_.Name -ne $effectivePromptFileName } | ForEach-Object {
+            $targetPath = Join-Path $promptsDir $_.Name
             $content = Get-Content -Path $_.FullName -Raw -Encoding UTF8
             Write-ManagedFile -Path $targetPath -Content $content -ReplaceExisting $effectiveHookReplaceExisting
         }
     }
 
-    # 复制 templates/agents 下的其他 Agent 提示
     if (Test-Path $templateAgentsDir) {
         Get-ChildItem -Path $templateAgentsDir -Filter "*.md" | Where-Object { $_.Name -ne $effectiveAgentFileName } | ForEach-Object {
             $targetPath = Join-Path $agentsDir $_.Name
@@ -225,16 +216,16 @@ if ($effectiveHookEnabled) {
 }
 
 Write-Host ""
-Write-Host "Done. Cursor MCP and hook config updated:"
+Write-Host "Done. Codex MCP and hook config updated:"
 Write-Host "  $mcpFile"
 if ($effectiveHookEnabled) {
-    Write-Host "  $ruleFile"
+    Write-Host "  $promptFile"
     Write-Host "  $agentFile"
 }
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "1) Restart Cursor"
-Write-Host "2) Check MCP panel: '$effectiveServerName' should be connected"
+Write-Host "1) Restart Codex session"
+Write-Host "2) Check MCP server: '$effectiveServerName' should be connected"
 Write-Host "3) Open Client console: http://${effectiveServerIp}:${effectivePort}"
 Write-Host "4) Optional Server dashboard: http://${effectiveServerIp}:5051"
 Write-Host "5) Optional verify MCP: $endpoint"

@@ -53,6 +53,70 @@ window.MemoryEditor = {
 let activeTab = 'topology';
 let currentUser = null;
 
+function applyToolState(elementId, installed) {
+  const element = $(elementId);
+  if (!element) return;
+  element.classList.remove('healthy', 'degraded', 'error');
+  if (installed) {
+    element.classList.add('healthy');
+    element.textContent = 'Installed';
+    return;
+  }
+
+  element.classList.add('degraded');
+  element.textContent = 'Not installed';
+}
+
+async function loadToolingStatus() {
+  try {
+    const tooling = await api('/client/tooling/list', { skipAuth: true });
+    $('toolingWorkspace').textContent = `Workspace: ${tooling.workspaceRoot || '-'}`;
+
+    const cursor = (tooling.targets || []).find(target => target.id === 'cursor');
+    const codex = (tooling.targets || []).find(target => target.id === 'codex');
+    applyToolState('cursorToolState', Boolean(cursor?.installed));
+    applyToolState('codexToolState', Boolean(codex?.installed));
+  } catch (error) {
+    $('toolingWorkspace').textContent = `Workspace: unavailable (${error.message})`;
+    const cursor = $('cursorToolState');
+    const codex = $('codexToolState');
+    if (cursor) {
+      cursor.classList.remove('healthy', 'degraded');
+      cursor.classList.add('error');
+      cursor.textContent = 'Error';
+    }
+    if (codex) {
+      codex.classList.remove('healthy', 'degraded');
+      codex.classList.add('error');
+      codex.textContent = 'Error';
+    }
+  }
+}
+
+async function installTooling(target) {
+  try {
+    setStatus(`Installing ${target} tooling...`);
+    const result = await api('/client/tooling/install', {
+      method: 'POST',
+      skipAuth: true,
+      body: {
+        target,
+        replaceExisting: true
+      }
+    });
+
+    const reports = result.reports || [];
+    const written = reports.reduce((sum, report) => sum + (report.writtenFiles?.length || 0), 0);
+    const skipped = reports.reduce((sum, report) => sum + (report.skippedFiles?.length || 0), 0);
+    const warnings = reports.reduce((sum, report) => sum + (report.warnings?.length || 0), 0);
+    setStatus(`Tooling installed: written ${written}, skipped ${skipped}, warnings ${warnings}`);
+    setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
+    await loadToolingStatus();
+  } catch (error) {
+    setStatus(`Tooling install failed: ${error.message}`);
+  }
+}
+
 function setStatus(text) {
   const statusText = $('statusText');
   if (statusText) statusText.textContent = text;
@@ -203,6 +267,7 @@ async function loadStatus() {
     $('targetServer').textContent = clientStatus.targetServer || '-';
     $('mcpAddress').textContent = `${window.location.origin}/mcp`;
     $('serverDashboardLink').href = clientStatus.targetServer || 'http://127.0.0.1:5051';
+    await loadToolingStatus();
 
     const serverStatus = clientStatus.serverStatus || null;
     if (serverStatus && !clientStatus.error) {
@@ -352,6 +417,8 @@ window.switchTab = switchTab;
 window.refreshAll = refreshAll;
 window.refreshTopology = loadTopology;
 window.refreshMemories = loadKnowledge;
+window.refreshToolingStatus = loadToolingStatus;
+window.installTooling = installTooling;
 window.login = login;
 window.logout = logout;
 

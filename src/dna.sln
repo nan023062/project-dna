@@ -8,6 +8,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dna.Knowledge", "Dna.Knowle
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{77A47F82-A820-4235-98C6-7C676411CB16}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Tests", "Client.Tests\Client.Tests.csproj", "{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -66,6 +68,18 @@ Global
 		{77A47F82-A820-4235-98C6-7C676411CB16}.Release|x64.Build.0 = Release|Any CPU
 		{77A47F82-A820-4235-98C6-7C676411CB16}.Release|x86.ActiveCfg = Release|Any CPU
 		{77A47F82-A820-4235-98C6-7C676411CB16}.Release|x86.Build.0 = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|x64.Build.0 = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Debug|x86.Build.0 = Debug|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|x64.ActiveCfg = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|x64.Build.0 = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|x86.ActiveCfg = Release|Any CPU
+		{E0D54B66-AF69-4B35-81D1-DBBB2E3C0104}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

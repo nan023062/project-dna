@@ -1,6 +1,9 @@
 # Project DNA Server Tools
 
-跨平台启动脚本，用于以独立进程（HTTP/SSE）运行 Project DNA Server。
+跨平台启动脚本，用于以独立进程运行 Project DNA **Server**（团队共享知识服务）。
+
+> 推荐拓扑：`Server(5051)` + `Client(5052)`  
+> 本目录只负责启动 `Server`，IDE 的 MCP 请连接 `Client`。
 
 ## 快速开始
 
@@ -16,7 +19,7 @@ cp server-config.example.json server-config.json
 
 ```json
 {
-  "appPath": "../publish/server/dna_server.exe",
+  "appPath": "../publish/server/dna_server",
   "dbPath": ".dna",
   "port": 5051
 }
@@ -24,9 +27,14 @@ cp server-config.example.json server-config.json
 
 | 字段 | 说明 | 示例 |
 |------|------|------|
-| `appPath` | 可执行文件路径（支持全局命令或绝对路径） | `"../publish/server/dna_server.exe"` 或 `"D:/path/to/dna_server.exe"` |
+| `appPath` | Server 可执行文件（支持绝对路径、相对路径、PATH 命令名） | `"../publish/server/dna_server"` / `"..\\publish\\server\\dna_server.exe"` / `"dna_server"` |
 | `dbPath` | 知识库目录（相对路径基于当前工作目录） | `".dna"` 或 `"C:/my-project/.dna"` |
 | `port` | 监听端口 | `5051` |
+
+`appPath` 常见写法：
+- macOS/Linux 本地发布：`../publish/server/dna_server`
+- Windows 本地发布：`..\\publish\\server\\dna_server.exe`
+- 已加入 PATH：`dna_server`
 
 ### 2. 启动服务
 
@@ -46,4 +54,11 @@ bash start-server.sh
 
 ```bash
 curl http://localhost:5051/api/status
+```
+
+如果返回 JSON 状态，说明 Server 已启动成功。  
+随后可再启动 Client（示例）：
+
+```bash
+dotnet run --project ../src/Client -- --server http://127.0.0.1:5051 --port 5052
 ```

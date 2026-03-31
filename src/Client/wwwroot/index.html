@@ -74,6 +74,9 @@
         <div class="quick-actions">
           <button class="btn btn-primary btn-sm" onclick="switchTab('topology')">Open Topology</button>
           <button class="btn btn-secondary btn-sm" onclick="switchTab('memory')">Open Knowledge</button>
+          <button class="btn btn-secondary btn-sm" onclick="refreshToolingStatus()">Refresh Tooling</button>
+          <button class="btn btn-primary btn-sm" onclick="installTooling('cursor')">Install Cursor Tooling</button>
+          <button class="btn btn-primary btn-sm" onclick="installTooling('codex')">Install Codex Tooling</button>
         </div>
         <div class="status-grid">
           <div class="status-card">
@@ -96,6 +99,20 @@
           <div class="status-card">
             <div class="status-card-title">Current Role</div>
             <p id="overviewSummary" class="status-copy">Client hosts local MCP and user workspace. Server owns shared knowledge, auth, review, and publishing.</p>
+          </div>
+          <div class="status-card">
+            <div class="status-card-title">IDE Tooling</div>
+            <div id="toolingWorkspace" class="status-copy">Workspace: -</div>
+            <ul class="status-list tooling-list">
+              <li>
+                <span>Cursor</span>
+                <span id="cursorToolState" class="tool-state">Checking...</span>
+              </li>
+              <li>
+                <span>Codex</span>
+                <span id="codexToolState" class="tool-state">Checking...</span>
+              </li>
+            </ul>
           </div>
         </div>
       </section>

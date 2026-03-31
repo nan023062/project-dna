@@ -6,7 +6,7 @@
     "hook": {
       "enabled": true,
       "replaceExisting": true,
-      "ruleFileName": "project-dna-mcp-hook.mdc",
+      "promptFileName": "project-dna-mcp-hook.md",
       "agentFileName": "project-dna-mcp-hooks.md"
     }
   }

@@ -355,6 +355,24 @@ public static class DnaApp
             wwwroot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
         if (!Directory.Exists(wwwroot)) return;
 
+        // Shared static assets are referenced by Server/Client pages via /dna-shared/*.
+        // We map it explicitly so both "dotnet run" and published binaries can resolve assets.
+        var sharedWebRoot = ResolveSharedWebRoot(wwwroot);
+        if (sharedWebRoot != null)
+        {
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(sharedWebRoot),
+                RequestPath = "/dna-shared",
+                OnPrepareResponse = ctx =>
+                {
+                    ctx.Context.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+                    ctx.Context.Response.Headers["Pragma"] = "no-cache";
+                    ctx.Context.Response.Headers["Expires"] = "0";
+                }
+            });
+        }
+
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = new PhysicalFileProvider(wwwroot) });
         app.UseStaticFiles(new StaticFileOptions
         {
@@ -374,6 +392,23 @@ public static class DnaApp
                 ? Results.NotFound("index.html not found")
                 : Results.File(indexPath, "text/html; charset=utf-8");
         });
+    }
+
+    private static string? ResolveSharedWebRoot(string appWebRoot)
+    {
+        var candidates = new[]
+        {
+            // Published layout (if copied into app wwwroot/dna-shared).
+            Path.Combine(appWebRoot, "dna-shared"),
+            // Repo layout when running publish binary from project-dna/publish/{app}.
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "src", "Dna.Web.Shared", "wwwroot")),
+            // Repo layout when running from source directory.
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "Dna.Web.Shared", "wwwroot")),
+            // Fallback: relative to app base.
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "Dna.Web.Shared", "wwwroot"))
+        };
+
+        return candidates.FirstOrDefault(Directory.Exists);
     }
 
     // ═══════════════════════════════════════════
