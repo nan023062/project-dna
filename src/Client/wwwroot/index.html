@@ -48,16 +48,21 @@
           <div class="overview-card">
             <div class="overview-label">Client</div>
             <div id="clientHealth" class="overview-value">检查中</div>
-            <div id="clientPort" class="overview-meta">本地端口 5052</div>
+            <div id="clientPort" class="overview-meta">地址加载中...</div>
+            <button class="btn btn-secondary btn-sm" data-action="copy-mcp-address" style="margin-top:8px;align-self:flex-start;">复制 MCP 地址</button>
           </div>
           <div class="overview-card">
             <div class="overview-label">Server</div>
             <div id="serverHealth" class="overview-value">检查中</div>
             <div id="serverUptime" class="overview-meta">等待 Server</div>
+            <div id="serverAddress" class="overview-meta">地址: -</div>
           </div>
           <div class="overview-card">
             <div class="overview-label">工作区</div>
             <div id="targetServer" class="overview-value overview-value-sm">-</div>
+            <select id="workspaceQuickSelect" class="btn btn-secondary btn-sm" data-change-action="quick-switch-workspace" style="margin-top:8px;width:100%;">
+              <option value="">选择工作区...</option>
+            </select>
             <div id="mcpAddress" class="overview-meta">模式: -</div>
           </div>
           <div class="overview-card">
@@ -132,11 +137,10 @@
           <div class="section-heading">
             <div>
               <h2>连接工作区</h2>
-              <p>统一管理个人与团队连接目标。当前工作区会决定 Client 访问哪个 Server，以及本地工具安装到哪个项目根目录。</p>
+              <p>工作区由 Server 侧维护，Client 侧只允许查看与切换当前工作区。</p>
             </div>
             <div class="quick-actions">
               <button class="btn btn-secondary btn-sm" data-action="refresh-workspaces">刷新连接</button>
-              <button class="btn btn-primary btn-sm" data-action="new-workspace">新建工作区</button>
             </div>
           </div>
 
@@ -155,22 +159,22 @@
               <div class="connection-form-grid">
                 <div class="connection-form-group">
                   <label for="workspaceName">显示名称</label>
-                  <input id="workspaceName" type="text" placeholder="我的本地工作区" />
+                  <input id="workspaceName" type="text" placeholder="我的本地工作区" readonly />
                 </div>
                 <div class="connection-form-group">
                   <label for="workspaceMode">模式</label>
-                  <select id="workspaceMode">
+                  <select id="workspaceMode" disabled>
                     <option value="personal">个人</option>
                     <option value="team">团队</option>
                   </select>
                 </div>
                 <div class="connection-form-group">
                   <label for="workspaceServerBaseUrl">Server 地址</label>
-                  <input id="workspaceServerBaseUrl" type="text" placeholder="http://localhost:5051" />
+                  <input id="workspaceServerBaseUrl" type="text" placeholder="http://localhost:5051" readonly />
                 </div>
                 <div class="connection-form-group">
                   <label for="workspaceRoot">工作区根目录</label>
-                  <input id="workspaceRoot" type="text" placeholder="D:\GitRepository\agentic-os" />
+                  <input id="workspaceRoot" type="text" placeholder="D:\GitRepository\agentic-os" readonly />
                 </div>
               </div>
 
@@ -186,9 +190,7 @@
               </div>
 
               <div class="connection-actions">
-                <button class="btn btn-primary btn-sm" data-action="save-workspace">保存工作区</button>
                 <button class="btn btn-secondary btn-sm" data-action="set-current-workspace">设为当前</button>
-                <button class="btn btn-secondary btn-sm" data-action="delete-workspace">删除</button>
               </div>
             </div>
           </div>

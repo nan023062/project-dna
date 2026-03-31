@@ -10,13 +10,14 @@ using ModelContextProtocol.Server;
 var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
 var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
 var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
+var defaultClientPort = ClientBootstrap.ResolveClientDefaultPort(args);
 
 var app = DnaApp.Create(args, new AppOptions
 {
     AppName = "Project DNA Client",
     AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
-    DefaultPort = 5052,
-    LockScopeProvider = _ => $"client:{workspaceRoot}",
+    DefaultPort = defaultClientPort,
+    LockScopeProvider = _ => $"client:{workspaceRoot}:{Environment.ProcessId}",
     BannerExtras = (_, port) =>
     {
         var host = ClientBootstrap.GetLocalIp();

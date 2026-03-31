@@ -2,6 +2,18 @@ namespace Dna.Client.Services;
 
 public static class ClientBootstrap
 {
+    public static int ResolveClientDefaultPort(string[]? args = null)
+    {
+        if (TryResolveOption(args, "--port", out var cliPort) && int.TryParse(cliPort, out var parsedCliPort) && parsedCliPort > 0)
+            return parsedCliPort;
+
+        var envPort = Environment.GetEnvironmentVariable("DNA_CLIENT_PORT");
+        if (!string.IsNullOrWhiteSpace(envPort) && int.TryParse(envPort, out var parsedEnvPort) && parsedEnvPort > 0)
+            return parsedEnvPort;
+
+        return GetEphemeralPort();
+    }
+
     public static string ResolveServerBaseUrl(string[] args)
     {
         if (TryResolveOption(args, "--server", out var cliValue))
@@ -66,6 +78,15 @@ public static class ClientBootstrap
     }
 
     public static string NormalizeUrl(string raw) => raw.Trim().TrimEnd('/');
+
+    private static int GetEphemeralPort()
+    {
+        using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
+    }
 
     private static bool TryResolveOption(string[]? args, string optionName, out string value)
     {

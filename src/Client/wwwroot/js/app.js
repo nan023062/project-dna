@@ -138,6 +138,37 @@ function setRefreshInfo(text) {
   if (refreshInfo) refreshInfo.textContent = text;
 }
 
+function getClientAddressMeta() {
+  const origin = window.location.origin;
+  return `${origin} · MCP ${origin}/mcp`;
+}
+
+function getMcpAddress() {
+  return `${window.location.origin}/mcp`;
+}
+
+async function copyMcpAddress() {
+  const text = getMcpAddress();
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', 'readonly');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+    }
+    setStatus(`MCP 地址已复制：${text}`);
+  } catch (error) {
+    setStatus(`复制失败，请手动复制：${text}`);
+  }
+}
+
 function renderWorkspaceSummary(workspace) {
   const targetServer = $('targetServer');
   const mcpAddress = $('mcpAddress');
@@ -156,6 +187,34 @@ function renderWorkspaceSummary(workspace) {
   if (mcpAddress) mcpAddress.textContent = `${formatWorkspaceMode(workspace.mode)} · ${workspace.serverBaseUrl || '-'}`;
   if (currentBadge) currentBadge.textContent = `${workspace.name} (${formatWorkspaceMode(workspace.mode)})`;
   if (currentServer) currentServer.textContent = `${workspace.serverBaseUrl} · ${workspace.workspaceRoot}`;
+}
+
+function renderWorkspaceQuickSelect() {
+  const select = $('workspaceQuickSelect');
+  if (!select) return;
+
+  const workspaces = workspaceSnapshot?.workspaces || [];
+  select.innerHTML = '';
+
+  if (!workspaces.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = '暂无工作区';
+    select.appendChild(option);
+    select.disabled = true;
+    return;
+  }
+
+  for (const workspace of workspaces) {
+    const option = document.createElement('option');
+    option.value = workspace.id;
+    option.textContent = `${workspace.name} (${formatWorkspaceMode(workspace.mode)})`;
+    if (workspace.id === workspaceSnapshot?.currentWorkspaceId) {
+      option.selected = true;
+    }
+    select.appendChild(option);
+  }
+  select.disabled = false;
 }
 
 function populateWorkspaceForm(workspace) {
@@ -246,6 +305,7 @@ async function loadWorkspaces(options = {}) {
 
   syncAuthScope(snapshot.currentWorkspace);
   renderWorkspaceSummary(snapshot.currentWorkspace);
+  renderWorkspaceQuickSelect();
   renderWorkspaceList();
   populateWorkspaceForm(getSelectedWorkspace() || createWorkspaceDraft(snapshot.defaults));
   await refreshAccountPanelIfVisible();
@@ -312,6 +372,10 @@ async function saveWorkspace() {
 
 async function setCurrentWorkspace() {
   const workspaceId = $('workspaceId')?.value?.trim() || selectedWorkspaceId || '';
+  await setCurrentWorkspaceById(workspaceId);
+}
+
+async function setCurrentWorkspaceById(workspaceId) {
   if (!workspaceId) {
     setStatus('请先选择一个工作区。');
     return;
@@ -326,6 +390,7 @@ async function setCurrentWorkspace() {
   workspaceSnapshot = result.snapshot;
   selectedWorkspaceId = result.workspace?.id || workspaceSnapshot.currentWorkspaceId;
   renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
+  renderWorkspaceQuickSelect();
   renderWorkspaceList();
   populateWorkspaceForm(getSelectedWorkspace());
   handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已切换，请登录对应服务器账号。');
@@ -558,7 +623,8 @@ async function loadStatus() {
     syncAuthScope(workspace);
 
     applyHealthState($('clientHealth'), clientStatus.client, '正常', '降级');
-    $('clientPort').textContent = '本地端口 5052';
+    $('clientPort').textContent = getClientAddressMeta();
+    $('serverAddress').textContent = `地址: ${clientStatus.targetServer || '-'}`;
     renderWorkspaceSummary(workspace);
     $('serverDashboardLink').href = clientStatus.targetServer || 'http://127.0.0.1:5051';
     await loadToolingStatus();
@@ -576,6 +642,7 @@ async function loadStatus() {
       $('serverHealth').classList.add('error');
       $('serverHealth').textContent = '离线';
       $('serverUptime').textContent = clientStatus.error || '无法连接服务器';
+      $('serverAddress').textContent = `地址: ${clientStatus.targetServer || '-'}`;
       $('overviewSummary').textContent =
         `${workspace?.name || '当前工作区'} 已配置完成，但目标 Server 当前不可用。`;
       resetProtectedOverview('等待服务器可用');
@@ -723,6 +790,9 @@ async function handleAction(action, element) {
     case 'refresh-all':
       await refreshAll();
       break;
+    case 'copy-mcp-address':
+      await copyMcpAddress();
+      break;
     case 'switch-tab':
       if (element?.dataset.tabTarget) await switchTab(element.dataset.tabTarget);
       break;
@@ -830,6 +900,12 @@ async function handleAction(action, element) {
 
 async function handleChangeAction(action) {
   switch (action) {
+    case 'quick-switch-workspace':
+    {
+      const workspaceId = $('workspaceQuickSelect')?.value || '';
+      if (workspaceId) await setCurrentWorkspaceById(workspaceId);
+      break;
+    }
     case 'load-memories':
       await loadMemories();
       break;
