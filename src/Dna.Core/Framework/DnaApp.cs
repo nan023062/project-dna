@@ -19,38 +19,33 @@ public enum AppRunMode { Cli, Stdio, Web }
 /// 应用管理器（静态类）— 封装所有服务的注册、生命周期管理和应用启动流程。
 ///
 /// 用法：
-///   DnaApp.Create(args, new AppOptions { AppName = "MyApp" });
-///   DnaApp.Register&lt;MyService&gt;();
-///   DnaApp.ConfigureWebApp(web => { ... });
-///   return await DnaApp.RunAsync();
+///   var app = DnaApp.Create(args, new AppOptions { AppName = "MyApp" });
+///   app.Register&lt;MyService&gt;();
+///   app.ConfigureWebApp(web => { ... });
+///   return await app.RunAsync();
 /// </summary>
-public static class DnaApp
+public sealed class DnaApp
 {
-    private static string[] _args = [];
-    private static AppOptions _options = new();
-    private static AppRunMode _mode;
-    private static FileLogWriter _fileWriter = new();
+    private readonly string[] _args;
+    private readonly AppOptions _options;
+    private readonly AppRunMode _mode;
+    private FileLogWriter _fileWriter = new();
 
-    private static readonly List<ServiceDescriptor> _serviceRegistrations = [];
-    private static readonly List<ICliCommand> _cliCommands = [];
-    private static readonly List<Action<IServiceCollection>> _rawConfigurators = [];
-    private static readonly List<Action<WebApplication>> _webConfigurators = [];
+    private readonly List<ServiceDescriptor> _serviceRegistrations = [];
+    private readonly List<ICliCommand> _cliCommands = [];
+    private readonly List<Action<IServiceCollection>> _rawConfigurators = [];
+    private readonly List<Action<WebApplication>> _webConfigurators = [];
 
-    private static IServiceProvider? _serviceProvider;
-    private static readonly List<IDnaService> _managedServices = [];
+    private IServiceProvider? _serviceProvider;
+    private readonly List<IDnaService> _managedServices = [];
 
-    private static int _port;
-    private static bool _openBrowser;
+    private int _port;
+    private bool _openBrowser;
 
-    public static AppRunMode Mode => _mode;
-    public static AppOptions Options => _options;
+    public AppRunMode Mode => _mode;
+    public AppOptions Options => _options;
 
-    // ═══════════════════════════════════════════
-    //  创建
-    // ═══════════════════════════════════════════
-
-    /// <summary>初始化应用管理器</summary>
-    public static void Create(string[] args, AppOptions? options = null)
+    private DnaApp(string[] args, AppOptions? options = null)
     {
         _args = args;
         _options = options ?? new AppOptions();
@@ -61,17 +56,24 @@ public static class DnaApp
     }
 
     // ═══════════════════════════════════════════
+    //  创建
+    // ═══════════════════════════════════════════
+
+    /// <summary>初始化应用管理器</summary>
+    public static DnaApp Create(string[] args, AppOptions? options = null) => new(args, options);
+
+    // ═══════════════════════════════════════════
     //  服务注册（必须实现 IDnaService）
     // ═══════════════════════════════════════════
 
     /// <summary>注册服务（Singleton，自动管理生命周期）</summary>
-    public static void Register<T>() where T : class, IDnaService
+    public void Register<T>() where T : class, IDnaService
     {
         _serviceRegistrations.Add(ServiceDescriptor.Singleton<T, T>());
     }
 
     /// <summary>注册服务（接口 + 实现分离）</summary>
-    public static void Register<TInterface, TImpl>()
+    public void Register<TInterface, TImpl>()
         where TInterface : class
         where TImpl : class, TInterface, IDnaService
     {
@@ -80,13 +82,13 @@ public static class DnaApp
     }
 
     /// <summary>注册已创建的服务实例</summary>
-    public static void Register<T>(T instance) where T : class, IDnaService
+    public void Register<T>(T instance) where T : class, IDnaService
     {
         _serviceRegistrations.Add(ServiceDescriptor.Singleton(instance));
     }
 
     /// <summary>注册框架级服务（不要求 IDnaService，用于 MCP、HttpClient 等）</summary>
-    public static void ConfigureServices(Action<IServiceCollection> configure)
+    public void ConfigureServices(Action<IServiceCollection> configure)
     {
         _rawConfigurators.Add(configure);
     }
@@ -95,32 +97,32 @@ public static class DnaApp
     //  CLI 命令注册
     // ═══════════════════════════════════════════
 
-    public static void AddCliCommand(ICliCommand command) => _cliCommands.Add(command);
-    public static void AddCliCommand<T>() where T : ICliCommand, new() => _cliCommands.Add(new T());
+    public void AddCliCommand(ICliCommand command) => _cliCommands.Add(command);
+    public void AddCliCommand<T>() where T : ICliCommand, new() => _cliCommands.Add(new T());
 
     // ═══════════════════════════════════════════
     //  Web 管道配置
     // ═══════════════════════════════════════════
 
-    public static void ConfigureWebApp(Action<WebApplication> configure) => _webConfigurators.Add(configure);
+    public void ConfigureWebApp(Action<WebApplication> configure) => _webConfigurators.Add(configure);
 
     // ═══════════════════════════════════════════
     //  服务访问（应用启动后可用）
     // ═══════════════════════════════════════════
 
     /// <summary>获取已注册的服务实例</summary>
-    public static T GetService<T>() where T : class
+    public T GetService<T>() where T : class
         => (_serviceProvider ?? throw new InvalidOperationException("App not started")).GetRequiredService<T>();
 
     /// <summary>尝试获取服务实例</summary>
-    public static T? TryGetService<T>() where T : class
+    public T? TryGetService<T>() where T : class
         => _serviceProvider?.GetService<T>();
 
     // ═══════════════════════════════════════════
     //  启动
     // ═══════════════════════════════════════════
 
-    public static async Task<int> RunAsync()
+    public async Task<int> RunAsync()
     {
         return _mode switch
         {
@@ -134,7 +136,7 @@ public static class DnaApp
     //  CLI 模式
     // ═══════════════════════════════════════════
 
-    private static async Task<int> RunCliAsync()
+    private async Task<int> RunCliAsync()
     {
         if (_cliCommands.Count == 0)
         {
@@ -167,7 +169,7 @@ public static class DnaApp
         return 1;
     }
 
-    private static void PrintCliHelp()
+    private void PrintCliHelp()
     {
         Console.WriteLine($"{_options.AppName} CLI");
         Console.WriteLine();
@@ -183,7 +185,7 @@ public static class DnaApp
     //  stdio 模式
     // ═══════════════════════════════════════════
 
-    private static async Task<int> RunStdioAsync()
+    private async Task<int> RunStdioAsync()
     {
         var builder = Host.CreateApplicationBuilder(
             _args.Where(a => !IsArg(a, "--stdio", "stdio")).ToArray());
@@ -205,7 +207,7 @@ public static class DnaApp
     //  Web 模式
     // ═══════════════════════════════════════════
 
-    private static async Task<int> RunWebAsync()
+    private async Task<int> RunWebAsync()
     {
         ParseWebArgs();
         _port = FindAvailablePort(_port);
@@ -239,7 +241,7 @@ public static class DnaApp
     //  服务注册（内部）
     // ═══════════════════════════════════════════
 
-    private static void ApplyAllServices(IServiceCollection services)
+    private void ApplyAllServices(IServiceCollection services)
     {
         services.AddHttpClient();
 
@@ -254,7 +256,7 @@ public static class DnaApp
     //  生命周期管理
     // ═══════════════════════════════════════════
 
-    private static async Task InitializeServicesAsync()
+    private async Task InitializeServicesAsync()
     {
         var provider = _serviceProvider ?? throw new InvalidOperationException("ServiceProvider is not initialized.");
         _managedServices.Clear();
@@ -283,7 +285,7 @@ public static class DnaApp
         logger?.LogInformation("[DnaApp] {Count} services initialized", _managedServices.Count);
     }
 
-    private static async Task ShutdownServicesAsync()
+    private async Task ShutdownServicesAsync()
     {
         for (var i = _managedServices.Count - 1; i >= 0; i--)
         {
@@ -297,7 +299,7 @@ public static class DnaApp
     //  单实例锁
     // ═══════════════════════════════════════════
 
-    private static async Task<int> StartWithLockAsync(Func<Task> run)
+    private async Task<int> StartWithLockAsync(Func<Task> run)
     {
         var lockScope = _options.LockScopeProvider?.Invoke(_serviceProvider!) ?? Directory.GetCurrentDirectory();
 
@@ -334,7 +336,7 @@ public static class DnaApp
     //  日志
     // ═══════════════════════════════════════════
 
-    private static void ConfigureLogging(IServiceCollection services, ILoggingBuilder logging, bool useStdErr)
+    private void ConfigureLogging(IServiceCollection services, ILoggingBuilder logging, bool useStdErr)
     {
         services.AddSingleton(_fileWriter);
         logging.ClearProviders();
@@ -415,7 +417,7 @@ public static class DnaApp
     //  横幅
     // ═══════════════════════════════════════════
 
-    private static void PrintBanner(int port)
+    private void PrintBanner(int port)
     {
         var name = _options.AppName;
         var desc = string.IsNullOrEmpty(_options.AppDescription) ? "" : $" — {_options.AppDescription}";
@@ -469,7 +471,7 @@ public static class DnaApp
     //  参数解析
     // ═══════════════════════════════════════════
 
-    private static void ParseWebArgs()
+    private void ParseWebArgs()
     {
         for (var i = 0; i < _args.Length; i++)
         {

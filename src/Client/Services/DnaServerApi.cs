@@ -41,15 +41,16 @@ public sealed class DnaServerApi(HttpClient httpClient, ClientRuntimeOptions opt
         return await ReadJsonAsync(response, cancellationToken);
     }
 
-    private static async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    private async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var message = string.IsNullOrWhiteSpace(payload)
-                ? response.ReasonPhrase ?? "请求失败"
-                : payload;
-            throw new InvalidOperationException($"HTTP {(int)response.StatusCode}: {message}");
+            throw new DnaServerApiException(
+                (int)response.StatusCode,
+                response.RequestMessage?.RequestUri?.GetLeftPart(UriPartial.Authority) ?? BaseUrl,
+                payload,
+                response.ReasonPhrase);
         }
 
         if (string.IsNullOrWhiteSpace(payload))

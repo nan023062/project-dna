@@ -1,130 +1,59 @@
 import { $, api, escapeHtml } from '../utils.js';
+import {
+  NODE_TYPE_NAME_TO_VALUE,
+  SOURCE_NAME_TO_VALUE,
+  TYPE_NAME_TO_VALUE,
+  normalizeNodeTypeName,
+  normalizeTypeName,
+  parseMemoryTimestamp,
+  sortMemoriesByRecent,
+  syncNodeTypeSelectOptions
+} from '/dna-shared/js/panels/memory-editor-common.js';
+import {
+  bindStructuredFieldListeners as bindSharedStructuredFieldListeners,
+  clearStructuredFieldValues,
+  fillStructuredTemplate,
+  isStructuredDraftEmpty,
+  readStructuredMemoryFields
+} from '/dna-shared/js/panels/memory-editor-structured.js';
 
 let _memories = [];
 let _currentMemoryId = null;
 
-const NODE_TYPE_NAME_TO_VALUE = {
-  Project: 0,
-  Department: 1,
-  Technical: 2,
-  Team: 3
-};
-
-const NODE_TYPE_VALUE_TO_NAME = Object.fromEntries(
-  Object.entries(NODE_TYPE_NAME_TO_VALUE).map(([k, v]) => [v, k])
-);
-
-const TYPE_NAME_TO_VALUE = {
-  Structural: 0,
-  Semantic: 1,
-  Episodic: 2,
-  Working: 3,
-  Procedural: 4
-};
-
-const TYPE_VALUE_TO_NAME = Object.fromEntries(
-  Object.entries(TYPE_NAME_TO_VALUE).map(([k, v]) => [v, k])
-);
-
-const SOURCE_NAME_TO_VALUE = {
-  Human: 2
-};
-
-const NODE_TYPE_OPTIONS = [
-  { value: 'Project', label: 'Project（项目）' },
-  { value: 'Department', label: 'Department（部门）' },
-  { value: 'Technical', label: 'Technical（技术组）' },
-  { value: 'Team', label: 'Team（执行团队）' }
-];
-
 const TEMPLATE_BY_NODE_TYPE = {
   Project: {
-    summary: 'Project 全局愿景与边界',
-    background: '项目整体背景',
-    goal: '明确项目目标、边界与约束',
-    rules: ['商业目标', '核心体验目标', '预算边界', '合规底线', '技术总选型'],
+    summary: 'Project 鍏ㄥ眬鎰挎櫙涓庤竟鐣?,
+    background: '椤圭洰鏁翠綋鑳屾櫙',
+    goal: '鏄庣‘椤圭洰鐩爣銆佽竟鐣屼笌绾︽潫',
+    rules: ['鍟嗕笟鐩爣', '鏍稿績浣撻獙鐩爣', '棰勭畻杈圭晫', '鍚堣搴曠嚎', '鎶€鏈€婚€夊瀷'],
     steps: [],
     notes: ''
   },
   Department: {
-    summary: 'Department 规则治理',
-    background: '部门级治理规范',
-    goal: '统一部门标准并协调资源冲突',
-    rules: ['质量标准', '流程规范', '协作约束', '资源优先级'],
-    steps: ['设计规范', '评审通过', '执行落地'],
+    summary: 'Department 瑙勫垯娌荤悊',
+    background: '閮ㄩ棬绾ф不鐞嗚鑼?,
+    goal: '缁熶竴閮ㄩ棬鏍囧噯骞跺崗璋冭祫婧愬啿绐?,
+    rules: ['璐ㄩ噺鏍囧噯', '娴佺▼瑙勮寖', '鍗忎綔绾︽潫', '璧勬簮浼樺厛绾?],
+    steps: ['璁捐瑙勮寖', '璇勫閫氳繃', '鎵ц钀藉湴'],
     notes: ''
   },
   Technical: {
-    summary: 'Technical 技术组规范',
-    background: '技术组负责的业务域',
-    goal: '固化工作流、接口与质量标准',
-    rules: ['接口协议', '性能规格', '文件责任域', '依赖约束（DAG）'],
-    steps: ['方案设计', '规范评审', '准入审核'],
+    summary: 'Technical 鎶€鏈粍瑙勮寖',
+    background: '鎶€鏈粍璐熻矗鐨勪笟鍔″煙',
+    goal: '鍥哄寲宸ヤ綔娴併€佹帴鍙ｄ笌璐ㄩ噺鏍囧噯',
+    rules: ['鎺ュ彛鍗忚', '鎬ц兘瑙勬牸', '鏂囦欢璐ｄ换鍩?, '渚濊禆绾︽潫锛圖AG锛?],
+    steps: ['鏂规璁捐', '瑙勮寖璇勫', '鍑嗗叆瀹℃牳'],
     notes: ''
   },
   Team: {
-    summary: 'Team 执行记录',
-    background: '具体任务执行上下文',
-    goal: '交付结果并沉淀复盘知识',
-    rules: ['授权文件域', '交付验收标准', '过程记忆沉淀'],
-    steps: ['领取任务', '执行开发', '提审交付', '复盘沉淀'],
+    summary: 'Team 鎵ц璁板綍',
+    background: '鍏蜂綋浠诲姟鎵ц涓婁笅鏂?,
+    goal: '浜や粯缁撴灉骞舵矇娣€澶嶇洏鐭ヨ瘑',
+    rules: ['鎺堟潈鏂囦欢鍩?, '浜や粯楠屾敹鏍囧噯', '杩囩▼璁板繂娌夋穩'],
+    steps: ['棰嗗彇浠诲姟', '鎵ц寮€鍙?, '鎻愬浜や粯', '澶嶇洏娌夋穩'],
     notes: ''
   }
 };
-
-function normalizeNodeTypeName(nodeType) {
-  if (typeof nodeType === 'number') return NODE_TYPE_VALUE_TO_NAME[nodeType] ?? 'Technical';
-  if (nodeType === 'ProjectVision') return 'Project';
-  if (nodeType === 'DisciplineStandard') return 'Department';
-  if (nodeType === 'CrossDiscipline') return 'Team';
-  if (nodeType === 'FeatureSystem') return 'Technical';
-  if (nodeType === 'Implementation') return 'Team';
-  if (nodeType === 'Group') return 'Technical';
-  return nodeType || 'Technical';
-}
-
-function normalizeTypeName(type) {
-  if (typeof type === 'number') return TYPE_VALUE_TO_NAME[type] ?? 'Semantic';
-  return type || 'Semantic';
-}
-
-function syncNodeTypeSelectOptions() {
-  const filterSelect = $('memFilterLayer');
-  if (filterSelect) {
-    const current = normalizeNodeTypeName(filterSelect.value || '');
-    filterSelect.innerHTML = [
-      '<option value="">所有节点类型</option>',
-      ...NODE_TYPE_OPTIONS.map(opt => `<option value="${opt.value}">${opt.label}</option>`)
-    ].join('');
-    filterSelect.value = NODE_TYPE_OPTIONS.some(opt => opt.value === current) ? current : '';
-  }
-
-  const editorSelect = $('memLayer');
-  if (editorSelect) {
-    const current = normalizeNodeTypeName(editorSelect.value || '');
-    editorSelect.innerHTML = NODE_TYPE_OPTIONS
-      .map(opt => `<option value="${opt.value}">${opt.label}</option>`)
-      .join('');
-    editorSelect.value = NODE_TYPE_OPTIONS.some(opt => opt.value === current) ? current : 'Technical';
-  }
-}
-
-function parseMemoryTimestamp(memory) {
-  const created = memory?.createdAt ?? memory?.created_at;
-  if (!created) return 0;
-  const timestamp = Date.parse(created);
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function sortMemoriesByRecent(memories) {
-  return memories
-    .map((memory, index) => ({ memory, index, timestamp: parseMemoryTimestamp(memory) }))
-    .sort((a, b) => {
-      if (b.timestamp !== a.timestamp) return b.timestamp - a.timestamp;
-      return a.index - b.index;
-    })
-    .map(item => item.memory);
-}
 
 function getCheckedDisciplines() {
   return Array.from(document.querySelectorAll('#memDisciplines input[type="checkbox"]:checked'))
@@ -151,7 +80,7 @@ function addListItem(containerId, value = '', placeholder = '') {
   row.className = 'memory-list-item';
   row.innerHTML = `
     <input type="text" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" />
-    <button class="btn btn-secondary btn-sm" type="button">删除</button>
+    <button class="btn btn-secondary btn-sm" type="button">鍒犻櫎</button>
   `;
   row.querySelector('button').addEventListener('click', () => {
     row.remove();
@@ -170,45 +99,39 @@ function getListValues(containerId) {
     .filter(Boolean);
 }
 
-function splitLines(value) {
-  return (value || '')
-    .split('\n')
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
 function composeMarkdown() {
-  const nodeType = $('memLayer').value;
-  const type = $('memType').value;
-  const background = $('memFieldBackground').value.trim();
-  const goal = $('memFieldGoal').value.trim();
-  const rules = splitLines($('memFieldRules').value);
-  const steps = splitLines($('memFieldSteps').value);
-  const notes = $('memFieldNotes').value.trim();
+  const draft = readStructuredMemoryFields($);
+  const nodeType = draft.nodeType;
+  const type = draft.type;
+  const background = draft.background;
+  const goal = draft.goal;
+  const rules = draft.rules;
+  const steps = draft.steps;
+  const notes = draft.notes;
 
   const lines = [];
-  lines.push(`## ${$('memSummary').value.trim() || '未命名记忆'}`);
+  lines.push(`## ${draft.summary || '鏈懡鍚嶈蹇?}`);
   lines.push('');
-  lines.push(`- 节点类型: ${nodeType}`);
-  lines.push(`- 类型: ${type}`);
-  if (background) lines.push(`- 背景: ${background}`);
-  if (goal) lines.push(`- 目标: ${goal}`);
+  lines.push(`- 鑺傜偣绫诲瀷: ${nodeType}`);
+  lines.push(`- 绫诲瀷: ${type}`);
+  if (background) lines.push(`- 鑳屾櫙: ${background}`);
+  if (goal) lines.push(`- 鐩爣: ${goal}`);
   lines.push('');
 
   if (rules.length > 0) {
-    lines.push('### 规则要点');
+    lines.push('### 瑙勫垯瑕佺偣');
     lines.push(...rules.map(r => `- ${r}`));
     lines.push('');
   }
 
   if (steps.length > 0) {
-    lines.push('### 执行步骤');
+    lines.push('### 鎵ц姝ラ');
     lines.push(...steps.map((s, idx) => `${idx + 1}. ${s}`));
     lines.push('');
   }
 
   if (notes) {
-    lines.push('### 备注');
+    lines.push('### 澶囨敞');
     lines.push(notes);
     lines.push('');
   }
@@ -221,46 +144,25 @@ function updateGeneratedContent() {
 }
 
 function bindStructuredFieldListeners() {
-  ['memSummary', 'memLayer', 'memType', 'memFieldBackground', 'memFieldGoal', 'memFieldRules', 'memFieldSteps', 'memFieldNotes']
-    .forEach(id => {
-      const el = $(id);
-      if (el) el.addEventListener('input', updateGeneratedContent);
-      if (el && el.tagName === 'SELECT') el.addEventListener('change', updateGeneratedContent);
-    });
-
-  document.querySelectorAll('#memDisciplines input[type="checkbox"]').forEach(el => {
-    el.addEventListener('change', updateGeneratedContent);
+  bindSharedStructuredFieldListeners({
+    getById: $,
+    queryAll: selector => document.querySelectorAll(selector),
+    onUpdate: updateGeneratedContent
   });
 }
 
 function clearStructuredFields() {
-  $('memFieldBackground').value = '';
-  $('memFieldGoal').value = '';
-  $('memFieldRules').value = '';
-  $('memFieldSteps').value = '';
-  $('memFieldNotes').value = '';
+  clearStructuredFieldValues($);
 }
 
 function fillTemplate(layerName) {
   const tpl = TEMPLATE_BY_NODE_TYPE[layerName] ?? TEMPLATE_BY_NODE_TYPE.Technical;
-  $('memSummary').value = tpl.summary;
-  $('memFieldBackground').value = tpl.background;
-  $('memFieldGoal').value = tpl.goal;
-  $('memFieldRules').value = tpl.rules.join('\n');
-  $('memFieldSteps').value = tpl.steps.join('\n');
-  $('memFieldNotes').value = tpl.notes;
+  fillStructuredTemplate($, tpl);
   updateGeneratedContent();
 }
 
 function isStructuredFieldsEmpty() {
-  return ![
-    $('memFieldBackground').value,
-    $('memFieldGoal').value,
-    $('memFieldRules').value,
-    $('memFieldSteps').value,
-    $('memFieldNotes').value,
-    $('memContent').value
-  ].some(v => String(v || '').trim().length > 0);
+  return isStructuredDraftEmpty($);
 }
 
 export function onLayerTypeChanged() {
@@ -284,14 +186,14 @@ export async function loadMemories() {
     _memories = sortMemoriesByRecent(memories);
     renderMemoryList();
   } catch (err) {
-    $('memoryList').innerHTML = `<div class="empty error">加载失败: ${err.message}</div>`;
+    $('memoryList').innerHTML = `<div class="empty error">鍔犺浇澶辫触: ${err.message}</div>`;
   }
 }
 
 function renderMemoryList() {
   const container = $('memoryList');
   if (_memories.length === 0) {
-    container.innerHTML = '<div class="empty">没有找到记忆</div>';
+    container.innerHTML = '<div class="empty">娌℃湁鎵惧埌璁板繂</div>';
     return;
   }
 
@@ -325,9 +227,9 @@ export function selectMemory(id) {
   $('memImportance').value = memory.importance || 0.5;
 
   setCheckedDisciplines(memory.disciplines || []);
-  renderListEditor('memFeaturesList', memory.features || [], '例如：character');
-  renderListEditor('memNodeIdField', memory.nodeId ? [memory.nodeId] : [], '例如：node-id');
-  renderListEditor('memTagsList', memory.tags || [], '例如：#lesson');
+  renderListEditor('memFeaturesList', memory.features || [], '渚嬪锛歝haracter');
+  renderListEditor('memNodeIdField', memory.nodeId ? [memory.nodeId] : [], '渚嬪锛歯ode-id');
+  renderListEditor('memTagsList', memory.tags || [], '渚嬪锛?lesson');
 
   clearStructuredFields();
   $('memFieldNotes').value = memory.content || '';
@@ -342,16 +244,16 @@ export function createNew() {
   renderMemoryList();
 
   $('memoryEditorForm').style.display = 'block';
-  $('memId').textContent = '新建记忆';
+  $('memId').textContent = '鏂板缓璁板繂';
   $('memSummary').value = '';
   $('memType').value = 'Semantic';
   $('memLayer').value = 'Technical';
   $('memImportance').value = 0.8;
 
   setCheckedDisciplines([]);
-  renderListEditor('memFeaturesList', [], '例如：character');
-  renderListEditor('memNodeIdField', [], '例如：node-id');
-  renderListEditor('memTagsList', [], '例如：#lesson');
+  renderListEditor('memFeaturesList', [], '渚嬪锛歝haracter');
+  renderListEditor('memNodeIdField', [], '渚嬪锛歯ode-id');
+  renderListEditor('memTagsList', [], '渚嬪锛?lesson');
 
   clearStructuredFields();
   fillTemplate('Technical');
@@ -360,15 +262,15 @@ export function createNew() {
 }
 
 export function addFeature() {
-  addListItem('memFeaturesList', '', '例如：character');
+  addListItem('memFeaturesList', '', '渚嬪锛歝haracter');
 }
 
 export function addNodeId() {
-  addListItem('memNodeIdField', '', '例如：node-id');
+  addListItem('memNodeIdField', '', '渚嬪锛歯ode-id');
 }
 
 export function addTag() {
-  addListItem('memTagsList', '', '例如：#lesson');
+  addListItem('memTagsList', '', '渚嬪锛?lesson');
 }
 
 export async function saveMemory() {
@@ -379,7 +281,7 @@ export async function saveMemory() {
 
   const request = {
     source: SOURCE_NAME_TO_VALUE.Human,
-    summary: $('memSummary').value.trim() || null,
+    summary: draft.summary || null,
     type: TYPE_NAME_TO_VALUE[typeName] ?? TYPE_NAME_TO_VALUE.Semantic,
     nodeType: NODE_TYPE_NAME_TO_VALUE[nodeTypeName] ?? NODE_TYPE_NAME_TO_VALUE.Technical,
     disciplines: getCheckedDisciplines(),
@@ -391,7 +293,7 @@ export async function saveMemory() {
   };
 
   if (!request.content) {
-    _showToast('正文内容不能为空', true);
+    _showToast('姝ｆ枃鍐呭涓嶈兘涓虹┖', true);
     return;
   }
 
@@ -401,17 +303,17 @@ export async function saveMemory() {
         method: 'PUT',
         body: request
       });
-      _showToast('更新成功');
+      _showToast('鏇存柊鎴愬姛');
     } else {
       await api('/memory/remember', {
         method: 'POST',
         body: request
       });
-      _showToast('创建成功');
+      _showToast('鍒涘缓鎴愬姛');
     }
     await loadMemories();
   } catch (err) {
-    _showToast('保存失败: ' + err.message, true);
+    _showToast('淇濆瓨澶辫触: ' + err.message, true);
   }
 }
 
@@ -419,18 +321,18 @@ export async function deleteMemory() {
   if (!_currentMemoryId) return;
 
   const confirmed = await _showConfirmModal(
-    '删除记忆',
-    '确定要删除这条记忆吗？此操作不可恢复。'
+    '鍒犻櫎璁板繂',
+    '纭畾瑕佸垹闄よ繖鏉¤蹇嗗悧锛熸鎿嶄綔涓嶅彲鎭㈠銆?
   );
   if (!confirmed) return;
 
   try {
     await api(`/memory/${_currentMemoryId}`, { method: 'DELETE' });
-    _showToast('删除成功');
+    _showToast('鍒犻櫎鎴愬姛');
     $('memoryEditorForm').style.display = 'none';
     await loadMemories();
   } catch (err) {
-    _showToast('删除失败: ' + err.message, true);
+    _showToast('鍒犻櫎澶辫触: ' + err.message, true);
   }
 }
 
@@ -451,8 +353,8 @@ function _showConfirmModal(title, message) {
         <h3 style="margin:0 0 12px;color:var(--text-primary,#e0e0e0)">${escapeHtml(title)}</h3>
         <p style="margin:0 0 20px;color:var(--text-secondary,#aaa)">${escapeHtml(message)}</p>
         <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn-cancel" style="padding:6px 16px;border:1px solid var(--border-color,#555);border-radius:4px;background:transparent;color:var(--text-secondary,#aaa);cursor:pointer">取消</button>
-          <button class="btn-confirm" style="padding:6px 16px;border:none;border-radius:4px;background:#e74c3c;color:#fff;cursor:pointer">删除</button>
+          <button class="btn-cancel" style="padding:6px 16px;border:1px solid var(--border-color,#555);border-radius:4px;background:transparent;color:var(--text-secondary,#aaa);cursor:pointer">鍙栨秷</button>
+          <button class="btn-confirm" style="padding:6px 16px;border:none;border-radius:4px;background:#e74c3c;color:#fff;cursor:pointer">鍒犻櫎</button>
         </div>
       </div>`;
 
@@ -483,3 +385,4 @@ export function applyTemplate() {
 
 bindStructuredFieldListeners();
 syncNodeTypeSelectOptions();
+

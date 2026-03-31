@@ -9,7 +9,7 @@ using ModelContextProtocol.Server;
 
 var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
 
-DnaApp.Create(args, new AppOptions
+var app = DnaApp.Create(args, new AppOptions
 {
     AppName = "Project DNA Client",
     AppDescription = "决策与执行客户端（MCP + Agent 入口）",
@@ -26,9 +26,9 @@ DnaApp.Create(args, new AppOptions
     }
 });
 
-DnaApp.AddCliCommand(new DefaultCliCommand());
+app.AddCliCommand(new DefaultCliCommand());
 
-DnaApp.ConfigureServices(services =>
+app.ConfigureServices(services =>
 {
     services.AddSingleton(new ClientRuntimeOptions { ServerBaseUrl = serverBaseUrl });
     services.AddHttpContextAccessor();
@@ -40,9 +40,9 @@ DnaApp.ConfigureServices(services =>
     }).AddHttpMessageHandler<ForwardAuthHeaderHandler>();
     services.AddSingleton<ClientPipelineStore>();
     services.AddSingleton<AgentPipelineRunner>();
-    services.AddSingleton<ClientIdeToolingService>();
+    services.AddClientToolingServices();
 
-    if (DnaApp.Mode == AppRunMode.Stdio)
+    if (app.Mode == AppRunMode.Stdio)
     {
         services.AddMcpServer(opts =>
         {
@@ -58,7 +58,7 @@ DnaApp.ConfigureServices(services =>
     }
 });
 
-DnaApp.ConfigureWebApp(web =>
+app.ConfigureWebApp(web =>
 {
     web.MapClientStatusEndpoints();
     web.MapClientProxyEndpoints();
@@ -67,4 +67,4 @@ DnaApp.ConfigureWebApp(web =>
     web.MapMcp("/mcp");
 });
 
-return await DnaApp.RunAsync();
+return await app.RunAsync();

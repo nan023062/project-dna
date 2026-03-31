@@ -1,6 +1,6 @@
 /**
- * 启动模块 — 直接进入主界面。
- * Server 是纯知识服务，无需项目配置。
+ * Server admin shell bootstrap.
+ * The server UI no longer has a project-selection setup flow.
  */
 
 import { $, api } from './utils.js';
@@ -14,7 +14,3 @@ export async function initSetup() {
     $('statusText').textContent = '连接失败: ' + e.message;
   }
 }
-
-export function showSetup() {}
-export async function setProject() {}
-export function openProjectBrowser() {}

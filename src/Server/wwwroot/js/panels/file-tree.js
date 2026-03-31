@@ -1,4 +1,5 @@
 import { $, api, escapeHtml } from '../utils.js';
+import { openRegisteredEditSidebar } from '../app-runtime.js';
 import { showTooltip, hideTooltip } from '../widgets/tooltip.js';
 
 let _roots = null;
@@ -428,9 +429,7 @@ function getPathDepth(path) {
 }
 
 function openModuleEditor(opts) {
-  if (window.openEditSidebar) {
-    window.openEditSidebar(opts);
-  }
+  openRegisteredEditSidebar(opts);
 }
 
 function bindRowTooltip(row, node, statusText, hasChildren) {

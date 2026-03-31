@@ -1,11 +1,25 @@
 /**
  * App entry for the Server admin UI.
- * Keeps fullscreen tabs, auto refresh, and window bridges in one place.
+ * Keeps the shell lifecycle, fullscreen tabs, and refresh flow in one place.
  */
 
 import { $, api, getAuthToken } from './utils.js';
-import { ui } from './ui/ui-manager.js';
-import { initSetup, showSetup, setProject, openProjectBrowser } from './setup.js';
+import {
+  registerEditSidebarOpener,
+  registerFileTreeActions,
+  registerModuleAdminActions,
+  registerRefreshHandler
+} from './app-runtime.js';
+import {
+  applyMetricValues,
+  formatCompactNumber,
+  registerFullscreenTabs,
+  renderSidebarMessage,
+  resetMetricValues
+} from '/dna-shared/js/core/host-shell.js';
+import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
+import { ui } from '/dna-shared/js/ui/ui-manager.js';
+import { initSetup } from './setup.js';
 import { renderTopology } from '/dna-shared/js/panels/topology.js';
 import {
   loadGovernanceStats,
@@ -30,13 +44,6 @@ import {
 } from './panels/memory-editor.js';
 import {
   loadReviewQueue,
-  selectSubmission as selectReviewSubmission,
-  reloadSelection as reloadReviewSelection,
-  login as loginReviewAdmin,
-  logout as logoutReviewAdmin,
-  approve as approveReviewSubmission,
-  reject as rejectReviewSubmission,
-  publish as publishReviewSubmission
 } from './panels/review-admin.js';
 import {
   loadModuleManagement,
@@ -57,72 +64,22 @@ import { loadFileTree, refreshFileTree } from './panels/file-tree.js';
 import {
   initEditSidebar,
   openEditSidebar,
-  closeEditSidebar,
-  onEditDisciplineChanged,
-  saveFromSidebar,
-  deleteFromSidebar,
-  onDepSearchInput,
-  onDepSearchKeydown
 } from './dialogs/module-editor.js';
 import { initDetail } from './panels/detail.js';
-import { openArchConfigDialog } from './dialogs/arch-config-dialog.js';
 import {
-  toggleChat,
   newChat,
   sendChatMessage,
   handleChatKeydown,
   autoResizeInput,
   initChatResize,
   switchChatMode,
-  loadSession,
   showSessionList,
   stopChat,
   openModelDropdown,
-  selectProvider,
-  continueChatFromLimit,
-  editQueueItem,
-  removeQueueItem,
-  keepEdit,
-  undoEdit,
-  beginTaskFromKnowledgeCard,
-  askClarifyingFromKnowledgeCard,
-  queueDependencyValidationFromKnowledgeCard,
-  runGovernanceCheckFromKnowledgeCard,
-  runSuggestedActionFromKnowledgeCard
 } from './chat/chat-panel.js';
 import { openLlmSettings, closeLlmSettings } from './chat/llm-settings.js';
 
-window.Governance = {
-  checkFreshness,
-  detectConflicts,
-  archiveStale,
-  condenseNodeKnowledge,
-  condenseAllKnowledge,
-  configureCondenseSchedule
-};
-window.MemoryEditor = {
-  loadMemories,
-  selectMemory,
-  createNew,
-  saveMemory,
-  deleteMemory,
-  applyTemplate,
-  onLayerTypeChanged,
-  addFeature,
-  addNodeId,
-  addTag
-};
-window.ReviewAdmin = {
-  loadReviewQueue,
-  selectSubmission: selectReviewSubmission,
-  reloadSelection: reloadReviewSelection,
-  login: loginReviewAdmin,
-  logout: logoutReviewAdmin,
-  approve: approveReviewSubmission,
-  reject: rejectReviewSubmission,
-  publish: publishReviewSubmission
-};
-window.ModuleAdmin = {
+registerModuleAdminActions({
   loadModuleManagement,
   saveModule,
   deleteModule,
@@ -136,20 +93,9 @@ window.ModuleAdmin = {
   saveDiscipline,
   deleteDiscipline,
   addLayerRow
-};
-window.FileTree = { loadFileTree, refreshFileTree };
-window.EditSidebar = {
-  openEditSidebar,
-  closeEditSidebar,
-  onEditDisciplineChanged,
-  saveFromSidebar,
-  deleteFromSidebar,
-  onDepSearchInput,
-  onDepSearchKeydown
-};
-window.openEditSidebar = openEditSidebar;
-window.openArchConfig = openArchConfigDialog;
-window.ui = ui;
+});
+registerFileTreeActions({ loadFileTree, refreshFileTree });
+registerEditSidebarOpener(openEditSidebar);
 
 let refreshTimer = null;
 let topoData = null;
@@ -158,65 +104,30 @@ let isRefreshing = false;
 let visibilityHandlerBound = false;
 let authRefreshPending = false;
 
-function formatSummaryMetric(value) {
-  if (!Number.isFinite(value)) return '-';
-
-  try {
-    return new Intl.NumberFormat('zh-CN', {
-      notation: 'compact',
-      maximumFractionDigits: 1
-    }).format(value);
-  } catch {
-    return String(value);
-  }
-}
-
 function initUI() {
   const mainApp = $('mainApp');
   if (!mainApp) return;
 
   ui.init(mainApp);
 
-  const tabDefs = [
-    { id: 'topology', onActivate: () => refreshTopologyOnly() },
-    { id: 'fileTree', onActivate: () => initEditSidebar().then(() => loadFileTree({ preserveState: true, showLoading: !_rootsHasRendered() })) },
-    { id: 'memoryMgmt', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
-    { id: 'reviewQueue', onActivate: () => loadReviewQueue() }
-  ];
-
-  for (const def of tabDefs) {
-    const tabBtn = document.querySelector(`.tab[data-tab="${def.id}"]`);
-    const panelEl = $('panel' + def.id.charAt(0).toUpperCase() + def.id.slice(1));
-    ui.fullscreen.registerTab(def.id, {
-      tabButtonEl: tabBtn,
-      panelEl,
-      onActivate: def.onActivate,
-      onDeactivate: null
-    });
-  }
+  registerFullscreenTabs(ui, [
+    { id: 'topology', tabButtonSelector: '.tab[data-tab="topology"]', onActivate: () => refreshTopologyOnly() },
+    {
+      id: 'fileTree',
+      tabButtonSelector: '.tab[data-tab="fileTree"]',
+      onActivate: () => initEditSidebar().then(() => loadFileTree({ preserveState: true, showLoading: !_rootsHasRendered() }))
+    },
+    { id: 'memoryMgmt', tabButtonSelector: '.tab[data-tab="memoryMgmt"]', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
+    { id: 'reviewQueue', tabButtonSelector: '.tab[data-tab="reviewQueue"]', onActivate: () => loadReviewQueue() }
+  ], $);
 }
 
 function resetTopologySummary() {
-  const ids = ['statModules', 'statEdges', 'statContainment', 'statCollaboration'];
-  for (const id of ids) {
-    const el = $(id);
-    if (!el) continue;
-    el.textContent = '-';
-    el.title = '';
-  }
+  resetMetricValues($, ['statModules', 'statEdges', 'statContainment', 'statCollaboration']);
 }
 
 function showTopologyMessage(title, message) {
-  const sidebar = $('archSidebar');
-  if (!sidebar) return;
-
-  sidebar.style.display = 'flex';
-  sidebar.innerHTML = `
-    <div class="sidebar-section">
-      <div class="sidebar-title">${title}</div>
-      <div class="sidebar-text">${message}</div>
-    </div>
-  `;
+  renderSidebarMessage($, 'archSidebar', title, message);
 }
 
 function getProtectedPanelMessage(error) {
@@ -243,10 +154,167 @@ function scheduleRefreshAfterAuthChange() {
   }, 0);
 }
 
+function clearReviewFilters() {
+  const status = $('reviewFilterStatus');
+  const submitter = $('reviewFilterSubmitter');
+  if (status) status.value = '';
+  if (submitter) submitter.value = '';
+  return loadReviewQueue();
+}
+
+async function handleStaticAction(action, element, event) {
+  switch (action) {
+    case 'refresh':
+      await refresh(true);
+      break;
+    case 'refresh-file-tree':
+      await refreshFileTree();
+      break;
+    case 'check-freshness':
+      await checkFreshness();
+      break;
+    case 'detect-conflicts':
+      await detectConflicts();
+      break;
+    case 'archive-stale':
+      await archiveStale();
+      break;
+    case 'condense-node-knowledge':
+      await condenseNodeKnowledge();
+      break;
+    case 'condense-all-knowledge':
+      await condenseAllKnowledge();
+      break;
+    case 'configure-condense-schedule':
+      await configureCondenseSchedule();
+      break;
+    case 'create-memory':
+      createNew();
+      break;
+    case 'apply-memory-template':
+      applyTemplate();
+      break;
+    case 'add-feature':
+      addFeature();
+      break;
+    case 'add-node-id':
+      addNodeId();
+      break;
+    case 'add-tag':
+      addTag();
+      break;
+    case 'save-memory':
+      await saveMemory();
+      break;
+    case 'delete-memory':
+      await deleteMemory();
+      break;
+    case 'load-review-queue':
+      await loadReviewQueue();
+      break;
+    case 'clear-review-filters':
+      await clearReviewFilters();
+      break;
+    case 'show-session-list':
+      showSessionList();
+      break;
+    case 'new-chat':
+      newChat();
+      break;
+    case 'send-chat-message':
+      await sendChatMessage();
+      break;
+    case 'stop-chat':
+      stopChat();
+      break;
+    case 'switch-chat-mode':
+      switchChatMode(element?.dataset.mode || 'agent');
+      break;
+    case 'open-model-dropdown':
+      openModelDropdown();
+      break;
+    case 'open-llm-settings':
+      openLlmSettings();
+      break;
+    case 'close-llm-settings':
+      closeLlmSettings();
+      break;
+    default:
+      if (action === 'switch-tab' && element?.dataset.tab) {
+        switchTab(element.dataset.tab);
+      }
+      break;
+  }
+}
+
+async function handleStaticChangeAction(action) {
+  switch (action) {
+    case 'load-memories':
+      await loadMemories();
+      break;
+    case 'memory-layer-type-changed':
+      onLayerTypeChanged();
+      break;
+    case 'load-review-queue':
+      await loadReviewQueue();
+      break;
+    default:
+      break;
+  }
+}
+
+function bindStaticUiEvents() {
+  bindDelegatedDocumentEvents([
+    {
+      eventName: 'click',
+      selector: '#llmSettingsOverlay',
+      handler: ({ event, element }) => {
+        if (event.target === element) {
+          closeLlmSettings();
+        }
+      }
+    },
+    {
+      eventName: 'click',
+      selector: '[data-action]',
+      preventDefault: true,
+      handler: ({ event, element }) => void handleStaticAction(element.dataset.action, element, event)
+    },
+    {
+      eventName: 'change',
+      selector: '[data-change-action]',
+      handler: ({ element }) => void handleStaticChangeAction(element.dataset.changeAction)
+    },
+    {
+      eventName: 'keydown',
+      selector: '[data-keydown-action]',
+      handler: ({ event, element }) => {
+        if (element.dataset.keydownAction === 'load-review-queue-on-enter' && event.key === 'Enter') {
+          event.preventDefault();
+          void loadReviewQueue();
+          return;
+        }
+
+        if (element.dataset.keydownAction === 'chat-keydown') {
+          handleChatKeydown(event);
+        }
+      }
+    },
+    {
+      eventName: 'input',
+      selector: '[data-input-action]',
+      handler: ({ element }) => {
+        if (element.dataset.inputAction === 'chat-auto-resize') {
+          autoResizeInput();
+        }
+      }
+    }
+  ]);
+}
+
 initDetail(switchTab);
 
 export function enterApp(projectRoot) {
-  $('setupPage').style.display = 'none';
   $('mainApp').classList.add('active');
   $('appWrapper').classList.add('active');
   $('projectPath').textContent = projectRoot;
@@ -257,11 +325,6 @@ export function enterApp(projectRoot) {
 
   refresh();
   startAutoRefresh();
-}
-
-export function showSetupFromApp() {
-  showSetup();
-  $('appWrapper').classList.remove('active');
 }
 
 function switchTab(tab) {
@@ -328,27 +391,12 @@ async function refreshTopologyOnly() {
     const containmentCount = topoData.containmentEdges ? topoData.containmentEdges.length : 0;
     const collaborationCount = topoData.collaborationEdges ? topoData.collaborationEdges.length : 0;
 
-    const statModules = $('statModules');
-    const statEdges = $('statEdges');
-    const statContainment = $('statContainment');
-    const statCollaboration = $('statCollaboration');
-
-    if (statModules) {
-      statModules.textContent = formatSummaryMetric(modulesCount);
-      statModules.title = String(modulesCount);
-    }
-    if (statEdges) {
-      statEdges.textContent = formatSummaryMetric(edgesCount);
-      statEdges.title = String(edgesCount);
-    }
-    if (statContainment) {
-      statContainment.textContent = formatSummaryMetric(containmentCount);
-      statContainment.title = String(containmentCount);
-    }
-    if (statCollaboration) {
-      statCollaboration.textContent = formatSummaryMetric(collaborationCount);
-      statCollaboration.title = String(collaborationCount);
-    }
+    applyMetricValues($, [
+      { id: 'statModules', value: modulesCount },
+      { id: 'statEdges', value: edgesCount },
+      { id: 'statContainment', value: containmentCount },
+      { id: 'statCollaboration', value: collaborationCount }
+    ], formatCompactNumber);
 
     const sidebar = $('archSidebar');
     if (sidebar && sidebar.querySelector('.sidebar-title')?.textContent === 'Access required') {
@@ -412,44 +460,14 @@ async function refresh(activeForce = true) {
   }
 }
 
+registerRefreshHandler(refresh);
+
 function _rootsHasRendered() {
   const container = $('fileTreeContent');
   return !!container && container.children.length > 0;
 }
 
-window.showSetup = showSetupFromApp;
-window.setProject = setProject;
-window.openProjectBrowser = openProjectBrowser;
-window.switchTab = switchTab;
-window.refresh = refresh;
-window.toggleChat = toggleChat;
-window.newChat = newChat;
-window.switchChatMode = switchChatMode;
-window.loadSession = loadSession;
-window.showSessionList = showSessionList;
-window.stopChat = stopChat;
-window.openModelDropdown = openModelDropdown;
-window.selectProvider = selectProvider;
-window.closeDd = () => {
-  const dd = document.getElementById('chatModelDropdown');
-  if (dd) dd.classList.add('hidden');
-};
-window.continueChatFromLimit = continueChatFromLimit;
-window.editQueueItem = editQueueItem;
-window.removeQueueItem = removeQueueItem;
-window.keepEdit = keepEdit;
-window.undoEdit = undoEdit;
-window.beginTaskFromKnowledgeCard = beginTaskFromKnowledgeCard;
-window.askClarifyingFromKnowledgeCard = askClarifyingFromKnowledgeCard;
-window.queueDependencyValidationFromKnowledgeCard = queueDependencyValidationFromKnowledgeCard;
-window.runGovernanceCheckFromKnowledgeCard = runGovernanceCheckFromKnowledgeCard;
-window.runSuggestedActionFromKnowledgeCard = runSuggestedActionFromKnowledgeCard;
-window.sendChatMessage = sendChatMessage;
-window.handleChatKeydown = handleChatKeydown;
-window.autoResizeInput = autoResizeInput;
-window.openLlmSettings = openLlmSettings;
-window.closeLlmSettings = closeLlmSettings;
-
 initSetup();
 initChatResize();
+bindStaticUiEvents();
 window.addEventListener('dna-admin-auth-changed', scheduleRefreshAfterAuthChange);

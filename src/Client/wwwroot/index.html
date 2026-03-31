@@ -28,15 +28,15 @@
           <div id="authLoginForm" class="client-auth-form">
             <input id="authUsername" type="text" placeholder="Username" />
             <input id="authPassword" type="password" placeholder="Password" />
-            <button class="btn btn-primary btn-sm" onclick="login()">Sign in</button>
+            <button class="btn btn-primary btn-sm" data-action="login">Sign in</button>
           </div>
           <div id="authUserBar" class="client-user-bar hidden">
             <span id="authUserInfo" class="client-user-info">-</span>
-            <button class="btn btn-secondary btn-sm" onclick="logout()">Sign out</button>
+            <button class="btn btn-secondary btn-sm" data-action="logout">Sign out</button>
           </div>
         </div>
         <a id="serverDashboardLink" class="btn btn-secondary btn-sm" href="http://127.0.0.1:5051" target="_blank" rel="noreferrer">Open Server</a>
-        <button class="btn btn-primary btn-sm" onclick="refreshAll()">Refresh</button>
+        <button class="btn btn-primary btn-sm" data-action="refresh-all">Refresh</button>
       </div>
     </header>
 
@@ -64,7 +64,13 @@
         </div>
       </section>
 
-      <section class="overview-panel" id="panelOverview">
+      <section class="workspace-tabs">
+        <button class="workspace-tab" data-tab="overview" data-action="switch-tab" data-tab-target="overview">Overview</button>
+        <button class="workspace-tab" data-tab="topology" data-action="switch-tab" data-tab-target="topology">Topology</button>
+        <button class="workspace-tab" data-tab="memory" data-action="switch-tab" data-tab-target="memory">Knowledge</button>
+      </section>
+
+      <section class="overview-panel workspace-panel" id="panelOverview">
         <div class="section-heading">
           <div>
             <h2>Status</h2>
@@ -72,11 +78,11 @@
           </div>
         </div>
         <div class="quick-actions">
-          <button class="btn btn-primary btn-sm" onclick="switchTab('topology')">Open Topology</button>
-          <button class="btn btn-secondary btn-sm" onclick="switchTab('memory')">Open Knowledge</button>
-          <button class="btn btn-secondary btn-sm" onclick="refreshToolingStatus()">Refresh Tooling</button>
-          <button class="btn btn-primary btn-sm" onclick="installTooling('cursor')">Install Cursor Tooling</button>
-          <button class="btn btn-primary btn-sm" onclick="installTooling('codex')">Install Codex Tooling</button>
+          <button class="btn btn-primary btn-sm" data-action="switch-tab" data-tab-target="topology">Open Topology</button>
+          <button class="btn btn-secondary btn-sm" data-action="switch-tab" data-tab-target="memory">Open Knowledge</button>
+          <button class="btn btn-secondary btn-sm" data-action="refresh-tooling-status">Refresh Tooling</button>
+          <button class="btn btn-primary btn-sm" data-action="install-tooling" data-target="cursor">Install Cursor Tooling</button>
+          <button class="btn btn-primary btn-sm" data-action="install-tooling" data-target="codex">Install Codex Tooling</button>
         </div>
         <div class="status-grid">
           <div class="status-card">
@@ -117,18 +123,13 @@
         </div>
       </section>
 
-      <section class="workspace-tabs">
-        <button class="workspace-tab active" data-tab="topology" onclick="switchTab('topology')">Topology</button>
-        <button class="workspace-tab" data-tab="memory" onclick="switchTab('memory')">Knowledge</button>
-      </section>
-
-      <section id="panelTopology" class="workspace-panel active">
+      <section id="panelTopology" class="workspace-panel">
         <div class="section-heading">
           <div>
             <h2>Topology Preview</h2>
             <p>Client reuses server topology data and graph rendering as the first local graph entry point.</p>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="refreshTopology()">Refresh Topology</button>
+          <button class="btn btn-secondary btn-sm" data-action="refresh-topology">Refresh Topology</button>
         </div>
         <div class="summary-bar">
           <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">Nodes</div></div>
@@ -148,7 +149,7 @@
             <h2>Knowledge Preview and Review Edit</h2>
             <p>Formal knowledge stays read-only here. Normal client edits become review submissions instead of direct formal writes.</p>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="refreshMemories()">Refresh Knowledge</button>
+          <button class="btn btn-secondary btn-sm" data-action="refresh-memories">Refresh Knowledge</button>
         </div>
 
         <div class="review-mode-banner">
@@ -159,21 +160,21 @@
         <div class="memory-layout">
           <div class="memory-sidebar">
             <div class="memory-filters">
-              <select id="memFilterLayer" onchange="window.MemoryEditor.loadMemories()">
+              <select id="memFilterLayer" data-change-action="load-memories">
                 <option value="">All Node Types</option>
                 <option value="Project">Project</option>
                 <option value="Department">Department</option>
                 <option value="Technical">Technical</option>
                 <option value="Team">Team</option>
               </select>
-              <select id="memFilterType" onchange="window.MemoryEditor.loadMemories()">
+              <select id="memFilterType" data-change-action="load-memories">
                 <option value="">All Memory Types</option>
                 <option value="Structural">Structural</option>
                 <option value="Semantic">Semantic</option>
                 <option value="Episodic">Episodic</option>
                 <option value="Procedural">Procedural</option>
               </select>
-              <button class="btn btn-primary btn-sm memory-new-btn" onclick="window.MemoryEditor.createNew()">New Review</button>
+              <button class="btn btn-primary btn-sm memory-new-btn" data-action="create-memory">New Review</button>
             </div>
 
             <div class="memory-sidebar-section">
@@ -187,7 +188,7 @@
                   <div class="memory-sidebar-heading">My Submissions</div>
                   <div class="submission-panel-copy">Changes you submit to the review queue appear here.</div>
                 </div>
-                <button class="btn btn-secondary btn-sm" type="button" onclick="window.MemoryEditor.loadSubmissions()">Refresh</button>
+                <button class="btn btn-secondary btn-sm" type="button" data-action="load-submissions">Refresh</button>
               </div>
               <div id="submissionList" class="submission-list"></div>
             </div>
@@ -200,7 +201,7 @@
                   <h3>Knowledge Edit <span id="memId" class="memory-page-subtitle"></span></h3>
                   <div id="memoryEditorHint" class="memory-editor-hint">Editing formal knowledge here creates a review submission.</div>
                 </div>
-                <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.applyTemplate()">Apply Template</button>
+                <button class="btn btn-secondary btn-sm" data-action="apply-memory-template">Apply Template</button>
               </div>
 
               <div id="submissionNotice" class="submission-notice hidden"></div>
@@ -213,7 +214,7 @@
               <div class="memory-form-row">
                 <div class="memory-form-group">
                   <label>Node Type</label>
-                  <select id="memLayer" onchange="window.MemoryEditor.onLayerTypeChanged()">
+                  <select id="memLayer" data-change-action="memory-layer-type-changed">
                     <option value="Project">Project</option>
                     <option value="Department">Department</option>
                     <option value="Technical">Technical</option>
@@ -222,7 +223,7 @@
                 </div>
                 <div class="memory-form-group">
                   <label>Memory Type</label>
-                  <select id="memType" onchange="window.MemoryEditor.onLayerTypeChanged()">
+                  <select id="memType" data-change-action="memory-layer-type-changed">
                     <option value="Structural">Structural</option>
                     <option value="Semantic">Semantic</option>
                     <option value="Episodic">Episodic</option>
@@ -253,19 +254,19 @@
                 <div class="memory-form-group">
                   <label>Features</label>
                   <div id="memFeaturesList" class="memory-list-editor"></div>
-                  <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addFeature()" type="button">+ Add</button>
+                  <button class="btn btn-secondary btn-sm" data-action="add-feature" type="button">+ Add</button>
                 </div>
                 <div class="memory-form-group">
                   <label>Node ID</label>
                   <div id="memNodeIdField" class="memory-list-editor"></div>
-                  <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addNodeId()" type="button">+ Add</button>
+                  <button class="btn btn-secondary btn-sm" data-action="add-node-id" type="button">+ Add</button>
                 </div>
               </div>
 
               <div class="memory-form-group">
                 <label>Tags</label>
                 <div id="memTagsList" class="memory-list-editor"></div>
-                <button class="btn btn-secondary btn-sm" onclick="window.MemoryEditor.addTag()" type="button">+ Add</button>
+                <button class="btn btn-secondary btn-sm" data-action="add-tag" type="button">+ Add</button>
               </div>
 
               <div class="memory-form-group">
@@ -302,8 +303,8 @@
               </div>
 
               <div class="memory-actions">
-                <button class="btn btn-primary btn-sm" onclick="window.MemoryEditor.saveMemory()">Submit Review</button>
-                <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" onclick="window.MemoryEditor.deleteMemory()" style="color:#ef4444;border-color:#ef4444;">Submit Delete Review</button>
+                <button class="btn btn-primary btn-sm" data-action="save-memory">Submit Review</button>
+                <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color:#ef4444;border-color:#ef4444;">Submit Delete Review</button>
               </div>
             </div>
             <div id="memoryEmptyState" class="empty">Select a formal knowledge entry on the left, or create a new review submission.</div>

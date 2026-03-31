@@ -4,25 +4,20 @@
  */
 
 import { $, api } from '../utils.js';
-
-function updateModelTag(model) {
-  const el = document.getElementById('chatModelTag');
-  if (el) el.textContent = model || 'Unavailable';
-}
+import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
+import { PROVIDER_PRESETS } from '/dna-shared/js/chat/provider-presets.js';
+import {
+  getActiveModelName,
+  getProviderBadgeClass,
+  updateModelTag as updateSharedModelTag
+} from '/dna-shared/js/chat/provider-ui.js';
 
 let providers = [];
 let activeProviderId = null;
 let editingProvider = null;
 let providersSupported = true;
 let providersMessage = '';
-
-const PRESETS = {
-  openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  anthropic: { name: 'Anthropic Claude', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-20250514', providerType: 'anthropic' },
-  deepseek: { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', providerType: 'openai' },
-  moonshot: { name: 'Moonshot', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k', providerType: 'openai' },
-  custom: { name: '', baseUrl: '', model: '', providerType: 'openai' }
-};
+let llmSettingsEventsBound = false;
 
 function getProviderErrorMessage(error) {
   if (error?.status === 401) {
@@ -42,7 +37,7 @@ function getProviderErrorMessage(error) {
 
 export async function loadProviders(force = false) {
   if (!force && !providersSupported && providersMessage) {
-    updateModelTag('Unavailable');
+    updateSharedModelTag($, 'Unavailable');
     return { supported: false, message: providersMessage };
   }
 
@@ -52,14 +47,14 @@ export async function loadProviders(force = false) {
     activeProviderId = data.activeProviderId || data.activeId || null;
     providersSupported = true;
     providersMessage = '';
-    updateModelTag(getActiveModelName());
+    updateSharedModelTag($, getActiveModelName(providers, activeProviderId));
     return { supported: true };
   } catch (error) {
     providers = [];
     activeProviderId = null;
     providersSupported = error?.status !== 404 ? true : false;
     providersMessage = getProviderErrorMessage(error);
-    updateModelTag('Unavailable');
+    updateSharedModelTag($, 'Unavailable');
     return { supported: false, message: providersMessage, error };
   }
 }
@@ -96,7 +91,7 @@ export async function switchProvider(id) {
   try {
     await requestSetActiveProvider(id);
     await loadProviders(true);
-    updateModelTag(getActiveModelName());
+    updateSharedModelTag($, getActiveModelName(providers, activeProviderId));
   } catch (error) {
     alert('Provider switch failed: ' + getProviderErrorMessage(error));
   }
@@ -113,9 +108,70 @@ export function closeLlmSettings() {
   editingProvider = null;
 }
 
-function getActiveModelName() {
-  const provider = providers.find(item => item.id === activeProviderId);
-  return provider ? provider.model : 'Unavailable';
+async function handleLlmAction(action, element) {
+  const providerId = element?.dataset.providerId
+    ? decodeURIComponent(element.dataset.providerId)
+    : '';
+
+  switch (action) {
+    case 'set-active':
+      if (providerId) {
+        await setActive(providerId);
+      }
+      break;
+    case 'edit':
+      if (providerId) {
+        startEdit(providerId);
+      }
+      break;
+    case 'delete':
+      if (providerId) {
+        await deleteProvider(providerId);
+      }
+      break;
+    case 'save':
+      await saveProvider();
+      break;
+    case 'cancel':
+      cancelEdit();
+      break;
+    default:
+      break;
+  }
+}
+
+function handleLlmChangeAction(action, element) {
+  switch (action) {
+    case 'apply-preset':
+      applyPreset(element?.value || '');
+      break;
+    default:
+      break;
+  }
+}
+
+function bindLlmSettingsEvents() {
+  if (llmSettingsEventsBound || typeof document === 'undefined') {
+    return;
+  }
+
+  llmSettingsEventsBound = true;
+
+  bindDelegatedDocumentEvents([
+    {
+      eventName: 'click',
+      selector: '[data-llm-action]',
+      within: '#llmSettingsBody',
+      preventDefault: true,
+      handler: ({ element }) => void handleLlmAction(element.dataset.llmAction, element)
+    },
+    {
+      eventName: 'change',
+      selector: '[data-llm-change-action]',
+      within: '#llmSettingsBody',
+      handler: ({ element }) => handleLlmChangeAction(element.dataset.llmChangeAction, element)
+    }
+  ]);
 }
 
 function renderSettings() {
@@ -136,17 +192,21 @@ function renderSettings() {
     html += '<div class="llm-provider-list">';
     for (const provider of providers) {
       const isActive = provider.id === activeProviderId;
-      const badge = provider.providerType === 'anthropic' ? 'anthropic' : 'openai';
+      const badge = getProviderBadgeClass(provider.providerType);
       html += `
-        <div class="llm-provider-card${isActive ? ' active' : ''}" onclick="window._llmSetActive('${provider.id}')">
+        <div
+          class="llm-provider-card${isActive ? ' active' : ''}"
+          data-llm-action="set-active"
+          data-provider-id="${encodeURIComponent(provider.id)}"
+        >
           <div class="llm-provider-info">
             <div class="llm-provider-name">${esc(provider.name || provider.model)}</div>
             <div class="llm-provider-meta">${esc(provider.model)} · ${esc(provider.apiKeyHint || 'no key hint')}</div>
           </div>
           <span class="llm-provider-badge ${badge}">${esc(provider.providerType || 'openai')}</span>
-          <div class="llm-provider-actions" onclick="event.stopPropagation()">
-            <button class="llm-provider-action-btn" onclick="window._llmEdit('${provider.id}')" title="Edit">Edit</button>
-            <button class="llm-provider-action-btn delete" onclick="window._llmDelete('${provider.id}')" title="Delete">Delete</button>
+          <div class="llm-provider-actions">
+            <button class="llm-provider-action-btn" data-llm-action="edit" data-provider-id="${encodeURIComponent(provider.id)}" title="Edit">Edit</button>
+            <button class="llm-provider-action-btn delete" data-llm-action="delete" data-provider-id="${encodeURIComponent(provider.id)}" title="Delete">Delete</button>
           </div>
         </div>`;
     }
@@ -170,7 +230,7 @@ function renderForm() {
     html += `<div class="llm-form-row">
       <div class="llm-form-group">
         <label>Preset</label>
-        <select id="llmPreset" onchange="window._llmApplyPreset(this.value)">
+        <select id="llmPreset" data-llm-change-action="apply-preset">
           <option value="">-- Select preset --</option>
           <option value="openai">OpenAI (GPT-4o)</option>
           <option value="anthropic">Anthropic (Claude)</option>
@@ -223,8 +283,8 @@ function renderForm() {
       </div>
     </div>
     <div class="llm-form-actions">
-      <button class="btn btn-primary btn-sm" onclick="window._llmSave()">${isEdit ? 'Save' : 'Add'}</button>
-      ${isEdit ? '<button class="btn btn-secondary btn-sm" onclick="window._llmCancelEdit()">Cancel</button>' : ''}
+      <button class="btn btn-primary btn-sm" data-llm-action="save">${isEdit ? 'Save' : 'Add'}</button>
+      ${isEdit ? '<button class="btn btn-secondary btn-sm" data-llm-action="cancel">Cancel</button>' : ''}
     </div>`;
 
   html += '</div>';
@@ -235,7 +295,7 @@ async function setActive(id) {
   try {
     await requestSetActiveProvider(id);
     await loadProviders(true);
-    updateModelTag(getActiveModelName());
+    updateSharedModelTag($, getActiveModelName(providers, activeProviderId));
     renderSettings();
   } catch (error) {
     alert('Provider switch failed: ' + getProviderErrorMessage(error));
@@ -315,7 +375,7 @@ function cancelEdit() {
 }
 
 function applyPreset(key) {
-  const preset = PRESETS[key];
+  const preset = PROVIDER_PRESETS[key];
   if (!preset) return;
 
   $('llmFormName').value = preset.name;
@@ -324,16 +384,11 @@ function applyPreset(key) {
   $('llmFormType').value = preset.providerType || 'openai';
 }
 
-window._llmSetActive = setActive;
-window._llmEdit = startEdit;
-window._llmDelete = deleteProvider;
-window._llmSave = saveProvider;
-window._llmCancelEdit = cancelEdit;
-window._llmApplyPreset = applyPreset;
-
 function esc(value) {
   if (!value) return '';
   const el = document.createElement('div');
   el.textContent = value;
   return el.innerHTML;
 }
+
+bindLlmSettingsEvents();

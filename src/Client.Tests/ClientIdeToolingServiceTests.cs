@@ -1,0 +1,62 @@
+using Dna.Client.Services.Tooling;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Client.Tests;
+
+public sealed class ClientIdeToolingServiceTests : IDisposable
+{
+    private readonly string _workspaceRoot = Path.Combine(Path.GetTempPath(), "dna-client-tooling-tests", Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void InstallTarget_ShouldCreateManagedFiles_AndReportInstalledStatus()
+    {
+        Directory.CreateDirectory(_workspaceRoot);
+        var tooling = CreateToolingService();
+
+        var report = tooling.InstallTarget("codex", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: true);
+        var status = tooling.GetStatus("codex", _workspaceRoot, "http://localhost:5052/mcp", "project-dna");
+
+        Assert.Empty(report.Warnings);
+        Assert.Equal(3, report.WrittenFiles.Count);
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "mcp.json")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "prompts", "project-dna-mcp-hook.md")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "agents", "project-dna-mcp-hooks.md")));
+        Assert.True(status.McpConfigured);
+        Assert.True(status.Installed);
+    }
+
+    [Fact]
+    public void InstallTarget_ShouldSkipManagedFiles_WhenReplaceExistingIsFalse()
+    {
+        Directory.CreateDirectory(_workspaceRoot);
+        var tooling = CreateToolingService();
+
+        var firstReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: true);
+        var promptPath = firstReport.Paths.PromptFile;
+        var agentPath = firstReport.Paths.AgentFile;
+        File.WriteAllText(promptPath, "custom prompt");
+        File.WriteAllText(agentPath, "custom agent");
+
+        var secondReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: false);
+
+        Assert.Contains(promptPath, secondReport.SkippedFiles);
+        Assert.Contains(agentPath, secondReport.SkippedFiles);
+        Assert.Equal("custom prompt", File.ReadAllText(promptPath));
+        Assert.Equal("custom agent", File.ReadAllText(agentPath));
+    }
+
+    private static ClientIdeToolingService CreateToolingService()
+    {
+        return new ServiceCollection()
+            .AddClientToolingServices()
+            .BuildServiceProvider()
+            .GetRequiredService<ClientIdeToolingService>();
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_workspaceRoot))
+            Directory.Delete(_workspaceRoot, recursive: true);
+    }
+}

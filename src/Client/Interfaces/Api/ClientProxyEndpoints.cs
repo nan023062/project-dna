@@ -64,7 +64,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -93,7 +93,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -109,7 +109,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -124,7 +124,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -139,7 +139,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -154,7 +154,7 @@ public static class ClientProxyEndpoints
             }
             catch (Exception ex)
             {
-                return HandleProxyError(ex, api.BaseUrl);
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
             }
         });
     }
@@ -170,21 +170,4 @@ public static class ClientProxyEndpoints
         return $"{path}?{string.Join("&", pairs)}";
     }
 
-    private static IResult HandleProxyError(Exception ex, string targetServer)
-    {
-        var message = ex.Message ?? "Proxy request failed.";
-        const string prefix = "HTTP ";
-        if (message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            var separator = message.IndexOf(':');
-            if (separator > prefix.Length &&
-                int.TryParse(message[prefix.Length..separator], out var statusCode))
-            {
-                var body = message[(separator + 1)..].Trim();
-                return Results.Json(new { error = body, targetServer }, statusCode: statusCode);
-            }
-        }
-
-        return Results.Json(new { error = message, targetServer }, statusCode: 502);
-    }
 }

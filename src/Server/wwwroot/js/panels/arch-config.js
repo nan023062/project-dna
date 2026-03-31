@@ -1,4 +1,5 @@
 import { $, api, escapeHtml } from '../utils.js';
+import { requestRefresh } from '../app-runtime.js';
 
 let _manifest = null;
 let _selectedModuleKey = null;
@@ -290,7 +291,7 @@ export async function saveModule() {
   }
 
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
   alert('模块保存成功');
 }
 
@@ -307,7 +308,7 @@ export async function deleteModule() {
 
   clearModuleForm();
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
 }
 
 export async function saveCrosswork() {
@@ -331,7 +332,7 @@ export async function saveCrosswork() {
   }
 
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
   alert('CrossWork 保存成功');
 }
 
@@ -348,7 +349,7 @@ export async function deleteCrosswork() {
 
   clearCrossworkForm();
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
 }
 
 export function newModule() {
@@ -480,7 +481,7 @@ export async function saveDiscipline() {
 
   _selectedDisciplineId = id;
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
   alert('部门保存成功');
 }
 
@@ -494,5 +495,5 @@ export async function deleteDiscipline() {
 
   clearDisciplineForm();
   await loadModuleManagement();
-  if (window.refresh) window.refresh();
+  requestRefresh();
 }

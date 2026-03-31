@@ -1,10 +1,13 @@
 import { $, api, escapeHtml, getAuthToken, setAuthToken, clearAuthToken } from '../utils.js';
+import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
+import { formatUserIdentity, isAdminUser } from '/dna-shared/js/auth/user-session.js';
 
 let currentUser = null;
 let authMessage = '';
 let submissions = [];
 let selectedSubmissionId = null;
 let selectedSubmission = null;
+let reviewUiEventsBound = false;
 
 const STATUS_META = {
   draft: { label: '草稿', cls: 'draft' },
@@ -93,10 +96,6 @@ function normalizeOperation(operation) {
 
 function operationLabel(operation) {
   return OPERATION_LABEL[normalizeOperation(operation)] || '变更';
-}
-
-function isAdminUser(user) {
-  return String(user?.role || '').trim().toLowerCase() === 'admin';
 }
 
 function formatTime(value) {
@@ -407,6 +406,58 @@ function renderSubmissionDiff(item) {
   `;
 }
 
+async function handleReviewAction(action, element) {
+  switch (action) {
+    case 'login':
+      await login();
+      break;
+    case 'logout':
+      logout();
+      break;
+    case 'select-submission': {
+      const submissionId = element?.dataset.submissionId
+        ? decodeURIComponent(element.dataset.submissionId)
+        : '';
+      if (submissionId) {
+        await selectSubmission(submissionId);
+      }
+      break;
+    }
+    case 'reload-selection':
+      await reloadSelection();
+      break;
+    case 'approve':
+      await approve();
+      break;
+    case 'reject':
+      await reject();
+      break;
+    case 'publish':
+      await publish();
+      break;
+    default:
+      break;
+  }
+}
+
+function bindReviewUiEvents() {
+  if (reviewUiEventsBound || typeof document === 'undefined') {
+    return;
+  }
+
+  reviewUiEventsBound = true;
+
+  bindDelegatedDocumentEvents([
+    {
+      eventName: 'click',
+      selector: '[data-review-action]',
+      preventDefault: true,
+      shouldHandle: ({ element }) => Boolean(element.closest('#reviewAuthSection, #reviewSubmissionList, #reviewDetailContent')),
+      handler: ({ element }) => void handleReviewAction(element.dataset.reviewAction, element)
+    }
+  ]);
+}
+
 function renderAuthSection() {
   const host = $('reviewAuthSection');
   if (!host) return;
@@ -417,12 +468,12 @@ function renderAuthSection() {
         <div class="review-auth-main">
           <div class="review-auth-title">管理员已登录</div>
           <div class="review-auth-copy">
-            当前账号：${escapeHtml(currentUser.username || currentUser.id || 'admin')}。
+            当前账号：${escapeHtml(formatUserIdentity(currentUser, 'admin'))}。
             这里可以查看待审核提交，并执行审核通过、驳回和发布。
           </div>
         </div>
         <div class="review-auth-actions">
-          <button class="btn btn-secondary btn-sm" onclick="window.ReviewAdmin.logout()">退出登录</button>
+          <button class="btn btn-secondary btn-sm" data-review-action="logout">退出登录</button>
         </div>
       </div>
       <div id="reviewAuthMessage" class="review-auth-message">${escapeHtml(authMessage)}</div>
@@ -441,7 +492,7 @@ function renderAuthSection() {
       <div class="review-auth-form">
         <input id="reviewLoginUsername" type="text" placeholder="用户名" value="admin" />
         <input id="reviewLoginPassword" type="password" placeholder="密码" value="admin" />
-        <button class="btn btn-primary btn-sm" onclick="window.ReviewAdmin.login()">登录</button>
+        <button class="btn btn-primary btn-sm" data-review-action="login">登录</button>
       </div>
     </div>
     <div id="reviewAuthMessage" class="review-auth-message">${escapeHtml(authMessage)}</div>
@@ -509,7 +560,11 @@ function renderList(message = '') {
     const isActive = selectedSubmissionId === item.id ? 'active' : '';
 
     return `
-      <div class="review-list-item ${isActive}" data-id="${item.id}">
+      <div
+        class="review-list-item ${isActive}"
+        data-review-action="select-submission"
+        data-submission-id="${encodeURIComponent(item.id)}"
+      >
         <div class="review-list-item-top">
           <span class="review-status-badge ${status.cls}">${status.label}</span>
           <span class="review-operation">${escapeHtml(operationLabel(item.operation))}</span>
@@ -521,11 +576,6 @@ function renderList(message = '') {
     `;
   }).join('');
 
-  host.querySelectorAll('.review-list-item').forEach(element => {
-    element.addEventListener('click', () => {
-      window.ReviewAdmin.selectSubmission(element.dataset.id);
-    });
-  });
 }
 
 function renderDetail(message = '') {
@@ -563,7 +613,7 @@ function renderDetail(message = '') {
           <span>提交编号：${escapeHtml(item.id)}</span>
         </div>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="window.ReviewAdmin.reloadSelection()">刷新详情</button>
+      <button class="btn btn-secondary btn-sm" data-review-action="reload-selection">刷新详情</button>
     </div>
 
     <div class="review-detail-grid">
@@ -587,9 +637,9 @@ function renderDetail(message = '') {
           placeholder="可选：填写审核意见、驳回原因或发布备注。"
         >${escapeHtml(item.reviewNote || '')}</textarea>
         <div class="review-action-row">
-          <button class="btn btn-primary btn-sm" ${canApprove ? '' : 'disabled'} onclick="window.ReviewAdmin.approve()">审核通过</button>
-          <button class="btn btn-secondary btn-sm" ${canReject ? '' : 'disabled'} onclick="window.ReviewAdmin.reject()">驳回</button>
-          <button class="btn btn-primary btn-sm" ${canPublish ? '' : 'disabled'} onclick="window.ReviewAdmin.publish()">发布</button>
+          <button class="btn btn-primary btn-sm" ${canApprove ? '' : 'disabled'} data-review-action="approve">审核通过</button>
+          <button class="btn btn-secondary btn-sm" ${canReject ? '' : 'disabled'} data-review-action="reject">驳回</button>
+          <button class="btn btn-primary btn-sm" ${canPublish ? '' : 'disabled'} data-review-action="publish">发布</button>
         </div>
         <div class="review-action-hint">
           普通提交需要先通过审核，再进入正式知识库发布。管理员直写正式库是另一条审计通道，不经过这里。
@@ -982,3 +1032,5 @@ function renderUnifiedDiffLine(op) {
     <span class="diff-text">${escapeHtml(op.text || '')}</span>
   </div>`;
 }
+
+bindReviewUiEvents();

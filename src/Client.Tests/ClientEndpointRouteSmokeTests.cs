@@ -21,7 +21,7 @@ public class ClientEndpointRouteSmokeTests
         builder.Services.AddSingleton<DnaServerApi>();
         builder.Services.AddSingleton<ClientPipelineStore>();
         builder.Services.AddSingleton<AgentPipelineRunner>();
-        builder.Services.AddSingleton<ClientIdeToolingService>();
+        builder.Services.AddClientToolingServices();
         var app = builder.Build();
 
         app.MapClientStatusEndpoints();

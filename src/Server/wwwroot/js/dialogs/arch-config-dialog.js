@@ -1,5 +1,6 @@
 import { $, api, escapeHtml } from '../utils.js';
-import { ui } from '../ui/ui-manager.js';
+import { requestRefresh } from '../app-runtime.js';
+import { ui } from '/dna-shared/js/ui/ui-manager.js';
 import { loadModuleManagement, newDiscipline, saveDiscipline, deleteDiscipline, addLayerRow } from '../panels/arch-config.js';
 
 const DIALOG_ID = 'arch-config';
@@ -36,7 +37,7 @@ export function openArchConfigDialog() {
     title: '组织架构配置（部门 + 层级 + 工种）',
     content: formHtml,
     className: 'arch-config-dialog',
-    onClose: () => { if (window.refresh) window.refresh(); }
+    onClose: () => { requestRefresh(); }
   });
 
   dialog.bodyEl.querySelector('#archAddLayerBtn').addEventListener('click', addLayerRow);

@@ -1,5 +1,6 @@
 import { $, api, escapeHtml } from '../utils.js';
-import { ui } from '../ui/ui-manager.js';
+import { getFileTreeActions, getModuleAdminActions, requestRefresh } from '../app-runtime.js';
+import { ui } from '/dna-shared/js/ui/ui-manager.js';
 
 const DIALOG_ID = 'module-editor';
 let _manifest = null;
@@ -401,9 +402,9 @@ export async function saveFromSidebar() {
   alert('模块保存成功');
   closeEditSidebar();
 
-  if (window.refresh) window.refresh();
-  if (window.FileTree?.loadFileTree) window.FileTree.loadFileTree();
-  if (window.ModuleAdmin?.loadModuleManagement) window.ModuleAdmin.loadModuleManagement();
+  requestRefresh();
+  getFileTreeActions()?.loadFileTree?.();
+  getModuleAdminActions()?.loadModuleManagement?.();
 }
 
 export async function deleteFromSidebar() {
@@ -415,8 +416,8 @@ export async function deleteFromSidebar() {
   if (res?.error) { alert('删除失败: ' + res.error); return; }
 
   closeEditSidebar();
-  if (window.refresh) window.refresh();
-  if (window.FileTree?.loadFileTree) window.FileTree.loadFileTree();
+  requestRefresh();
+  getFileTreeActions()?.loadFileTree?.();
 }
 
 function guessDiscipline(path) {

@@ -1,12 +1,17 @@
 /**
- * 聊天面板模块
- * - 管理聊天面板 UI 状态（打开/关闭/新对话）
- * - 发送消息与接收 SSE 流式响应
- * - 渲染用户/助手消息、工具调用状态
+ * 鑱婂ぉ闈㈡澘妯″潡
+ * - 绠＄悊鑱婂ぉ闈㈡澘 UI 鐘舵€侊紙鎵撳紑/鍏抽棴/鏂板璇濓級
+ * - 鍙戦€佹秷鎭笌鎺ユ敹 SSE 娴佸紡鍝嶅簲
+ * - 娓叉煋鐢ㄦ埛/鍔╂墜娑堟伅銆佸伐鍏疯皟鐢ㄧ姸鎬?
  */
 
 import { $, api, apiFetch } from '../utils.js';
 import { getProviderList, getActiveProviderId, switchProvider, openLlmSettings } from './llm-settings.js';
+import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
+import {
+  renderModelDropdownHtml,
+  updateModelTag as updateSharedModelTag
+} from '/dna-shared/js/chat/provider-ui.js';
 
 let chatOpen = true;
 let messages = [];
@@ -21,11 +26,110 @@ let actionSequence = 0;
 const actionButtonMap = new Map();
 let viewingSessionList = false;
 let cachedChatHTML = '';
+let chatUiEventsBound = false;
 
 window.addEventListener('beforeunload', () => { saveCurrentSession(); });
 
+async function handleChatUiAction(action, element) {
+  switch (action) {
+    case 'show-session-list':
+      await showSessionList();
+      break;
+    case 'load-session': {
+      const id = element?.dataset.sessionId ? decodeURIComponent(element.dataset.sessionId) : '';
+      if (id) {
+        await loadSession(id);
+      }
+      break;
+    }
+    case 'toggle-tool-group':
+    case 'toggle-tool-card':
+      element.parentElement?.classList.toggle('expanded');
+      break;
+    case 'edit-queue-item': {
+      const index = Number(element?.dataset.queueIndex);
+      if (Number.isInteger(index)) {
+        editQueueItem(index);
+      }
+      break;
+    }
+    case 'remove-queue-item': {
+      const index = Number(element?.dataset.queueIndex);
+      if (Number.isInteger(index)) {
+        removeQueueItem(index);
+      }
+      break;
+    }
+    case 'continue-chat':
+      continueChatFromLimit();
+      break;
+    case 'open-llm-settings':
+      await openLlmSettings();
+      if (element?.dataset.closeDropdown === 'true') {
+        closeDd();
+      }
+      break;
+    case 'select-provider': {
+      const providerId = element?.dataset.providerId ? decodeURIComponent(element.dataset.providerId) : '';
+      if (providerId) {
+        await selectProvider(providerId);
+      }
+      break;
+    }
+    case 'keep-edit':
+      await keepEdit(element?.dataset.editId || '', element);
+      break;
+    case 'undo-edit':
+      await undoEdit(element?.dataset.editId || '', element?.dataset.path || '', element);
+      break;
+    case 'begin-task-knowledge':
+      beginTaskFromKnowledgeCard(element?.dataset.moduleName || '', element);
+      break;
+    case 'ask-clarifying':
+      askClarifyingFromKnowledgeCard(element?.dataset.question || '', element);
+      break;
+    case 'queue-dependency-validation':
+      queueDependencyValidationFromKnowledgeCard(
+        element?.dataset.caller || '',
+        element?.dataset.callee || '',
+        element
+      );
+      break;
+    case 'run-governance-check':
+      runGovernanceCheckFromKnowledgeCard(element);
+      break;
+    case 'run-suggested-action':
+      runSuggestedActionFromKnowledgeCard(
+        element?.dataset.prompt || '',
+        element?.dataset.display || '',
+        element
+      );
+      break;
+    default:
+      break;
+  }
+}
+
+function bindChatUiEvents() {
+  if (chatUiEventsBound || typeof document === 'undefined') {
+    return;
+  }
+
+  chatUiEventsBound = true;
+
+  bindDelegatedDocumentEvents([
+    {
+      eventName: 'click',
+      selector: '[data-chat-action]',
+      preventDefault: true,
+      shouldHandle: ({ element }) => Boolean(element.closest('#chatMessages, #chatQueue, #chatModelDropdown')),
+      handler: ({ element }) => void handleChatUiAction(element.dataset.chatAction, element)
+    }
+  ]);
+}
+
 export function toggleChat() {
-  // 右侧 AI 面板改为常驻：不再支持开关。
+  // 鍙充晶 AI 闈㈡澘鏀逛负甯搁┗锛氫笉鍐嶆敮鎸佸紑鍏炽€?
   chatOpen = true;
   const panel = $('chatPanel');
   const btn = $('chatToggleBtn');
@@ -82,36 +186,36 @@ export async function showSessionList() {
   cachedChatHTML = container.innerHTML;
   viewingSessionList = true;
 
-  container.innerHTML = '<div class="session-list-loading">加载中...</div>';
+  container.innerHTML = '<div class="session-list-loading">鍔犺浇涓?..</div>';
 
   try {
     const data = await api('/agent/sessions');
     const resp = { ok: true };
     if (!resp.ok) {
-      container.innerHTML = '<div class="chat-welcome"><p>无法加载历史会话</p></div>';
+      container.innerHTML = '<div class="chat-welcome"><p>鏃犳硶鍔犺浇鍘嗗彶浼氳瘽</p></div>';
       return;
     }
     const sessions = data.sessions || [];
 
     let html = `<div class="session-list-header">
-      <span class="session-list-title">历史会话</span>
-      <button class="session-list-back-btn" onclick="showSessionList()" title="返回当前对话">✕</button>
+      <span class="session-list-title">鍘嗗彶浼氳瘽</span>
+      <button class="session-list-back-btn" data-chat-action="show-session-list" title="杩斿洖褰撳墠瀵硅瘽">鉁?/button>
     </div>`;
 
     if (sessions.length === 0) {
-      html += '<div class="session-list-empty">暂无历史会话</div>';
+      html += '<div class="session-list-empty">鏆傛棤鍘嗗彶浼氳瘽</div>';
     } else {
       html += '<div class="session-list-items">';
       for (const s of sessions) {
         const isActive = s.id === sessionId;
         const modeLabel = { agent: 'Agent', chat: 'Chat', plan: 'Plan' }[(s.mode || '').toLowerCase()] || s.mode || '';
         const time = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '';
-        const title = s.title || '无标题';
+        const title = s.title || '鏃犳爣棰?;
         const msgCount = s.messageCount || 0;
-        html += `<div class="chat-session-item${isActive ? ' active' : ''}" onclick="loadSession('${escapeHtml(s.id)}')">
+        html += `<div class="chat-session-item${isActive ? ' active' : ''}" data-chat-action="load-session" data-session-id="${encodeURIComponent(s.id)}">
           <div class="chat-session-title">${escapeHtml(title)}</div>
-          <div class="chat-session-meta">${modeLabel}${msgCount > 0 ? ' · ' + msgCount + ' 条消息' : ''}${time ? ' · ' + time : ''}</div>
-          ${isActive ? '<div class="chat-session-badge">当前</div>' : ''}
+          <div class="chat-session-meta">${modeLabel}${msgCount > 0 ? ' 路 ' + msgCount + ' 鏉℃秷鎭? : ''}${time ? ' 路 ' + time : ''}</div>
+          ${isActive ? '<div class="chat-session-badge">褰撳墠</div>' : ''}
         </div>`;
       }
       html += '</div>';
@@ -120,7 +224,7 @@ export async function showSessionList() {
     container.innerHTML = html;
   } catch (err) {
     console.warn('[chat] showSessionList failed:', err);
-    container.innerHTML = '<div class="chat-welcome"><p>加载历史会话失败</p></div>';
+    container.innerHTML = '<div class="chat-welcome"><p>鍔犺浇鍘嗗彶浼氳瘽澶辫触</p></div>';
   }
 }
 
@@ -158,7 +262,7 @@ function renderMessages() {
     if (toolCount > 0 && (i === messages.length - 1 || (messages[i+1] && messages[i+1].role !== 'tool'))) {
       const group = document.createElement('div');
       group.className = 'chat-tool-group done';
-      group.innerHTML = `<div class="chat-tool-summary" onclick="this.parentElement.classList.toggle('expanded')"><span class="tool-group-icon">⚡</span><span class="tool-summary-text">使用了 ${toolCount} 个工具</span></div>`;
+      group.innerHTML = `<div class="chat-tool-summary" data-chat-action="toggle-tool-group"><span class="tool-group-icon">鈿?/span><span class="tool-summary-text">浣跨敤浜?${toolCount} 涓伐鍏?/span></div>`;
       container.appendChild(group);
       toolCount = 0;
     }
@@ -170,10 +274,10 @@ function showWelcome() {
   const container = $('chatMessages');
   container.innerHTML = `
     <div class="chat-welcome">
-      <div class="chat-welcome-icon">🤖</div>
-      <p><strong>Project DNA AI 助手</strong></p>
-      <p>我可以帮你理解项目结构、阅读和编写代码。</p>
-      <p style="color:#64748b;font-size:12px;margin-top:8px;">Shift+Enter 换行 · Enter 发送</p>
+      <div class="chat-welcome-icon">馃</div>
+      <p><strong>Project DNA AI 鍔╂墜</strong></p>
+      <p>鎴戝彲浠ュ府浣犵悊瑙ｉ」鐩粨鏋勩€侀槄璇诲拰缂栧啓浠ｇ爜銆?/p>
+      <p style="color:#64748b;font-size:12px;margin-top:8px;">Shift+Enter 鎹㈣ 路 Enter 鍙戦€?/p>
     </div>`;
 }
 
@@ -187,8 +291,8 @@ export async function sendChatMessage() {
 
   enqueueMessage({
     text,
-    resume: text === '继续' && lastRunInterrupted,
-    displayText: text === '继续' && lastRunInterrupted ? '继续（断点续跑）' : text
+    resume: text === '缁х画' && lastRunInterrupted,
+    displayText: text === '缁х画' && lastRunInterrupted ? '缁х画锛堟柇鐐圭画璺戯級' : text
   });
 }
 
@@ -220,8 +324,8 @@ export function beginTaskFromKnowledgeCard(encodedModuleName, btn) {
   const safeModuleName = moduleName.replaceAll('"', '\\"');
   const actionId = registerActionButton(btn);
   enqueueMessage({
-    text: `请调用 begin_task("${safeModuleName}") 并进入该模块继续执行。`,
-    displayText: `进入模块 ${moduleName}`,
+    text: `璇疯皟鐢?begin_task("${safeModuleName}") 骞惰繘鍏ヨ妯″潡缁х画鎵ц銆俙,
+    displayText: `杩涘叆妯″潡 ${moduleName}`,
     actionId
   });
 }
@@ -233,7 +337,7 @@ export function askClarifyingFromKnowledgeCard(encodedQuestion, btn) {
   const actionId = registerActionButton(btn);
   enqueueMessage({
     text: question,
-    displayText: `澄清：${shortenText(question, 24)}`,
+    displayText: `婢勬竻锛?{shortenText(question, 24)}`,
     actionId
   });
 }
@@ -251,8 +355,8 @@ export function queueDependencyValidationFromKnowledgeCard(encodedCaller, encode
   const safeCallee = callee.replaceAll('"', '\\"');
   const actionId = registerActionButton(btn);
   enqueueMessage({
-    text: `请调用 validate_dependency(callerModule="${safeCaller}", calleeModule="${safeCallee}")，并说明是否允许访问、边界级别和后续建议。`,
-    displayText: `校验依赖 ${caller} → ${callee}`,
+    text: `璇疯皟鐢?validate_dependency(callerModule="${safeCaller}", calleeModule="${safeCallee}")锛屽苟璇存槑鏄惁鍏佽璁块棶銆佽竟鐣岀骇鍒拰鍚庣画寤鸿銆俙,
+    displayText: `鏍￠獙渚濊禆 ${caller} 鈫?${callee}`,
     actionId
   });
 }
@@ -264,8 +368,8 @@ export function runGovernanceCheckFromKnowledgeCard(btn) {
 
   const actionId = registerActionButton(btn);
   enqueueMessage({
-    text: '请调用 evolve() 执行一次治理预检，并输出高风险模块和可执行的渐进式重构步骤。',
-    displayText: '执行治理预检',
+    text: '璇疯皟鐢?evolve() 鎵ц涓€娆℃不鐞嗛妫€锛屽苟杈撳嚭楂橀闄╂ā鍧楀拰鍙墽琛岀殑娓愯繘寮忛噸鏋勬楠ゃ€?,
+    displayText: '鎵ц娌荤悊棰勬',
     actionId
   });
 }
@@ -302,7 +406,7 @@ function registerActionButton(btn) {
   }
 
   if (!btn.dataset.originalLabel) {
-    btn.dataset.originalLabel = (btn.textContent || '').trim() || '执行';
+    btn.dataset.originalLabel = (btn.textContent || '').trim() || '鎵ц';
   }
 
   const actionId = `qa_${Date.now().toString(36)}_${(actionSequence++).toString(36)}`;
@@ -327,43 +431,43 @@ function updateActionButtonState(actionId, status) {
 
 function setActionButtonState(btn, status) {
   if (!btn) return;
-  const baseLabel = btn.dataset.originalLabel || (btn.textContent || '').trim() || '执行';
+  const baseLabel = btn.dataset.originalLabel || (btn.textContent || '').trim() || '鎵ц';
   btn.classList.remove('busy', 'queued', 'running', 'done', 'paused', 'failed');
   btn.dataset.actionStatus = status;
 
   if (status === 'queued') {
     btn.classList.add('queued');
     btn.disabled = true;
-    btn.textContent = '⏳ 已入队';
-    btn.title = '动作已加入消息队列';
+    btn.textContent = '鈴?宸插叆闃?;
+    btn.title = '鍔ㄤ綔宸插姞鍏ユ秷鎭槦鍒?;
     return;
   }
   if (status === 'running') {
     btn.classList.add('running');
     btn.disabled = true;
-    btn.textContent = '⚙ 执行中';
-    btn.title = '动作正在执行';
+    btn.textContent = '鈿?鎵ц涓?;
+    btn.title = '鍔ㄤ綔姝ｅ湪鎵ц';
     return;
   }
   if (status === 'done') {
     btn.classList.add('done');
     btn.disabled = false;
-    btn.textContent = '✓ 已执行';
-    btn.title = '动作已执行，可再次点击重跑';
+    btn.textContent = '鉁?宸叉墽琛?;
+    btn.title = '鍔ㄤ綔宸叉墽琛岋紝鍙啀娆＄偣鍑婚噸璺?;
     return;
   }
   if (status === 'paused') {
     btn.classList.add('paused');
     btn.disabled = false;
-    btn.textContent = '↻ 已中断';
-    btn.title = '执行中断，可点击重试';
+    btn.textContent = '鈫?宸蹭腑鏂?;
+    btn.title = '鎵ц涓柇锛屽彲鐐瑰嚮閲嶈瘯';
     return;
   }
   if (status === 'failed') {
     btn.classList.add('failed');
     btn.disabled = false;
-    btn.textContent = '⚠ 失败';
-    btn.title = '动作执行失败，可点击重试';
+    btn.textContent = '鈿?澶辫触';
+    btn.title = '鍔ㄤ綔鎵ц澶辫触锛屽彲鐐瑰嚮閲嶈瘯';
     return;
   }
 
@@ -388,7 +492,7 @@ async function processQueue() {
 
       if (item.resume) {
         updateActionButtonState(item.actionId, 'running');
-        appendUserMessage(item.displayText || item.text || '继续');
+        appendUserMessage(item.displayText || item.text || '缁х画');
         const runState = await streamAssistantResponse({ resume: true });
         finalizeActionQueueItem(item.actionId, Boolean(runState?.interrupted));
         continue;
@@ -432,9 +536,9 @@ function renderQueueUI() {
   queueContainer.innerHTML = messageQueue.map((text, i) =>
     `<div class="chat-queue-item">
       <span class="queue-index">${i + 1}</span>
-      <span class="queue-text">${escapeHtml((text.displayText || text.text || '').length > 40 ? (text.displayText || text.text || '').slice(0, 40) + '…' : (text.displayText || text.text || ''))}</span>
-      <button class="queue-edit" onclick="editQueueItem(${i})" title="编辑">✎</button>
-      <button class="queue-remove" onclick="removeQueueItem(${i})" title="删除">✕</button>
+      <span class="queue-text">${escapeHtml((text.displayText || text.text || '').length > 40 ? (text.displayText || text.text || '').slice(0, 40) + '鈥? : (text.displayText || text.text || ''))}</span>
+      <button class="queue-edit" data-chat-action="edit-queue-item" data-queue-index="${i}" title="缂栬緫">鉁?/button>
+      <button class="queue-remove" data-chat-action="remove-queue-item" data-queue-index="${i}" title="鍒犻櫎">鉁?/button>
     </div>`
   ).join('');
 }
@@ -475,14 +579,14 @@ async function expandMentions(text) {
         const resp = await fetch(`/api/memory/query?tags=identity&limit=1`);
         if (resp.ok) {
           const data = await resp.json();
-          if (data && data.length > 0) attachments.push(`@${ref} (模块记忆):\n${data[0].content.slice(0, 5000)}`);
+          if (data && data.length > 0) attachments.push(`@${ref} (妯″潡璁板繂):\n${data[0].content.slice(0, 5000)}`);
         }
       }
     } catch {}
   }
 
   return attachments.length > 0
-    ? text + '\n\n--- 引用的上下文 ---\n' + attachments.join('\n\n')
+    ? text + '\n\n--- 寮曠敤鐨勪笂涓嬫枃 ---\n' + attachments.join('\n\n')
     : text;
 }
 
@@ -500,7 +604,7 @@ export function autoResizeInput() {
   ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
 }
 
-// ── Message rendering ──
+// 鈹€鈹€ Message rendering 鈹€鈹€
 
 function appendUserMessage(text) {
   const container = $('chatMessages');
@@ -573,74 +677,74 @@ function sealCurrentBubble() {
 }
 
 const TOOL_ICONS = {
-  edit_file: '📝', write_file: '📄', read_file: '📖', list_files: '📁',
-  grep: '🔍', search_files: '🔍', find_files: '📁', run_command: '▶', restore_checkpoint: '↩',
-  begin_task: '🎯', get_topology: '🗺', validate_dependency: '🔗',
-  query_retrieval: '🧭',
-  query_knowledge_graph: '🧠',
-  create_plan: '📋', update_plan: '📋'
+  edit_file: '馃摑', write_file: '馃搫', read_file: '馃摉', list_files: '馃搧',
+  grep: '馃攳', search_files: '馃攳', find_files: '馃搧', run_command: '鈻?, restore_checkpoint: '鈫?,
+  begin_task: '馃幆', get_topology: '馃椇', validate_dependency: '馃敆',
+  query_retrieval: '馃Л',
+  query_knowledge_graph: '馃',
+  create_plan: '馃搵', update_plan: '馃搵'
 };
 let toolCardMap = {};
 
 const TOOL_VERBS = {
-  grep: '已搜索',
-  search_files: '已搜索',
-  read_file: '已读取',
-  list_files: '已列出',
-  find_files: '已查找',
-  write_file: '已写入',
-  edit_file: '已编辑',
-  run_command: '已执行',
-  restore_checkpoint: '已恢复',
-  begin_task: '已开始任务',
-  get_module_context: '已获取上下文',
-  validate_dependency: '已校验依赖',
-  set_current_module: '已切换模块',
-  get_current_module: '已检查模块',
-  get_call_stack: '已检查栈',
-  get_topology: '已获取拓扑',
-  get_topology_summary: '已获取拓扑摘要',
-  query_retrieval: '已查询',
-  query_knowledge_graph: '已查询知识图谱',
-  get_execution_plan: '已生成计划',
-  suspend_and_push: '已挂起',
-  complete_and_pop: '已完成',
-  update_task_status: '已更新状态',
-  remember: '已记录记忆',
-  recall: '已检索记忆',
-  verify_memory: '已验证记忆',
-  get_feature_knowledge: '已获取特性知识',
-  write_history: '已记录历史',
-  write_lesson: '已记录教训',
-  register_module: '已注册模块',
-  auto_register_modules: '已自动注册模块',
-  upsert_discipline: '已更新部门',
-  relocate_module: '已迁移模块',
-  remove_orphan: '已移除孤儿',
-  plan_task: '已创建计划',
-  activate_plan: '已激活计划',
-  next_step: '已获取下一步',
-  complete_step: '已完成步骤',
-  create_plan: '已创建计划',
-  update_plan: '已更新计划'
+  grep: '宸叉悳绱?,
+  search_files: '宸叉悳绱?,
+  read_file: '宸茶鍙?,
+  list_files: '宸插垪鍑?,
+  find_files: '宸叉煡鎵?,
+  write_file: '宸插啓鍏?,
+  edit_file: '宸茬紪杈?,
+  run_command: '宸叉墽琛?,
+  restore_checkpoint: '宸叉仮澶?,
+  begin_task: '宸插紑濮嬩换鍔?,
+  get_module_context: '宸茶幏鍙栦笂涓嬫枃',
+  validate_dependency: '宸叉牎楠屼緷璧?,
+  set_current_module: '宸插垏鎹㈡ā鍧?,
+  get_current_module: '宸叉鏌ユā鍧?,
+  get_call_stack: '宸叉鏌ユ爤',
+  get_topology: '宸茶幏鍙栨嫇鎵?,
+  get_topology_summary: '宸茶幏鍙栨嫇鎵戞憳瑕?,
+  query_retrieval: '宸叉煡璇?,
+  query_knowledge_graph: '宸叉煡璇㈢煡璇嗗浘璋?,
+  get_execution_plan: '宸茬敓鎴愯鍒?,
+  suspend_and_push: '宸叉寕璧?,
+  complete_and_pop: '宸插畬鎴?,
+  update_task_status: '宸叉洿鏂扮姸鎬?,
+  remember: '宸茶褰曡蹇?,
+  recall: '宸叉绱㈣蹇?,
+  verify_memory: '宸查獙璇佽蹇?,
+  get_feature_knowledge: '宸茶幏鍙栫壒鎬х煡璇?,
+  write_history: '宸茶褰曞巻鍙?,
+  write_lesson: '宸茶褰曟暀璁?,
+  register_module: '宸叉敞鍐屾ā鍧?,
+  auto_register_modules: '宸茶嚜鍔ㄦ敞鍐屾ā鍧?,
+  upsert_discipline: '宸叉洿鏂伴儴闂?,
+  relocate_module: '宸茶縼绉绘ā鍧?,
+  remove_orphan: '宸茬Щ闄ゅ鍎?,
+  plan_task: '宸插垱寤鸿鍒?,
+  activate_plan: '宸叉縺娲昏鍒?,
+  next_step: '宸茶幏鍙栦笅涓€姝?,
+  complete_step: '宸插畬鎴愭楠?,
+  create_plan: '宸插垱寤鸿鍒?,
+  update_plan: '宸叉洿鏂拌鍒?
 };
 
 function appendToolCall(name, args, description, toolCallId) {
   sealCurrentBubble();
   const block = getOrCreateAssistantBlock();
   const cardId = 'tc_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
-  const icon = TOOL_ICONS[name] || '🔧';
+  const icon = TOOL_ICONS[name] || '馃敡';
   const desc = formatToolTitle(name, args, description);
 
   const card = document.createElement('div');
   card.className = 'tool-card running';
   card.id = cardId;
   card.innerHTML = `
-    <div class="tool-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+    <div class="tool-card-header" data-chat-action="toggle-tool-card">
       <span class="tool-card-icon">${icon}</span>
       <span class="tool-card-title">${escapeHtml(desc)}</span>
       <div class="tool-card-spinner"><div class="spinner"></div></div>
-      <span class="tool-card-arrow">▸</span>
+      <span class="tool-card-arrow">鈻?/span>
     </div>
     <div class="tool-card-body"></div>`;
   block.appendChild(card);
@@ -702,7 +806,7 @@ function markToolDone(name, detail, description, result, toolCallId) {
   card.classList.remove('running');
   card.classList.add('done');
   const spinner = card.querySelector('.tool-card-spinner');
-  if (spinner) spinner.innerHTML = '<span class="tool-card-check">✓</span>';
+  if (spinner) spinner.innerHTML = '<span class="tool-card-check">鉁?/span>';
 
   const body = card.querySelector('.tool-card-body');
   if (body) {
@@ -725,8 +829,8 @@ function renderRetrievalDetail(result) {
   const parsed = typeof result === 'string' ? tryParseJson(result) : result;
   if (!parsed || typeof parsed !== 'object') {
     const text = String(result || '').trim();
-    if (!text) return '<div class="tool-search-info">统一检索完成。</div>';
-    return `<div class="tool-search-info">统一检索结果解析失败：${escapeHtml(text.slice(0, 180))}</div>`;
+    if (!text) return '<div class="tool-search-info">缁熶竴妫€绱㈠畬鎴愩€?/div>';
+    return `<div class="tool-search-info">缁熶竴妫€绱㈢粨鏋滆В鏋愬け璐ワ細${escapeHtml(text.slice(0, 180))}</div>`;
   }
 
   const locate = parsed.locate && typeof parsed.locate === 'object' ? parsed.locate : null;
@@ -747,7 +851,7 @@ function renderRetrievalDetail(result) {
         evidence: locate.evidence || [],
         summary: locate.summary || ''
       })
-    : '<div class="tool-search-info">当前未返回模块定位结果。</div>';
+    : '<div class="tool-search-info">褰撳墠鏈繑鍥炴ā鍧楀畾浣嶇粨鏋溿€?/div>';
 
   const planSection = plan ? renderRetrievalPlanSection(plan) : '';
   const answerSection = answer ? renderRetrievalAnswerSection(answer) : '';
@@ -767,8 +871,8 @@ function renderRetrievalPlanSection(plan) {
   const assumptions = normalizeStringArray(plan.assumptions).slice(0, 4);
 
   const orderHtml = executionOrder.length > 0
-    ? `<div class="kg-order">${executionOrder.map((m, idx) => `${idx > 0 ? '<span class="kg-order-sep">→</span>' : ''}<span>${escapeHtml(m)}</span>`).join('')}</div>`
-    : '<div class="tool-search-info">暂无执行顺序。</div>';
+    ? `<div class="kg-order">${executionOrder.map((m, idx) => `${idx > 0 ? '<span class="kg-order-sep">鈫?/span>' : ''}<span>${escapeHtml(m)}</span>`).join('')}</div>`
+    : '<div class="tool-search-info">鏆傛棤鎵ц椤哄簭銆?/div>';
 
   const checklistHtml = checklist.length > 0
     ? `<ul class="kg-list">${checklist.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul>`
@@ -787,12 +891,12 @@ function renderRetrievalPlanSection(plan) {
     : '';
 
   return `<div class="kg-section">
-    <div class="kg-label">开发计划</div>
+    <div class="kg-label">寮€鍙戣鍒?/div>
     ${orderHtml}
-    ${checklistHtml ? `<div class="kg-label" style="margin-top:8px;">执行清单</div>${checklistHtml}` : ''}
-    ${risksHtml ? `<div class="kg-label" style="margin-top:8px;">风险</div>${risksHtml}` : ''}
-    ${rollbackHtml ? `<div class="kg-label" style="margin-top:8px;">回滚计划</div>${rollbackHtml}` : ''}
-    ${assumptionsHtml ? `<div class="kg-label" style="margin-top:8px;">假设</div>${assumptionsHtml}` : ''}
+    ${checklistHtml ? `<div class="kg-label" style="margin-top:8px;">鎵ц娓呭崟</div>${checklistHtml}` : ''}
+    ${risksHtml ? `<div class="kg-label" style="margin-top:8px;">椋庨櫓</div>${risksHtml}` : ''}
+    ${rollbackHtml ? `<div class="kg-label" style="margin-top:8px;">鍥炴粴璁″垝</div>${rollbackHtml}` : ''}
+    ${assumptionsHtml ? `<div class="kg-label" style="margin-top:8px;">鍋囪</div>${assumptionsHtml}` : ''}
   </div>`;
 }
 
@@ -804,13 +908,13 @@ function renderRetrievalAnswerSection(answer) {
   const assumptions = normalizeStringArray(answer.assumptions).slice(0, 4);
 
   return `<div class="kg-section">
-    <div class="kg-label">技术答复</div>
-    ${answerText ? `<div class="kg-summary">${escapeHtml(answerText)}</div>` : '<div class="tool-search-info">暂无答复文本。</div>'}
+    <div class="kg-label">鎶€鏈瓟澶?/div>
+    ${answerText ? `<div class="kg-summary">${escapeHtml(answerText)}</div>` : '<div class="tool-search-info">鏆傛棤绛斿鏂囨湰銆?/div>'}
     <div class="kg-tags" style="margin-top:6px;">
       <span class="kg-tag">answer confidence: ${confidencePct}%</span>
     </div>
-    ${assumptions.length > 0 ? `<div class="kg-label" style="margin-top:8px;">答复假设</div><ul class="kg-list">${assumptions.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul>` : ''}
-    ${unknowns.length > 0 ? `<div class="kg-label" style="margin-top:8px;">未确定项</div><ul class="kg-list">${unknowns.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul>` : ''}
+    ${assumptions.length > 0 ? `<div class="kg-label" style="margin-top:8px;">绛斿鍋囪</div><ul class="kg-list">${assumptions.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul>` : ''}
+    ${unknowns.length > 0 ? `<div class="kg-label" style="margin-top:8px;">鏈‘瀹氶」</div><ul class="kg-list">${unknowns.map(v => `<li>${escapeHtml(v)}</li>`).join('')}</ul>` : ''}
   </div>`;
 }
 
@@ -818,8 +922,8 @@ function renderKnowledgeGraphDetail(result) {
   const parsed = typeof result === 'string' ? tryParseJson(result) : result;
   if (!parsed || typeof parsed !== 'object') {
     const text = String(result || '').trim();
-    if (!text) return '<div class="tool-search-info">知识图谱查询完成。</div>';
-    return `<div class="tool-search-info">知识图谱结果解析失败：${escapeHtml(text.slice(0, 180))}</div>`;
+    if (!text) return '<div class="tool-search-info">鐭ヨ瘑鍥捐氨鏌ヨ瀹屾垚銆?/div>';
+    return `<div class="tool-search-info">鐭ヨ瘑鍥捐氨缁撴灉瑙ｆ瀽澶辫触锛?{escapeHtml(text.slice(0, 180))}</div>`;
   }
 
   const confidence = clampConfidence(parsed.confidence);
@@ -833,45 +937,45 @@ function renderKnowledgeGraphDetail(result) {
   const governanceHints = Array.isArray(parsed.governanceHints) ? parsed.governanceHints.slice(0, 4) : [];
 
   const moduleQuickActions = primaryModules.slice(0, 3).map(moduleName => (
-    `<button class="kg-action-btn" onclick="beginTaskFromKnowledgeCard('${encodeURIComponent(moduleName)}', this)">进入 ${escapeHtml(moduleName)}</button>`
+    `<button class="kg-action-btn" data-chat-action="begin-task-knowledge" data-module-name="${encodeURIComponent(moduleName)}">杩涘叆 ${escapeHtml(moduleName)}</button>`
   )).join('');
   const dependencyQuickActions = (primaryModules.length > 0 && relatedModules.length > 0)
     ? relatedModules.slice(0, 2).map(moduleName => (
-        `<button class="kg-action-btn secondary" onclick="queueDependencyValidationFromKnowledgeCard('${encodeURIComponent(primaryModules[0])}', '${encodeURIComponent(moduleName)}', this)">校验 ${escapeHtml(primaryModules[0])} → ${escapeHtml(moduleName)}</button>`
+        `<button class="kg-action-btn secondary" data-chat-action="queue-dependency-validation" data-caller="${encodeURIComponent(primaryModules[0])}" data-callee="${encodeURIComponent(moduleName)}">鏍￠獙 ${escapeHtml(primaryModules[0])} 鈫?${escapeHtml(moduleName)}</button>`
       )).join('')
     : '';
   const clarifyQuickActions = clarifyingQuestions.length > 0
     ? clarifyingQuestions.slice(0, 3).map(question => (
-        `<button class="kg-action-btn secondary" onclick="askClarifyingFromKnowledgeCard('${encodeURIComponent(question)}', this)" title="${escapeHtml(question)}">${escapeHtml(shortenText(question, 26))}</button>`
+        `<button class="kg-action-btn secondary" data-chat-action="ask-clarifying" data-question="${encodeURIComponent(question)}" title="${escapeHtml(question)}">${escapeHtml(shortenText(question, 26))}</button>`
       )).join('')
     : '';
   const hasGovernanceRisk = governanceHints.some(h =>
     Number(h?.errorCount || 0) >= 3 || Number(h?.warningCount || 0) >= 8
   );
   const governanceQuickAction = hasGovernanceRisk
-    ? `<button class="kg-action-btn warn" onclick="runGovernanceCheckFromKnowledgeCard(this)">先执行治理预检</button>`
+    ? '<button class="kg-action-btn warn" data-chat-action="run-governance-check">鍏堟墽琛屾不鐞嗛妫€</button>'
     : '';
 
   const primaryHtml = primaryModules.length > 0
-    ? `<div class="kg-section"><div class="kg-label">候选模块</div><div class="kg-chip-row">${
+    ? `<div class="kg-section"><div class="kg-label">鍊欓€夋ā鍧?/div><div class="kg-chip-row">${
         primaryModules.map(m => `<span class="kg-chip primary">${escapeHtml(m)}</span>`).join('')
       }</div></div>`
     : '';
 
   const relatedHtml = relatedModules.length > 0
-    ? `<div class="kg-section"><div class="kg-label">关联模块</div><div class="kg-chip-row">${
+    ? `<div class="kg-section"><div class="kg-label">鍏宠仈妯″潡</div><div class="kg-chip-row">${
         relatedModules.map(m => `<span class="kg-chip">${escapeHtml(m)}</span>`).join('')
       }</div></div>`
     : '';
 
   const orderHtml = executionOrder.length > 0
-    ? `<div class="kg-section"><div class="kg-label">执行顺序</div><div class="kg-order">${
-        executionOrder.map((m, idx) => `${idx > 0 ? '<span class="kg-order-sep">→</span>' : ''}<span>${escapeHtml(m)}</span>`).join('')
+    ? `<div class="kg-section"><div class="kg-label">鎵ц椤哄簭</div><div class="kg-order">${
+        executionOrder.map((m, idx) => `${idx > 0 ? '<span class="kg-order-sep">鈫?/span>' : ''}<span>${escapeHtml(m)}</span>`).join('')
       }</div></div>`
     : '';
 
   const governanceHtml = governanceHints.length > 0
-    ? `<div class="kg-section"><div class="kg-label">治理提示</div><div class="kg-govern-list">${
+    ? `<div class="kg-section"><div class="kg-label">娌荤悊鎻愮ず</div><div class="kg-govern-list">${
         governanceHints.map(h => renderGovernanceHint(h)).join('')
       }</div></div>`
     : '';
@@ -882,28 +986,28 @@ function renderKnowledgeGraphDetail(result) {
   );
 
   const clarifyHtml = parsed.needsClarification && clarifyingQuestions.length > 0
-    ? `<div class="kg-section"><div class="kg-label">建议先澄清</div><ul class="kg-list">${
+    ? `<div class="kg-section"><div class="kg-label">寤鸿鍏堟緞娓?/div><ul class="kg-list">${
         clarifyingQuestions.map(q => `<li>${escapeHtml(q)}</li>`).join('')
       }</ul></div>`
     : '';
   const clarifyActionHtml = parsed.needsClarification && clarifyQuickActions
-    ? `<div class="kg-section"><div class="kg-label">澄清快捷动作（点击直发）</div><div class="kg-action-row">${clarifyQuickActions}</div></div>`
+    ? `<div class="kg-section"><div class="kg-label">婢勬竻蹇嵎鍔ㄤ綔锛堢偣鍑荤洿鍙戯級</div><div class="kg-action-row">${clarifyQuickActions}</div></div>`
     : '';
   const dependencyActionHtml = dependencyQuickActions
-    ? `<div class="kg-section"><div class="kg-label">依赖校验快捷动作</div><div class="kg-action-row">${dependencyQuickActions}</div></div>`
+    ? `<div class="kg-section"><div class="kg-label">渚濊禆鏍￠獙蹇嵎鍔ㄤ綔</div><div class="kg-action-row">${dependencyQuickActions}</div></div>`
     : '';
   const moduleActionHtml = moduleQuickActions
-    ? `<div class="kg-section"><div class="kg-label">模块跳转</div><div class="kg-action-row">${moduleQuickActions}</div></div>`
+    ? `<div class="kg-section"><div class="kg-label">妯″潡璺宠浆</div><div class="kg-action-row">${moduleQuickActions}</div></div>`
     : '';
   const governanceActionHtml = governanceQuickAction
-    ? `<div class="kg-section"><div class="kg-label">治理快捷动作</div><div class="kg-action-row">${governanceQuickAction}</div></div>`
+    ? `<div class="kg-section"><div class="kg-label">娌荤悊蹇嵎鍔ㄤ綔</div><div class="kg-action-row">${governanceQuickAction}</div></div>`
     : '';
 
   return `<div class="tool-kg">
     <div class="kg-top-row">
       <div class="kg-tags">
         <span class="kg-tag">intent: ${escapeHtml(String(parsed.intent || 'mixed'))}</span>
-        <span class="kg-tag">游戏角色: ${escapeHtml(formatGameRoleTag(parsed.role || 'coder'))}</span>
+        <span class="kg-tag">娓告垙瑙掕壊: ${escapeHtml(formatGameRoleTag(parsed.role || 'coder'))}</span>
       </div>
       <span class="kg-confidence-text ${confidenceClass}">${confidencePct}%</span>
     </div>
@@ -958,15 +1062,15 @@ function clampConfidence(value) {
 function shortenText(text, maxLen) {
   const value = String(text || '');
   const limit = Math.max(4, Number(maxLen) || 24);
-  return value.length <= limit ? value : value.slice(0, limit - 1) + '…';
+  return value.length <= limit ? value : value.slice(0, limit - 1) + '鈥?;
 }
 
 function formatGameRoleTag(role) {
   const normalized = String(role || '').trim().toLowerCase();
-  if (normalized === 'programmer' || normalized === 'coder') return '程序';
-  if (normalized === 'planner' || normalized === 'designer' || normalized === 'design') return '策划';
-  if (normalized === 'artist' || normalized === 'art') return '美术';
-  return '程序';
+  if (normalized === 'programmer' || normalized === 'coder') return '绋嬪簭';
+  if (normalized === 'planner' || normalized === 'designer' || normalized === 'design') return '绛栧垝';
+  if (normalized === 'artist' || normalized === 'art') return '缇庢湳';
+  return '绋嬪簭';
 }
 
 function buildSuggestedActionList(suggestedActions, context) {
@@ -983,7 +1087,7 @@ function buildSuggestedActionList(suggestedActions, context) {
   }).filter(Boolean).join('');
 
   if (!rows) return '';
-  return `<div class="kg-section"><div class="kg-label">建议动作（可点击执行）</div><ul class="kg-list kg-action-list">${rows}</ul></div>`;
+  return `<div class="kg-section"><div class="kg-label">寤鸿鍔ㄤ綔锛堝彲鐐瑰嚮鎵ц锛?/div><ul class="kg-list kg-action-list">${rows}</ul></div>`;
 }
 
 function buildActionButtonsForSuggestion(actionText, context) {
@@ -1000,42 +1104,42 @@ function buildActionButtonsForSuggestion(actionText, context) {
   const beginTaskModuleMatch = text.match(/begin_task\s*\(\s*"([^"]+)"\s*\)/i);
   if (beginTaskModuleMatch) {
     const moduleNames = beginTaskModuleMatch[1]
-      .split(/[,，]/)
+      .split(/[,锛宂/)
       .map(v => v.trim())
       .filter(Boolean)
       .slice(0, 3);
     moduleNames.forEach(moduleName => {
-      buttons.push(`<button class="kg-action-btn secondary" onclick="beginTaskFromKnowledgeCard('${encodeURIComponent(moduleName)}', this)">进入 ${escapeHtml(moduleName)}</button>`);
+      buttons.push(`<button class="kg-action-btn secondary" data-chat-action="begin-task-knowledge" data-module-name="${encodeURIComponent(moduleName)}">杩涘叆 ${escapeHtml(moduleName)}</button>`);
     });
   } else if (/begin_task\s*\(\s*\)/i.test(text)) {
-    buttons.push(`<button class="kg-action-btn secondary" onclick="runSuggestedActionFromKnowledgeCard('${encodeURIComponent('请调用 begin_task() 返回项目模块速查表。')}', '${encodeURIComponent('获取模块速查表')}', this)">获取模块速查表</button>`);
+    buttons.push(`<button class="kg-action-btn secondary" data-chat-action="run-suggested-action" data-prompt="${encodeURIComponent('璇疯皟鐢?begin_task() 杩斿洖椤圭洰妯″潡閫熸煡琛ㄣ€?)}" data-display="${encodeURIComponent('鑾峰彇妯″潡閫熸煡琛?)}">鑾峰彇妯″潡閫熸煡琛?/button>`);
   }
 
   if (lower.includes('validate_dependency')) {
     if (primaryModules.length > 0 && relatedModules.length > 0) {
       relatedModules.slice(0, 2).forEach(moduleName => {
-        buttons.push(`<button class="kg-action-btn secondary" onclick="queueDependencyValidationFromKnowledgeCard('${encodeURIComponent(primaryModules[0])}', '${encodeURIComponent(moduleName)}', this)">校验 ${escapeHtml(primaryModules[0])} → ${escapeHtml(moduleName)}</button>`);
+        buttons.push(`<button class="kg-action-btn secondary" data-chat-action="queue-dependency-validation" data-caller="${encodeURIComponent(primaryModules[0])}" data-callee="${encodeURIComponent(moduleName)}">鏍￠獙 ${escapeHtml(primaryModules[0])} 鈫?${escapeHtml(moduleName)}</button>`);
       });
     } else {
-      buttons.push(`<button class="kg-action-btn secondary" onclick="runSuggestedActionFromKnowledgeCard('${encodeURIComponent('请调用 validate_dependency(callerModule, calleeModule) 并说明依赖是否合法。')}', '${encodeURIComponent('执行依赖校验')}', this)">执行依赖校验</button>`);
+      buttons.push(`<button class="kg-action-btn secondary" data-chat-action="run-suggested-action" data-prompt="${encodeURIComponent('璇疯皟鐢?validate_dependency(callerModule, calleeModule) 骞惰鏄庝緷璧栨槸鍚﹀悎娉曘€?)}" data-display="${encodeURIComponent('鎵ц渚濊禆鏍￠獙')}">鎵ц渚濊禆鏍￠獙</button>`);
     }
   }
 
-  if (lower.includes('evolve()') || lower.includes('治理')) {
-    buttons.push(`<button class="kg-action-btn warn" onclick="runGovernanceCheckFromKnowledgeCard(this)">执行治理预检</button>`);
+  if (lower.includes('evolve()') || lower.includes('娌荤悊')) {
+    buttons.push('<button class="kg-action-btn warn" data-chat-action="run-governance-check">鎵ц娌荤悊棰勬</button>');
   }
 
-  if (lower.includes('澄清') && clarifyingQuestions.length > 0) {
-    buttons.push(`<button class="kg-action-btn secondary" onclick="askClarifyingFromKnowledgeCard('${encodeURIComponent(clarifyingQuestions[0])}', this)">发送澄清问题</button>`);
+  if (lower.includes('婢勬竻') && clarifyingQuestions.length > 0) {
+    buttons.push(`<button class="kg-action-btn secondary" data-chat-action="ask-clarifying" data-question="${encodeURIComponent(clarifyingQuestions[0])}">鍙戦€佹緞娓呴棶棰?/button>`);
   }
 
-  if ((lower.includes('执行顺序') || lower.includes('按顺序')) && executionOrder.length > 0) {
+  if ((lower.includes('鎵ц椤哄簭') || lower.includes('鎸夐『搴?)) && executionOrder.length > 0) {
     const firstModule = executionOrder[0];
-    buttons.push(`<button class="kg-action-btn secondary" onclick="beginTaskFromKnowledgeCard('${encodeURIComponent(firstModule)}', this)">按顺序从 ${escapeHtml(firstModule)} 开始</button>`);
+    buttons.push(`<button class="kg-action-btn secondary" data-chat-action="begin-task-knowledge" data-module-name="${encodeURIComponent(firstModule)}">鎸夐『搴忎粠 ${escapeHtml(firstModule)} 寮€濮?/button>`);
   }
 
-  if (buttons.length === 0 && lower.includes('进入模块') && primaryModules.length > 0) {
-    buttons.push(`<button class="kg-action-btn secondary" onclick="beginTaskFromKnowledgeCard('${encodeURIComponent(primaryModules[0])}', this)">进入 ${escapeHtml(primaryModules[0])}</button>`);
+  if (buttons.length === 0 && lower.includes('杩涘叆妯″潡') && primaryModules.length > 0) {
+    buttons.push(`<button class="kg-action-btn secondary" data-chat-action="begin-task-knowledge" data-module-name="${encodeURIComponent(primaryModules[0])}">杩涘叆 ${escapeHtml(primaryModules[0])}</button>`);
   }
 
   return buttons.slice(0, 3).join('');
@@ -1056,20 +1160,20 @@ function renderToolDetail(name, detail) {
       const keepDisabled = hasEditId ? '' : 'disabled';
       const undoDisabled = undoAvailable ? '' : 'disabled';
       const undoTitle = undoAvailable
-        ? '撤销本条改动'
-        : escapeHtml(String(detail.undoReason || '该改动不支持单条 Undo'));
+        ? '鎾ら攢鏈潯鏀瑰姩'
+        : escapeHtml(String(detail.undoReason || '璇ユ敼鍔ㄤ笉鏀寔鍗曟潯 Undo'));
       const helper = detail.truncated
-        ? '<span class="tool-diff-note">Diff 过长，已自动截断预览。</span>'
+        ? '<span class="tool-diff-note">Diff 杩囬暱锛屽凡鑷姩鎴柇棰勮銆?/span>'
         : '';
       const undoHint = !undoAvailable
-        ? `<span class="tool-diff-note warn">${escapeHtml(String(detail.undoReason || '该改动不支持单条 Undo'))}</span>`
+        ? `<span class="tool-diff-note warn">${escapeHtml(String(detail.undoReason || '璇ユ敼鍔ㄤ笉鏀寔鍗曟潯 Undo'))}</span>`
         : '';
       return `<div class="tool-diff">
         <div class="tool-diff-path">${escapeHtml(path)}</div>
         ${renderDiff(detail.oldStr || '', detail.newStr || '')}
         <div class="tool-card-actions">
-          <button class="tool-keep-btn" ${keepDisabled} onclick="keepEdit('${encodedEditId}', this)">Keep</button>
-          <button class="tool-undo-btn" ${undoDisabled} title="${undoTitle}" onclick="undoEdit('${encodedEditId}', '${encodedPath}', this)">Undo</button>
+          <button class="tool-keep-btn" ${keepDisabled} data-chat-action="keep-edit" data-edit-id="${encodedEditId}">Keep</button>
+          <button class="tool-undo-btn" ${undoDisabled} title="${undoTitle}" data-chat-action="undo-edit" data-edit-id="${encodedEditId}" data-path="${encodedPath}">Undo</button>
           ${helper}
           ${undoHint}
         </div>
@@ -1079,7 +1183,7 @@ function renderToolDetail(name, detail) {
     case 'file_created':
       return `<div class="tool-file-info">
         <span class="tool-file-path">${escapeHtml(detail.path || '')}</span>
-        <span class="tool-file-size">${detail.size || 0} 字符</span>
+        <span class="tool-file-size">${detail.size || 0} 瀛楃</span>
       </div>`;
 
     case 'shell': {
@@ -1095,14 +1199,14 @@ function renderToolDetail(name, detail) {
     case 'file_read':
       return `<div class="tool-file-info">
         <span class="tool-file-path">${escapeHtml(detail.path || '')}</span>
-        <span class="tool-file-size">${detail.lines || 0} 行</span>
+        <span class="tool-file-size">${detail.lines || 0} 琛?/span>
       </div>`;
 
     case 'search':
-      return `<div class="tool-search-info">搜索 "${escapeHtml(detail.pattern || '')}" — ${detail.matchCount || 0} 条匹配</div>`;
+      return `<div class="tool-search-info">鎼滅储 "${escapeHtml(detail.pattern || '')}" 鈥?${detail.matchCount || 0} 鏉″尮閰?/div>`;
 
     case 'find':
-      return `<div class="tool-search-info">查找 "${escapeHtml(detail.pattern || '')}" — ${detail.fileCount || 0} 个文件</div>`;
+      return `<div class="tool-search-info">鏌ユ壘 "${escapeHtml(detail.pattern || '')}" 鈥?${detail.fileCount || 0} 涓枃浠?/div>`;
 
     default: return '';
   }
@@ -1114,7 +1218,7 @@ function renderDiff(oldStr, newStr) {
   const ops = buildGreedyDiffOps(oldLines, newLines);
   const hasChanges = ops.some(op => op.type !== 'context');
   if (!hasChanges) {
-    return '<div class="diff-view unified"><div class="diff-empty">无可视化差异（内容可能只变更了换行/空白）。</div></div>';
+    return '<div class="diff-view unified"><div class="diff-empty">鏃犲彲瑙嗗寲宸紓锛堝唴瀹瑰彲鑳藉彧鍙樻洿浜嗘崲琛?绌虹櫧锛夈€?/div></div>';
   }
 
   let oldNo = 1;
@@ -1143,7 +1247,7 @@ function renderDiff(oldStr, newStr) {
   for (const range of ranges) {
     if (renderedLines >= maxRenderLines) break;
     if (range.start > lastEnd + 1) {
-      html += '<div class="diff-gap">…</div>';
+      html += '<div class="diff-gap">鈥?/div>';
     }
 
     const header = buildHunkHeader(ops, range.start, range.end);
@@ -1159,7 +1263,7 @@ function renderDiff(oldStr, newStr) {
   }
 
   if (renderedLines >= maxRenderLines) {
-    html += '<div class="diff-gap">…（diff 过长，已截断）</div>';
+    html += '<div class="diff-gap">鈥︼紙diff 杩囬暱锛屽凡鎴柇锛?/div>';
   }
 
   html += '</div>';
@@ -1286,7 +1390,7 @@ export async function keepEdit(encodedEditId, btn) {
     btn.disabled = false;
     btn.textContent = 'Keep';
     if (undoBtn) undoBtn.disabled = undoWasDisabled;
-    setDiffActionHint(actions, result.message || 'Keep 失败', 'warn');
+    setDiffActionHint(actions, result.message || 'Keep 澶辫触', 'warn');
     return;
   }
 
@@ -1298,12 +1402,12 @@ export async function keepEdit(encodedEditId, btn) {
   }
   const diff = btn.closest('.tool-diff');
   if (diff) diff.classList.add('kept');
-  setDiffActionHint(actions, '已保留该改动', 'ok');
+  setDiffActionHint(actions, '宸蹭繚鐣欒鏀瑰姩', 'ok');
 }
 
 export async function undoEdit(encodedEditId, encodedPath, btn) {
   const editId = decodeCardText(encodedEditId);
-  const path = decodeCardText(encodedPath) || '该文件';
+  const path = decodeCardText(encodedPath) || '璇ユ枃浠?;
   if (!editId || !btn) return;
 
   const actions = btn.closest('.tool-card-actions');
@@ -1319,7 +1423,7 @@ export async function undoEdit(encodedEditId, encodedPath, btn) {
     btn.disabled = false;
     btn.textContent = 'Undo';
     if (keepBtn) keepBtn.disabled = keepWasDisabled;
-    setDiffActionHint(actions, result.message || `撤销 ${path} 失败`, 'warn');
+    setDiffActionHint(actions, result.message || `鎾ら攢 ${path} 澶辫触`, 'warn');
     return;
   }
 
@@ -1331,7 +1435,7 @@ export async function undoEdit(encodedEditId, encodedPath, btn) {
   }
   const diff = btn.closest('.tool-diff');
   if (diff) diff.classList.add('undone');
-  setDiffActionHint(actions, result.message || `已撤销 ${path}`, 'ok');
+  setDiffActionHint(actions, result.message || `宸叉挙閿€ ${path}`, 'ok');
 }
 
 async function postEditAction(url, editId) {
@@ -1342,14 +1446,14 @@ async function postEditAction(url, editId) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-      return { success: false, message: data.message || `请求失败 (${resp.status})` };
+      return { success: false, message: data.message || `璇锋眰澶辫触 (${resp.status})` };
     }
     if (data && typeof data.success === 'boolean') {
       return data;
     }
     return { success: true, message: '' };
   } catch (err) {
-    return { success: false, message: '网络异常：' + (err?.message || String(err)) };
+    return { success: false, message: '缃戠粶寮傚父锛? + (err?.message || String(err)) };
   }
 }
 
@@ -1378,7 +1482,7 @@ function appendContinuePrompt(limit) {
   const container = $('chatMessages');
   const div = document.createElement('div');
   div.className = 'chat-continue-prompt';
-  div.innerHTML = `<span>已达工具调用上限（${limit} 轮）。</span><button class="chat-continue-btn" onclick="continueChatFromLimit()">继续</button>`;
+  div.innerHTML = `<span>宸茶揪宸ュ叿璋冪敤涓婇檺锛?{limit} 杞級銆?/span><button class="chat-continue-btn" data-chat-action="continue-chat">缁х画</button>`;
   container.appendChild(div);
   scrollToBottom();
 }
@@ -1386,7 +1490,7 @@ function appendContinuePrompt(limit) {
 export function continueChatFromLimit() {
   const prompt = document.querySelector('.chat-continue-prompt');
   if (prompt) prompt.remove();
-  enqueueMessage({ text: '继续', resume: true, displayText: '继续（断点续跑）' });
+  enqueueMessage({ text: '缁х画', resume: true, displayText: '缁х画锛堟柇鐐圭画璺戯級' });
 }
 
 function appendError(message) {
@@ -1412,14 +1516,14 @@ function scrollToBottom() {
   });
 }
 
-// ── SSE streaming ──
+// 鈹€鈹€ SSE streaming 鈹€鈹€
 
 async function streamAssistantResponse(options = {}) {
   const resume = options.resume === true;
   let interruptedThisRun = false;
   isStreaming = true;
   updateSendButton();
-  setStatus(resume ? '续跑中...' : '思考中...', 'thinking');
+  setStatus(resume ? '缁窇涓?..' : '鎬濊€冧腑...', 'thinking');
 
   currentController = new AbortController();
   let fullText = '';
@@ -1436,7 +1540,7 @@ async function streamAssistantResponse(options = {}) {
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
-      appendError(err.error || `请求失败 (${resp.status})`);
+      appendError(err.error || `璇锋眰澶辫触 (${resp.status})`);
       interruptedThisRun = true;
       isStreaming = false;
       currentController = null;
@@ -1476,7 +1580,7 @@ async function streamAssistantResponse(options = {}) {
         else if (evt.type === 'mode_switched') {
           const toMode = evt.toMode || 'plan';
           switchChatMode(toMode);
-          const reason = evt.reason || `已自动切换到 ${toMode} 模式`;
+          const reason = evt.reason || `宸茶嚜鍔ㄥ垏鎹㈠埌 ${toMode} 妯″紡`;
           setStatus(reason, 'working');
         }
         else if (evt.type === 'tool_start') {
@@ -1499,7 +1603,7 @@ async function streamAssistantResponse(options = {}) {
         }
         else if (evt.type === 'error') {
           interruptedThisRun = true;
-          appendError(evt.content || evt.message || '未知错误');
+          appendError(evt.content || evt.message || '鏈煡閿欒');
         }
         else if (evt.type === 'done') {
           setStatus('');
@@ -1517,7 +1621,7 @@ async function streamAssistantResponse(options = {}) {
   } catch (err) {
     if (err.name !== 'AbortError') {
       interruptedThisRun = true;
-      appendError('连接中断: ' + err.message);
+      appendError('杩炴帴涓柇: ' + err.message);
     }
   }
 
@@ -1572,7 +1676,7 @@ export function stopChat() {
   isStreaming = false;
   updateStreamingUI(false);
   finalizeToolGroup();
-  setStatus('已停止', 'warn');
+  setStatus('宸插仠姝?, 'warn');
   setTimeout(() => setStatus(''), 3000);
 }
 
@@ -1610,25 +1714,13 @@ export function openModelDropdown() {
   const providers = getProviderList();
   const activeId = getActiveProviderId();
 
-  let html = '';
-
-  if (providers.length === 0) {
-    html = '<div class="model-dd-empty">未配置模型 —— <a href="#" onclick="event.preventDefault(); openLlmSettings()">去设置</a></div>';
-  } else {
-    for (const p of providers) {
-      const active = p.id === activeId ? ' active' : '';
-      html += `<div class="model-dd-item${active}" onclick="selectProvider('${p.id}')">`
-        + `<span class="model-dd-name">${p.model}</span>`
-        + `<span class="model-dd-provider">${p.name}</span>`
-        + `</div>`;
-    }
-  }
-
-  html += '<div class="model-dd-divider"></div>';
-  html += '<div class="model-dd-empty">工具轮次固定：200（Max）</div>';
-  html += `<div class="model-dd-item settings" onclick="openLlmSettings(); closeDd()">⚙ 模型设置</div>`;
-
-  dd.innerHTML = html;
+  dd.innerHTML = renderModelDropdownHtml({
+    providers,
+    activeProviderId: activeId,
+    emptyHtml: '<div class="model-dd-empty">鏈厤缃ā鍨?鈥斺€?<a href="#" data-chat-action="open-llm-settings">鍘昏缃?/a></div>',
+    settingsLabel: '鈿?妯″瀷璁剧疆',
+    footerNote: '宸ュ叿杞鍥哄畾锛?00锛圡ax锛?'
+  });
   dd.classList.remove('hidden');
 
   setTimeout(() => document.addEventListener('click', closeDropdownOutside, { once: true }), 0);
@@ -1648,11 +1740,10 @@ export async function selectProvider(id) {
 }
 
 export function updateModelTag(model) {
-  const tag = $('chatModelTag');
-  if (tag) tag.textContent = model || '未配置';
+  updateSharedModelTag($, model, 'Unavailable');
 }
 
-// ── Session persistence ──
+// 鈹€鈹€ Session persistence 鈹€鈹€
 
 function generateSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1663,7 +1754,7 @@ function extractTitleFromMessages(msgs) {
   const first = msgs.find(m => m.role === 'user' && m.content);
   if (!first) return '';
   const text = first.content.trim().replace(/\s+/g, ' ');
-  return text.length > 40 ? text.slice(0, 40) + '…' : text;
+  return text.length > 40 ? text.slice(0, 40) + '鈥? : text;
 }
 
 function saveCurrentSession() {
@@ -1677,7 +1768,7 @@ function saveCurrentSession() {
   }).catch(err => console.warn('[chat] save session error:', err));
 }
 
-// ── Helpers ──
+// 鈹€鈹€ Helpers 鈹€鈹€
 
 function escapeHtml(text) {
   const d = document.createElement('div');
@@ -1685,9 +1776,11 @@ function escapeHtml(text) {
   return d.innerHTML;
 }
 
-// ══════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
 //  Chat panel resize
-// ══════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
+
+bindChatUiEvents();
 
 const STORAGE_KEY = 'dna-chat-width';
 

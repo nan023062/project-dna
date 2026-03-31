@@ -7,11 +7,19 @@ import {
   setAuthUser,
   clearAuthState
 } from './utils.js';
+import {
+  applyMetricValues,
+  formatCompactNumber,
+  registerFullscreenTabs,
+  renderSidebarMessage
+} from '/dna-shared/js/core/host-shell.js';
+import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
+import { formatUserIdentity } from '/dna-shared/js/auth/user-session.js';
+import { ui } from '/dna-shared/js/ui/ui-manager.js';
 import { renderTopology } from '/dna-shared/js/panels/topology.js';
 import {
   loadMemories,
   loadSubmissions,
-  selectMemory,
   createNew,
   saveMemory,
   deleteMemory,
@@ -22,40 +30,25 @@ import {
   addTag
 } from './panels/memory-editor.js';
 
-function hideMemoryEmptyState() {
-  $('memoryEmptyState')?.classList.add('hidden');
-}
-
-function showMemoryEmptyState() {
-  $('memoryEmptyState')?.classList.remove('hidden');
-}
-
-window.MemoryEditor = {
-  loadMemories,
-  loadSubmissions,
-  selectMemory: id => {
-    hideMemoryEmptyState();
-    return selectMemory(id);
-  },
-  createNew: () => {
-    hideMemoryEmptyState();
-    return createNew();
-  },
-  saveMemory,
-  deleteMemory,
-  applyTemplate,
-  onLayerTypeChanged,
-  addFeature,
-  addNodeId,
-  addTag
-};
-
-let activeTab = 'topology';
 let currentUser = null;
+
+function initUI() {
+  const mainArea = $('clientMain');
+  if (!mainArea) return;
+
+  ui.init(mainArea);
+
+  registerFullscreenTabs(ui, [
+    { id: 'overview', tabButtonSelector: '.workspace-tab[data-tab="overview"]' },
+    { id: 'topology', tabButtonSelector: '.workspace-tab[data-tab="topology"]' },
+    { id: 'memory', tabButtonSelector: '.workspace-tab[data-tab="memory"]' }
+  ], $);
+}
 
 function applyToolState(elementId, installed) {
   const element = $(elementId);
   if (!element) return;
+
   element.classList.remove('healthy', 'degraded', 'error');
   if (installed) {
     element.classList.add('healthy');
@@ -127,18 +120,6 @@ function setRefreshInfo(text) {
   if (refreshInfo) refreshInfo.textContent = text;
 }
 
-function formatCompact(value) {
-  if (!Number.isFinite(value)) return '-';
-  try {
-    return new Intl.NumberFormat('zh-CN', {
-      notation: 'compact',
-      maximumFractionDigits: 1
-    }).format(value);
-  } catch {
-    return String(value);
-  }
-}
-
 function applyHealthState(element, value, okText = 'OK', degradedText = 'Degraded') {
   if (!element) return;
   element.classList.remove('healthy', 'degraded', 'error');
@@ -177,7 +158,7 @@ function renderAuthState() {
   }
 
   if (authStateText) authStateText.textContent = `Signed in as ${user.role}`;
-  if (authUserInfo) authUserInfo.textContent = `${user.username} (${user.role})`;
+  if (authUserInfo) authUserInfo.textContent = formatUserIdentity(user);
 }
 
 function resetProtectedOverview(message = 'Sign in required') {
@@ -254,7 +235,7 @@ async function logout() {
   renderAuthState();
   setAuthMessage('Signed out. Protected data is now hidden.', false);
   resetProtectedOverview();
-  showMemoryEmptyState();
+  $('memoryEmptyState')?.classList.remove('hidden');
   setStatus('Signed out');
   await loadStatus();
 }
@@ -301,7 +282,7 @@ async function loadStatus() {
     }
 
     const memoryStats = await api('/memory/stats');
-    $('memoryTotal').textContent = formatCompact(memoryStats.total ?? 0);
+    $('memoryTotal').textContent = formatCompactNumber(memoryStats.total ?? 0);
     const freshness = memoryStats.byFreshness || {};
     $('memoryFreshness').textContent =
       `Fresh ${freshness.Fresh ?? freshness.fresh ?? 0} / Aging ${freshness.Aging ?? freshness.aging ?? 0}`;
@@ -325,13 +306,7 @@ async function loadTopology() {
       resetProtectedOverview('Sign in required');
       const sidebar = $('archSidebar');
       if (sidebar) {
-        sidebar.style.display = 'flex';
-        sidebar.innerHTML = `
-          <div class="sidebar-section">
-            <div class="sidebar-title">Sign in required</div>
-            <div class="sidebar-text">Use a server account to load the formal topology.</div>
-          </div>
-        `;
+        renderSidebarMessage($, 'archSidebar', 'Sign in required', 'Use a server account to load the formal topology.');
       }
       setStatus('Sign in before loading topology.');
       return;
@@ -346,23 +321,16 @@ async function loadTopology() {
     const containmentCount = topoData.containmentEdges ? topoData.containmentEdges.length : 0;
     const collaborationCount = topoData.collaborationEdges ? topoData.collaborationEdges.length : 0;
 
-    $('statModules').textContent = formatCompact(modulesCount);
-    $('statEdges').textContent = formatCompact(edgesCount);
-    $('statContainment').textContent = formatCompact(containmentCount);
-    $('statCollaboration').textContent = formatCompact(collaborationCount);
+    applyMetricValues($, [
+      { id: 'statModules', value: modulesCount },
+      { id: 'statEdges', value: edgesCount },
+      { id: 'statContainment', value: containmentCount },
+      { id: 'statCollaboration', value: collaborationCount }
+    ], formatCompactNumber);
     setStatus('Topology refreshed');
   } catch (error) {
     setStatus(`Topology load failed: ${error.message}`);
-    const sidebar = $('archSidebar');
-    if (sidebar) {
-      sidebar.style.display = 'flex';
-      sidebar.innerHTML = `
-        <div class="sidebar-section">
-          <div class="sidebar-title">Topology load failed</div>
-          <div class="sidebar-text">${error.message}</div>
-        </div>
-      `;
-    }
+    renderSidebarMessage($, 'archSidebar', 'Topology load failed', error.message);
   }
 }
 
@@ -370,32 +338,28 @@ async function loadKnowledge() {
   try {
     const user = await ensureAuthenticatedUser({ silent: true });
     if (!user) {
-      showMemoryEmptyState();
+      $('memoryEmptyState')?.classList.remove('hidden');
       setStatus('Sign in before using the knowledge workspace.');
       return;
     }
 
     setStatus('Loading knowledge workspace...');
     await Promise.all([loadMemories(), loadSubmissions()]);
-    if ($('memoryEditorForm').style.display !== 'none') hideMemoryEmptyState();
-    else showMemoryEmptyState();
+    if ($('memoryEditorForm').style.display !== 'none') $('memoryEmptyState')?.classList.add('hidden');
+    else $('memoryEmptyState')?.classList.remove('hidden');
     setStatus('Knowledge workspace refreshed');
   } catch (error) {
     setStatus(`Knowledge workspace failed: ${error.message}`);
   }
 }
 
-function setActiveTab(tabId) {
-  activeTab = tabId;
-  document.querySelectorAll('.workspace-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.tab === tabId);
-  });
-  $('panelTopology').classList.toggle('active', tabId === 'topology');
-  $('panelMemory').classList.toggle('active', tabId === 'memory');
-}
+async function refreshTab(tabId) {
+  if (tabId === 'overview') {
+    await loadStatus();
+    return;
+  }
 
-async function refreshActiveTab() {
-  if (activeTab === 'memory') {
+  if (tabId === 'memory') {
     await loadKnowledge();
     return;
   }
@@ -403,34 +367,121 @@ async function refreshActiveTab() {
   await loadTopology();
 }
 
+async function refreshActiveTab() {
+  await refreshTab(ui.activeTabId || 'overview');
+}
+
 async function refreshAll() {
   await loadStatus();
-  await refreshActiveTab();
+  if ((ui.activeTabId || 'overview') !== 'overview') {
+    await refreshActiveTab();
+  }
 }
 
 async function switchTab(tabId) {
-  setActiveTab(tabId);
-  await refreshActiveTab();
+  ui.switchTab(tabId);
+  await refreshTab(tabId);
 }
 
-window.switchTab = switchTab;
-window.refreshAll = refreshAll;
-window.refreshTopology = loadTopology;
-window.refreshMemories = loadKnowledge;
-window.refreshToolingStatus = loadToolingStatus;
-window.installTooling = installTooling;
-window.login = login;
-window.logout = logout;
+async function handleAction(action, element) {
+  switch (action) {
+    case 'login':
+      await login();
+      break;
+    case 'logout':
+      await logout();
+      break;
+    case 'refresh-all':
+      await refreshAll();
+      break;
+    case 'switch-tab':
+      if (element?.dataset.tabTarget) await switchTab(element.dataset.tabTarget);
+      break;
+    case 'refresh-tooling-status':
+      await loadToolingStatus();
+      break;
+    case 'install-tooling':
+      if (element?.dataset.target) await installTooling(element.dataset.target);
+      break;
+    case 'refresh-topology':
+      await loadTopology();
+      break;
+    case 'refresh-memories':
+      await loadKnowledge();
+      break;
+    case 'create-memory':
+      createNew();
+      break;
+    case 'load-submissions':
+      await loadSubmissions();
+      break;
+    case 'apply-memory-template':
+      applyTemplate();
+      break;
+    case 'add-feature':
+      addFeature();
+      break;
+    case 'add-node-id':
+      addNodeId();
+      break;
+    case 'add-tag':
+      addTag();
+      break;
+    case 'save-memory':
+      await saveMemory();
+      break;
+    case 'delete-memory':
+      await deleteMemory();
+      break;
+    default:
+      break;
+  }
+}
+
+async function handleChangeAction(action) {
+  switch (action) {
+    case 'load-memories':
+      await loadMemories();
+      break;
+    case 'memory-layer-type-changed':
+      onLayerTypeChanged();
+      break;
+    default:
+      break;
+  }
+}
+
+function bindUiEvents() {
+  bindDelegatedDocumentEvents([
+    {
+      eventName: 'click',
+      selector: '[data-action]',
+      preventDefault: true,
+      handler: ({ element }) => void handleAction(element.dataset.action, element)
+    },
+    {
+      eventName: 'change',
+      selector: '[data-change-action]',
+      handler: ({ element }) => void handleChangeAction(element.dataset.changeAction)
+    },
+    {
+      eventName: 'keydown',
+      selector: '#authPassword',
+      handler: ({ event }) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          void login();
+        }
+      }
+    }
+  ]);
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   currentUser = getAuthUser();
   renderAuthState();
-  $('authPassword')?.addEventListener('keydown', event => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      login();
-    }
-  });
-  setActiveTab('topology');
-  await refreshAll();
+  bindUiEvents();
+  initUI();
+  await loadStatus();
+  await switchTab('topology');
 });
