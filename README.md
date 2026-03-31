@@ -144,27 +144,37 @@ Open `http://localhost:5051` in your browser:
 - Memory CRUD (create, search, edit, delete)
 - LLM configuration and AI chat
 
-Open `http://localhost:5052` for the client workbench:
-- Three tabs: Overview / Topology / Memory
-- Manual server address connection (LAN auto-scan removed)
-- Read-only display of current client IP permission (role/name/note)
-- MCP tool inventory, external agent usage guide, and governance flow diagram
-- One-click Cursor/Codex setup (choose target folder first, then install files)
+Open `http://localhost:5052` for the headless client workbench (optional web mode).
 
-### 4.1 Desktop Window Shell (Preview)
+### 4.1 Desktop Client (Integrated)
 
-An `Avalonia` desktop shell is now available for window-based local client control:
+Desktop window mode is now integrated into `src/Client` (single project + single process):
 
 ```bash
-dotnet run --project src/Client.Desktop
+dotnet run --no-launch-profile --project src/Client
 ```
 
-Current shell capabilities:
-- Configure server URL and workspace path in a desktop window
-- Start/stop local `Client` service
-- Open workbench page and copy MCP endpoint
+Current desktop capabilities:
+- Select target project at startup (project root must contain `.project.dna`)
+- Read `projectName` and `serverBaseUrl` from `.project.dna` to build workspace config
+- Start/stop embedded local `Client` host (`5052`) in the same process
+- Overview / Topology / Memory / Tooling+MCP tabs in window
+- MCP endpoint copy and one-click Cursor/Codex workflow installation
 
-Note: the shell currently reuses the existing web workbench (opens in browser); embedded WebView can be added in a later iteration.
+`.project.dna` example:
+
+```json
+{
+  "projectName": "agentic-os",
+  "serverBaseUrl": "http://127.0.0.1:5051"
+}
+```
+
+Headless mode is still available for automation and IDE MCP transport:
+
+```bash
+dotnet run --no-launch-profile --project src/Client -- web --server http://127.0.0.1:5051
+```
 
 ### 5. CLI
 

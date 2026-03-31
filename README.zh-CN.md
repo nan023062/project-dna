@@ -57,27 +57,37 @@ Server 不访问项目源码，只负责知识数据一致性与多端共享；C
 - 记忆增删查改
 - LLM 配置 + AI 对话
 
-客户端浏览器打开 `http://localhost:5052`：
-- 概览 / 拓扑 / 记忆三页签
-- 手动填写 Server 地址连接（不再自动扫描局域网）
-- 只读展示当前客户端 IP 的白名单权限（角色/备注）
-- MCP 工具清单、外置 Agent 使用说明与治理流程图
-- Cursor / Codex 一键安装（先选择目标项目目录，再写入工作流配置）
+客户端浏览器打开 `http://localhost:5052`（可选的无窗口模式工作台）。
 
-### 4.1 桌面窗口壳（预览）
+### 4.1 桌面客户端（已合并）
 
-已提供 `Avalonia` 桌面壳项目，可用于窗口化启动和管理本地 Client：
+桌面窗口模式已并入 `src/Client`（单工程 + 单进程）：
 
 ```bash
-dotnet run --project src/Client.Desktop
+dotnet run --no-launch-profile --project src/Client
 ```
 
 当前版本能力：
-- 在桌面窗口内配置 `Server` 地址与工作区路径
-- 启动/停止本地 `Client` 服务
-- 打开工作台页面、复制 MCP 地址
+- 启动时选择目标项目目录（根目录必须包含 `.project.dna`）
+- 从 `.project.dna` 读取 `projectName` 和 `serverBaseUrl` 自动生成工作区
+- 同进程启动/停止内嵌 `Client` Host（5052）
+- 窗口内提供 概览 / 拓扑 / 记忆 / 工具与MCP 页签
+- 复制 MCP 地址、并一键安装 Cursor/Codex 工作流
 
-说明：当前仍复用现有 Web 工作台（通过浏览器打开），后续可迭代为内嵌 WebView。
+`.project.dna` 示例：
+
+```json
+{
+  "projectName": "agentic-os",
+  "serverBaseUrl": "http://127.0.0.1:5051"
+}
+```
+
+仍可保留无窗口运行方式（用于自动化和 IDE MCP 连接）：
+
+```bash
+dotnet run --no-launch-profile --project src/Client -- web --server http://127.0.0.1:5051
+```
 
 ### 5. CLI
 

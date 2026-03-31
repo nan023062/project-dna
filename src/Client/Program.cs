@@ -1,93 +1,111 @@
-using Dna.Client.Interfaces.Api;
-using Dna.Client.Interfaces.Cli;
+using Avalonia;
+using Dna.Client.Desktop;
 using Dna.Client.Services;
-using Dna.Client.Services.Tooling;
 using Dna.Core.Framework;
-using Dna.Web.Shared.AgentShell;
-using ModelContextProtocol.AspNetCore;
-using ModelContextProtocol.Server;
+using Dna.Core.Runtime;
 
-var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
-var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
-var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
-var defaultClientPort = ClientBootstrap.ResolveClientDefaultPort(args);
-var appArgs = ClientBootstrap.SanitizeArgsForFixedPort(args);
+return await ProgramEntry.MainAsync(args);
 
-var app = DnaApp.Create(appArgs, new AppOptions
+internal static class ProgramEntry
 {
-    AppName = "Project DNA Client",
-    AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
-    DefaultPort = defaultClientPort,
-    AllowPortAutoFallback = false,
-    LockScopeProvider = _ => "project-dna-client",
-    BannerExtras = (_, port) =>
+    [STAThread]
+    public static async Task<int> MainAsync(string[] args)
     {
-        var host = ClientBootstrap.GetLocalIp();
-        return
-        [
-            ("Client API:  ", $"http://{host}:{port}/api/client/status"),
-            ("MCP Server:  ", $"http://{host}:{port}/mcp"),
-            ("DNA Server:  ", serverBaseUrl)
-        ];
+        if (ShouldRunHeadless(args))
+            return await RunHeadlessAsync(args);
+
+        return RunDesktop(args);
     }
-});
 
-app.AddCliCommand(new DefaultCliCommand());
+    private static bool ShouldRunHeadless(string[] args)
+    {
+        if (args.Length == 0)
+            return false;
 
-app.ConfigureServices(services =>
-{
-    services.AddSingleton(new ClientRuntimeOptions
-    {
-        ServerBaseUrl = serverBaseUrl,
-        WorkspaceRoot = workspaceRoot,
-        WorkspaceConfigPath = workspaceConfigPath
-    });
-    services.AddSingleton<ClientWorkspaceStore>();
-    services.AddSingleton<IAgentShellContext, ClientAgentShellContext>();
-    services.AddSingleton(sp => new AgentShellStorageOptions
-    {
-        RootDirectory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dna",
-            "client-agent-shell")
-    });
-    services.AddSingleton<AgentShellService>();
-    services.AddHttpClient<DnaServerApi>((_, client) =>
-    {
-        client.Timeout = TimeSpan.FromSeconds(30);
-    });
-    services.AddHttpClient<ServerDiscoveryService>((_, client) =>
-    {
-        client.Timeout = TimeSpan.FromMilliseconds(400);
-    });
-    services.AddClientToolingServices();
-    services.AddSingleton<ClientFolderPickerService>();
+        var first = args[0];
+        if (IsArg(first, "desktop", "--desktop"))
+            return false;
 
-    if (app.Mode == AppRunMode.Stdio)
-    {
-        services.AddMcpServer(opts =>
+        if (IsArg(first, "cli", "stdio", "--stdio", "web", "serve"))
+            return true;
+
+        return args.Any(a =>
         {
-            opts.ServerInfo = new() { Name = "project-dna-client", Version = "1.0.0" };
-        }).WithStdioServerTransport().WithToolsFromAssembly();
+            return IsArg(a,
+                "--server",
+                "--workspace-root",
+                "--workspace-config",
+                "--port",
+                "-p",
+                "--no-browser");
+        });
     }
-    else
+
+    private static async Task<int> RunHeadlessAsync(string[] args)
     {
-        services.AddMcpServer(opts =>
+        var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
+        var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
+        var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
+        var defaultClientPort = ClientBootstrap.ResolveClientDefaultPort(args);
+        var appArgs = ClientBootstrap.SanitizeArgsForFixedPort(args);
+
+        var app = DnaApp.Create(appArgs, new AppOptions
         {
-            opts.ServerInfo = new() { Name = "project-dna-client", Version = "1.0.0" };
-        }).WithHttpTransport().WithToolsFromAssembly();
+            AppName = "Project DNA Client",
+            AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
+            DefaultPort = defaultClientPort,
+            AllowPortAutoFallback = false,
+            LockScopeProvider = _ => "project-dna-client",
+            BannerExtras = (_, port) =>
+            {
+                var host = ClientBootstrap.GetLocalIp();
+                return
+                [
+                    ("Client API:  ", $"http://{host}:{port}/api/client/status"),
+                    ("MCP Server:  ", $"http://{host}:{port}/mcp"),
+                    ("DNA Server:  ", serverBaseUrl)
+                ];
+            }
+        });
+
+        ClientHostComposition.ConfigureDnaApp(
+            app,
+            serverBaseUrl,
+            workspaceRoot,
+            workspaceConfigPath);
+
+        return await app.RunAsync();
     }
-});
 
-app.ConfigureWebApp(web =>
-{
-    web.MapClientStatusEndpoints();
-    web.MapClientWorkspaceEndpoints();
-    web.MapClientDiscoveryEndpoints();
-    web.MapClientProxyEndpoints();
-    web.MapClientAgentProxyEndpoints();
-    web.MapClientToolingEndpoints();
-    web.MapMcp("/mcp");
-});
+    private static int RunDesktop(string[] args)
+    {
+        var desktopArgs = args
+            .Where(a => !IsArg(a, "desktop", "--desktop"))
+            .ToArray();
 
-return await app.RunAsync();
+        if (!SingleInstanceLock.TryAcquire("project-dna-client", out var instanceLock, out var lockName))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"[Project DNA Client] 已有实例在运行（lock={lockName}）。");
+            Console.ResetColor();
+            return 1;
+        }
+
+        using (instanceLock)
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(desktopArgs);
+        }
+
+        return 0;
+    }
+
+    private static AppBuilder BuildAvaloniaApp()
+        => AppBuilder.Configure<App>()
+            .UsePlatformDetect()
+            .WithInterFont()
+            .LogToTrace();
+
+    private static bool IsArg(string? value, params string[] candidates)
+        => value != null &&
+           Array.Exists(candidates, candidate => string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase));
+}

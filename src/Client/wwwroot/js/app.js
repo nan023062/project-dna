@@ -41,6 +41,25 @@ let workspaceSnapshot = null;
 let selectedWorkspaceId = null;
 
 const DEFAULT_CONNECTION_MESSAGE = '无账号模式：由 Server 白名单控制连接权限。';
+const PROJECT_LOCKED_MODE = new URLSearchParams(window.location.search).get('mode') === 'project';
+const PROJECT_LOCKED_MESSAGE = '项目锁定模式：服务器连接由 .project.dna 指定，客户端不提供切换入口。';
+
+function applyProjectLockedModeUI() {
+  if (!PROJECT_LOCKED_MODE) return;
+
+  document.body.classList.add('project-locked-mode');
+
+  document.querySelectorAll('[data-project-lock-hidden]').forEach(element => {
+    element.classList.add('hidden');
+  });
+
+  const subtitle = document.querySelector('.client-subtitle');
+  if (subtitle) {
+    subtitle.textContent = '本地 MCP 宿主与知识工作区入口。当前模式：项目锁定连接（.project.dna）。';
+  }
+
+  setText('availableWorkspaceHint', PROJECT_LOCKED_MESSAGE);
+}
 
 function initUI() {
   const mainArea = $('clientMain');
@@ -80,7 +99,11 @@ function syncAuthScope(workspace) {
 
 function handleWorkspaceAuthChanged(workspace, fallbackMessage) {
   syncAuthScope(workspace);
-  setAuthMessage(`已切换到“${workspace?.name || '当前工作区'}”`, false);
+  if (PROJECT_LOCKED_MODE) {
+    setAuthMessage(PROJECT_LOCKED_MESSAGE, false);
+  } else {
+    setAuthMessage(`已切换到“${workspace?.name || '当前工作区'}”`, false);
+  }
   resetProtectedOverview('等待连接');
   $('memoryEmptyState')?.classList.remove('hidden');
   if (fallbackMessage) setStatus(fallbackMessage);
@@ -253,7 +276,11 @@ function renderWorkspaceList() {
 }
 
 function getVisibleWorkspaces() {
-  return workspaceSnapshot?.workspaces || [];
+  const workspaces = workspaceSnapshot?.workspaces || [];
+  if (!PROJECT_LOCKED_MODE) return workspaces;
+
+  const currentId = workspaceSnapshot?.currentWorkspaceId;
+  return workspaces.filter(item => item.id === currentId);
 }
 
 function formatPermissionLabel(role) {
@@ -403,6 +430,11 @@ async function setCurrentWorkspace() {
 }
 
 async function connectManualServer() {
+  if (PROJECT_LOCKED_MODE) {
+    setStatus(PROJECT_LOCKED_MESSAGE);
+    return;
+  }
+
   const input = $('manualServerAddress');
   const rawAddress = input?.value?.trim() || '';
 
@@ -436,6 +468,11 @@ async function connectManualServer() {
 }
 
 async function setCurrentWorkspaceById(workspaceId) {
+  if (PROJECT_LOCKED_MODE) {
+    setStatus(PROJECT_LOCKED_MESSAGE);
+    return;
+  }
+
   if (!workspaceId) {
     setStatus('请先选择一个工作区。');
     return;
@@ -460,6 +497,11 @@ async function setCurrentWorkspaceById(workspaceId) {
 }
 
 async function deleteWorkspace() {
+  if (PROJECT_LOCKED_MODE) {
+    setStatus(PROJECT_LOCKED_MESSAGE);
+    return;
+  }
+
   const workspaceId = $('workspaceId')?.value?.trim() || selectedWorkspaceId || '';
   if (!workspaceId) {
     setStatus('请先选择一个工作区。');
@@ -825,18 +867,34 @@ async function handleAction(action, element) {
       await connectManualServer();
       break;
     case 'refresh-workspaces':
+      if (PROJECT_LOCKED_MODE) {
+        setStatus(PROJECT_LOCKED_MESSAGE);
+        break;
+      }
       await loadWorkspaces();
       break;
     case 'new-workspace':
+      if (PROJECT_LOCKED_MODE) {
+        setStatus(PROJECT_LOCKED_MESSAGE);
+        break;
+      }
       newWorkspace();
       break;
     case 'select-workspace':
       if (element?.dataset.workspaceId) selectWorkspace(element.dataset.workspaceId);
       break;
     case 'save-workspace':
+      if (PROJECT_LOCKED_MODE) {
+        setStatus(PROJECT_LOCKED_MESSAGE);
+        break;
+      }
       await saveWorkspace();
       break;
     case 'set-current-workspace':
+      if (PROJECT_LOCKED_MODE) {
+        setStatus(PROJECT_LOCKED_MESSAGE);
+        break;
+      }
       await setCurrentWorkspace();
       break;
     case 'delete-workspace':
@@ -908,6 +966,10 @@ async function handleChangeAction(action) {
   switch (action) {
     case 'quick-switch-workspace':
     {
+      if (PROJECT_LOCKED_MODE) {
+        setStatus(PROJECT_LOCKED_MESSAGE);
+        break;
+      }
       const workspaceId = $('availableWorkspaceSelect')?.value || $('workspaceQuickSelect')?.value || '';
       if (workspaceId) await setCurrentWorkspaceById(workspaceId);
       break;
@@ -969,9 +1031,10 @@ function bindUiEvents() {
 document.addEventListener('DOMContentLoaded', async () => {
   bindUiEvents();
   initUI();
+  applyProjectLockedModeUI();
   initChatResize();
   await loadWorkspaces({ preserveSelection: false });
-  setAuthMessage(DEFAULT_CONNECTION_MESSAGE, false);
+  setAuthMessage(PROJECT_LOCKED_MODE ? PROJECT_LOCKED_MESSAGE : DEFAULT_CONNECTION_MESSAGE, false);
   await loadStatus();
   await switchTab(resolveInitialTab());
 });

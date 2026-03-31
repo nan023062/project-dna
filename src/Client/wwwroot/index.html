@@ -44,7 +44,7 @@
             <div id="targetServer" class="overview-value overview-value-sm">-</div>
             <div id="mcpAddress" class="overview-meta">模式: -</div>
           </div>
-          <div class="overview-card">
+          <div class="overview-card" data-project-lock-hidden="true">
             <div class="overview-label">手动连接</div>
             <div id="availableWorkspaceCount" class="overview-value">-</div>
             <input id="manualServerAddress" class="btn btn-secondary btn-sm" type="text" placeholder="http://127.0.0.1:5051" style="margin-top:8px;width:100%;" />
@@ -80,7 +80,7 @@
             <div class="status-card">
               <div class="status-card-title">当前已包含</div>
               <ul class="status-list">
-                <li>状态页与连接管理</li>
+                <li>状态页与知识工作区</li>
                 <li>拓扑预览</li>
                 <li>正式知识直接读写</li>
                 <li>MCP 接入 Cursor / Codex</li>
@@ -161,7 +161,7 @@
           </div>
         </section>
 
-        <section id="panelConnections" class="workspace-panel">
+        <section id="panelConnections" class="workspace-panel" data-project-lock-hidden="true">
           <div class="section-heading">
             <div>
               <h2>连接服务器</h2>
