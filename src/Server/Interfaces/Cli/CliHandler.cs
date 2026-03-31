@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
@@ -11,8 +10,6 @@ public static class CliHandler
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static string _baseUrl = "http://localhost:5051";
-    private static string? _authToken;
-    private static string? _authBaseUrl;
 
     public static async Task<int> RunAsync(string[] args)
     {
@@ -358,49 +355,7 @@ public static class CliHandler
         return doc.RootElement;
     }
 
-    private static async Task EnsureAuthenticatedAsync(string path)
-    {
-        if (string.Equals(path, "/api/status", StringComparison.OrdinalIgnoreCase))
-            return;
-
-        if (!string.Equals(_authBaseUrl, _baseUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            _authBaseUrl = _baseUrl;
-            _authToken = null;
-            Http.DefaultRequestHeaders.Authorization = null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_authToken))
-            return;
-
-        var username = Environment.GetEnvironmentVariable("DNA_CLI_USERNAME") ?? "admin";
-        var password = Environment.GetEnvironmentVariable("DNA_CLI_PASSWORD")
-                       ?? Environment.GetEnvironmentVariable("DNA_ADMIN_PASSWORD")
-                       ?? "admin";
-
-        using var content = new StringContent(
-            JsonSerializer.Serialize(new { username, password }),
-            Encoding.UTF8,
-            "application/json");
-
-        var response = await Http.PostAsync($"{_baseUrl}/api/auth/login", content);
-        var doc = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
-        var json = doc.RootElement;
-
-        if (!response.IsSuccessStatusCode ||
-            !json.TryGetProperty("token", out var tokenElement) ||
-            string.IsNullOrWhiteSpace(tokenElement.GetString()))
-        {
-            var error = json.TryGetProperty("error", out var err)
-                ? err.GetString()
-                : $"HTTP {(int)response.StatusCode}";
-            throw new InvalidOperationException(
-                $"CLI authentication failed: {error}. Set DNA_CLI_USERNAME and DNA_CLI_PASSWORD if needed.");
-        }
-
-        _authToken = tokenElement.GetString();
-        Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _authToken);
-    }
+    private static Task EnsureAuthenticatedAsync(string _) => Task.CompletedTask;
 
     private static bool HasError(JsonElement json)
     {

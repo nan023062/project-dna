@@ -13,12 +13,14 @@ public static class ClientStatusEndpoints
             try
             {
                 var serverStatus = await api.GetAsync("/api/status");
+                var access = await api.GetAsync("/api/connection/access");
                 return Results.Ok(new
                 {
                     client = "ok",
                     targetServer = api.BaseUrl,
                     currentWorkspace,
-                    serverStatus
+                    serverStatus,
+                    access
                 });
             }
             catch (Exception ex)

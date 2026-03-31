@@ -225,14 +225,5 @@ public static class MemoryEndpoints
     {
     }
 
-    private static IResult? RequireAdminForLegacyFormalWrite(ClaimsPrincipal principal)
-    {
-        if (principal.IsInRole("admin"))
-            return null;
-
-        return Results.Json(new
-        {
-            error = "Formal memory writes are restricted. Use /api/review/memory/submissions for normal edits, or /api/admin/memory/* for audited admin direct writes."
-        }, statusCode: 403);
-    }
+    private static IResult? RequireAdminForLegacyFormalWrite(ClaimsPrincipal _) => null;
 }

@@ -10,30 +10,10 @@ public static class ClientProxyEndpoints
         // Core service status and topology read.
         MapProxyGet(app, "/api/status");
         MapProxyGet(app, "/api/topology");
-
-        // Auth API proxy.
-        MapAuthProxyEndpoints(app);
+        MapProxyGet(app, "/api/connection/access");
 
         // Formal memory read/write proxy.
         MapMemoryProxyEndpoints(app);
-
-        // Review submission workflow proxy.
-        MapReviewProxyEndpoints(app);
-    }
-
-    private static void MapAuthProxyEndpoints(IEndpointRouteBuilder app)
-    {
-        MapProxyPost(app, "/api/auth/login");
-        MapProxyPost(app, "/api/auth/register");
-        MapProxyGet(app, "/api/auth/me");
-        MapProxyGet(app, "/api/auth/users");
-        MapProxyPost(app, "/api/auth/users");
-        MapProxyPutById(app, "/api/auth/users/{id}/role",
-            id => $"/api/auth/users/{Uri.EscapeDataString(id)}/role");
-        MapProxyPutById(app, "/api/auth/users/{id}/password",
-            id => $"/api/auth/users/{Uri.EscapeDataString(id)}/password");
-        MapProxyDeleteById(app, "/api/auth/users/{id}",
-            id => $"/api/auth/users/{Uri.EscapeDataString(id)}");
     }
 
     private static void MapMemoryProxyEndpoints(IEndpointRouteBuilder app)
@@ -46,18 +26,6 @@ public static class ClientProxyEndpoints
         MapProxyPost(app, "/api/memory/remember");
         MapProxyPutById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
         MapProxyDeleteById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
-    }
-
-    private static void MapReviewProxyEndpoints(IEndpointRouteBuilder app)
-    {
-        MapProxyGet(app, "/api/review/memory/submissions/mine");
-        MapProxyGetById(app, "/api/review/memory/submissions/{id}",
-            id => $"/api/review/memory/submissions/{Uri.EscapeDataString(id)}");
-        MapProxyPost(app, "/api/review/memory/submissions");
-        MapProxyPutById(app, "/api/review/memory/submissions/{id}",
-            id => $"/api/review/memory/submissions/{Uri.EscapeDataString(id)}");
-        MapProxyDeleteById(app, "/api/review/memory/submissions/{id}",
-            id => $"/api/review/memory/submissions/{Uri.EscapeDataString(id)}");
     }
 
     private static void MapProxyGet(IEndpointRouteBuilder app, string localPath, string? remotePath = null)

@@ -12,10 +12,6 @@
   <link rel="stylesheet" href="css/chat.css" />
   <link rel="stylesheet" href="css/governance.css" />
   <link rel="stylesheet" href="/dna-shared/css/memory.css" />
-  <link rel="stylesheet" href="css/review-admin.css" />
-  <link rel="stylesheet" href="/dna-shared/css/user-admin.css" />
-  <link rel="stylesheet" href="css/module-management.css" />
-  <link rel="stylesheet" href="css/file-tree.css" />
   <link rel="stylesheet" href="/dna-shared/css/ui-framework.css" />
   <link rel="stylesheet" href="/dna-shared/css/graph.css" />
   <link rel="stylesheet" href="css/github-markdown-dark.css" />
@@ -39,10 +35,8 @@
   <div id="mainApp" class="app">
     <div class="tabs">
       <div class="tab active" data-tab="topology" data-action="switch-tab">架构总览</div>
-      <div class="tab" data-tab="fileTree" data-action="switch-tab">工程文件</div>
       <div class="tab" data-tab="memoryMgmt" data-action="switch-tab">知识治理</div>
       <div class="tab" data-tab="users" data-action="switch-tab">用户管理</div>
-      <div class="tab" data-tab="reviewQueue" data-action="switch-tab" style="opacity:0.5;">审核队列</div>
     </div>
 
     <div class="panels">
@@ -57,19 +51,6 @@
           <div id="topoGrid" class="topo-grid"></div>
           <div id="archSidebar" class="arch-sidebar" style="display:none"></div>
         </div>
-      </div>
-
-      <div id="panelFileTree" class="panel">
-        <div class="file-tree-toolbar">
-          <button class="btn btn-primary btn-sm" data-action="refresh-file-tree">刷新</button>
-          <div class="legend">
-            <span class="legend-item"><span class="legend-dot registered"></span> 已注册</span>
-            <span class="legend-item"><span class="legend-dot crosswork"></span> 执行团队</span>
-            <span class="legend-item"><span class="legend-dot container"></span> 容器</span>
-            <span class="legend-item"><span class="legend-dot candidate"></span> 候选（双击注册）</span>
-          </div>
-        </div>
-        <div id="fileTreeContent" style="overflow:auto;flex:1;padding:12px;"></div>
       </div>
 
       <div id="panelMemoryMgmt" class="panel">
@@ -205,48 +186,58 @@
         </div>
       </div>
 
-      <div id="panelReviewQueue" class="panel">
-        <div class="review-admin-page">
-          <div id="reviewAuthSection"></div>
-          <div id="reviewStats" class="review-stats"></div>
-
-          <div class="review-layout">
-            <div class="review-sidebar">
-              <div class="review-sidebar-toolbar">
-                <div class="review-filter-row">
-                  <select id="reviewFilterStatus" data-change-action="load-review-queue">
-                    <option value="">全部状态</option>
-                    <option value="pending">待审核</option>
-                    <option value="approved">已通过</option>
-                    <option value="rejected">已驳回</option>
-                    <option value="published">已发布</option>
-                    <option value="withdrawn">已撤回</option>
-                    <option value="superseded">已过期</option>
-                  </select>
-                  <input
-                    id="reviewFilterSubmitter"
-                    type="text"
-                    placeholder="按提交人筛选"
-                    data-keydown-action="load-review-queue-on-enter"
-                  />
+      <div id="panelUsers" class="panel">
+        <div class="memory-layout">
+          <div class="memory-sidebar">
+            <div class="memory-filters">
+              <button class="btn btn-primary btn-sm" data-action="load-whitelist">刷新白名单</button>
+              <button class="btn btn-secondary btn-sm" data-action="new-whitelist-entry">新建条目</button>
+            </div>
+            <div id="whitelistList" class="memory-list"></div>
+          </div>
+          <div class="memory-content">
+            <div id="whitelistEditorForm" class="memory-form">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h2 style="margin:0;font-size:18px;color:var(--text-primary);">白名单用户管理 <span id="whitelistEntryId" style="font-size:12px;color:var(--text-secondary);font-weight:normal;margin-left:8px;"></span></h2>
+              </div>
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label for="whitelistIp">IP</label>
+                  <input type="text" id="whitelistIp" placeholder="例如 192.168.1.23" />
                 </div>
-                <div class="review-filter-actions">
-                  <button class="btn btn-secondary btn-sm" data-action="clear-review-filters">清空筛选</button>
-                  <button class="btn btn-primary btn-sm" data-action="load-review-queue">刷新队列</button>
+                <div class="memory-form-group">
+                  <label for="whitelistName">名称</label>
+                  <input type="text" id="whitelistName" placeholder="例如 设计师电脑" />
                 </div>
               </div>
-              <div id="reviewSubmissionList" class="review-submission-list"></div>
-            </div>
-
-            <div class="review-content">
-              <div id="reviewDetailContent" class="review-detail-content"></div>
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label for="whitelistRole">权限</label>
+                  <select id="whitelistRole">
+                    <option value="viewer">viewer</option>
+                    <option value="editor">editor</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </div>
+                <div class="memory-form-group">
+                  <label for="whitelistEnabled">状态</label>
+                  <select id="whitelistEnabled">
+                    <option value="true">启用</option>
+                    <option value="false">禁用</option>
+                  </select>
+                </div>
+              </div>
+              <div class="memory-form-group">
+                <label for="whitelistNote">备注</label>
+                <input type="text" id="whitelistNote" placeholder="用途说明" />
+              </div>
+              <div class="memory-actions">
+                <button class="btn btn-primary btn-sm" data-action="save-whitelist-entry">保存</button>
+                <button class="btn btn-secondary btn-sm" data-action="delete-whitelist-entry" style="color:#ef4444;border-color:#ef4444;">删除</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-
-      <div id="panelUsers" class="panel">
-        <div id="userAdminRoot" class="user-admin-page"></div>
       </div>
     </div>
   </div>

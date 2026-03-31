@@ -101,6 +101,11 @@ body {
   color: var(--text-secondary);
 }
 
+.client-auth-message.error,
+.status-copy.error {
+  color: #fca5a5;
+}
+
 .client-auth-form,
 .client-user-bar {
   display: flex;
@@ -221,6 +226,89 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
+}
+
+.mcp-section-heading {
+  margin-top: 22px;
+}
+
+.mcp-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.mcp-detail-card {
+  min-height: 0;
+}
+
+.mcp-tool-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.mcp-tool-item {
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(10, 10, 20, 0.45);
+}
+
+.mcp-tool-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.mcp-tool-group {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(96, 165, 250, 0.2);
+  color: #bfdbfe;
+}
+
+.mcp-tool-desc {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mcp-tool-params {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mcp-tool-param {
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.mcp-flow-diagram {
+  margin-top: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  background: rgba(10, 10, 20, 0.55);
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
 }
 
 .status-card {
@@ -504,6 +592,18 @@ body {
   margin-top: 16px;
 }
 
+.access-profile-grid {
+  margin-top: 12px;
+}
+
+.access-profile-note {
+  grid-column: 1 / -1;
+}
+
+.access-profile-rule {
+  margin-top: 12px;
+}
+
 .review-mode-banner {
   display: flex;
   flex-direction: column;
@@ -731,6 +831,10 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .mcp-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .connection-layout {
     grid-template-columns: 1fr;
   }
@@ -775,6 +879,10 @@ body {
   .overview-strip,
   .status-grid,
   .account-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mcp-detail-grid {
     grid-template-columns: 1fr;
   }
 

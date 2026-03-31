@@ -12,7 +12,8 @@ public sealed class DefaultCliCommand : ICliCommand
         Console.WriteLine("Project DNA Client");
         Console.WriteLine("运行方式：");
         Console.WriteLine("  Client --stdio --server http://localhost:5051");
-        Console.WriteLine("  Client --port 5052 --server http://localhost:5051");
+        Console.WriteLine("  Client --server http://localhost:5051");
+        Console.WriteLine("说明：Client 固定端口 5052，且同一台机器只允许运行一个实例。");
         return Task.FromResult(0);
     }
 }

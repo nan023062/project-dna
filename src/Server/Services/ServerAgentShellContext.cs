@@ -1,6 +1,5 @@
 using System.Text;
 using Dna.Knowledge;
-using Dna.Review;
 using Dna.Web.Shared.AgentShell;
 
 namespace Dna.Services;
@@ -8,7 +7,6 @@ namespace Dna.Services;
 internal sealed class ServerAgentShellContext(
     IGraphEngine graph,
     IMemoryEngine memory,
-    MemoryReviewStore reviewStore,
     ServerRuntimeOptions runtimeOptions) : IAgentShellContext
 {
     public string HostKind => "server";
@@ -19,7 +17,6 @@ internal sealed class ServerAgentShellContext(
 
         var topology = graph.GetTopology();
         var stats = memory.GetMemoryStats();
-        var pendingReviews = reviewStore.ListSubmissions(ReviewSubmissionStatus.Pending, null, "memory").Count;
         var latestUserMessage = request.Messages.LastOrDefault(item => string.Equals(item.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content?.Trim();
 
         var sb = new StringBuilder();
@@ -29,10 +26,9 @@ internal sealed class ServerAgentShellContext(
         sb.AppendLine($"- Data Path: {runtimeOptions.DataPath}");
         sb.AppendLine($"- Modules: {topology.Nodes.Count}");
         sb.AppendLine($"- Formal Memories: {stats.Total}");
-        sb.AppendLine($"- Pending Reviews: {pendingReviews}");
         sb.AppendLine();
         sb.AppendLine("当前版本只提供轻量 agent 壳层，不做详细任务编排。");
-        sb.AppendLine("Server chat 的职责先聚焦在管理视角、知识治理入口和审核边界提示。");
+        sb.AppendLine("Server chat 的职责先聚焦在管理视角、架构预览与记忆治理入口。");
         sb.AppendLine();
 
         if (!string.IsNullOrWhiteSpace(latestUserMessage))
@@ -41,16 +37,6 @@ internal sealed class ServerAgentShellContext(
             sb.AppendLine();
             sb.AppendLine(latestUserMessage);
             sb.AppendLine();
-
-            if (ContainsAny(latestUserMessage, "审核", "review", "发布", "正式知识"))
-            {
-                sb.AppendLine("## Governance Boundary");
-                sb.AppendLine();
-                sb.AppendLine("- Server 管理端可以审核、发布预审知识。");
-                sb.AppendLine("- 管理员客户端可以按既定边界直接上传正式知识。");
-                sb.AppendLine("- 普通客户端修改正式知识仍然应走预审。");
-                sb.AppendLine();
-            }
 
             if (ContainsAny(latestUserMessage, "编排", "agent", "执行", "workflow", "plan"))
             {

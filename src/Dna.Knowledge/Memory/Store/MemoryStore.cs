@@ -9,7 +9,7 @@ namespace Dna.Memory.Store;
 
 /// <summary>
 /// 记忆存储 — 纯 SQLite 存储引擎。
-/// index.db 存储索引/元数据/向量/FTS，记忆内容不再落盘为 JSON 文件。
+/// memory.db 存储索引/元数据/向量/FTS，记忆内容不再落盘为 JSON 文件。
 /// </summary>
 internal partial class MemoryStore : IDisposable
 {
@@ -46,23 +46,22 @@ internal partial class MemoryStore : IDisposable
         _memoryDir = Path.Combine(storePath, "memory");
         Directory.CreateDirectory(_memoryDir);
 
-        var dbPath = Path.Combine(storePath, "index.db");
-        var legacyDbPath = Path.Combine(_memoryDir, "index.db");
-        if (!File.Exists(dbPath) && File.Exists(legacyDbPath))
+        var dbPath = Path.Combine(storePath, "memory.db");
+        var legacyRootIndexDbPath = Path.Combine(storePath, "index.db");
+        var legacyMemoryDirIndexDbPath = Path.Combine(_memoryDir, "index.db");
+
+        if (!File.Exists(dbPath))
         {
-            File.Move(legacyDbPath, dbPath, overwrite: true);
-
-            var oldWal = legacyDbPath + "-wal";
-            var oldShm = legacyDbPath + "-shm";
-            var newWal = dbPath + "-wal";
-            var newShm = dbPath + "-shm";
-
-            if (File.Exists(oldWal))
-                File.Move(oldWal, newWal, overwrite: true);
-            if (File.Exists(oldShm))
-                File.Move(oldShm, newShm, overwrite: true);
-
-            _logger.LogInformation("已迁移旧索引库: {Old} -> {New}", legacyDbPath, dbPath);
+            if (File.Exists(legacyRootIndexDbPath))
+            {
+                MoveSqliteDbWithSidecars(legacyRootIndexDbPath, dbPath);
+                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyRootIndexDbPath, dbPath);
+            }
+            else if (File.Exists(legacyMemoryDirIndexDbPath))
+            {
+                MoveSqliteDbWithSidecars(legacyMemoryDirIndexDbPath, dbPath);
+                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyMemoryDirIndexDbPath, dbPath);
+            }
         }
 
         _db?.Dispose();
@@ -81,6 +80,21 @@ internal partial class MemoryStore : IDisposable
         _initialized = true;
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
             dbPath, storePath, Count());
+    }
+
+    private static void MoveSqliteDbWithSidecars(string fromDbPath, string toDbPath)
+    {
+        File.Move(fromDbPath, toDbPath, overwrite: true);
+
+        var fromWal = fromDbPath + "-wal";
+        var fromShm = fromDbPath + "-shm";
+        var toWal = toDbPath + "-wal";
+        var toShm = toDbPath + "-shm";
+
+        if (File.Exists(fromWal))
+            File.Move(fromWal, toWal, overwrite: true);
+        if (File.Exists(fromShm))
+            File.Move(fromShm, toShm, overwrite: true);
     }
 
     private void EnsureSchema()

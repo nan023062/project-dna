@@ -109,6 +109,77 @@ public sealed class ClientWorkspaceStore
         }
     }
 
+    public ClientWorkspaceRecord SetCurrentServer(string serverBaseUrl, string? displayName = null)
+    {
+        lock (_gate)
+        {
+            var current = ResolveCurrentWorkspace();
+            current.ServerBaseUrl = NormalizeServerBaseUrl(serverBaseUrl);
+            current.Mode = InferWorkspaceMode(current.ServerBaseUrl);
+            if (!string.IsNullOrWhiteSpace(displayName))
+                current.Name = displayName.Trim();
+            current.UpdatedAtUtc = DateTime.UtcNow;
+            SaveState();
+            return Clone(current);
+        }
+    }
+
+    public int SyncDiscoveredServers(IEnumerable<DiscoveredServerInfo> discoveredServers)
+    {
+        lock (_gate)
+        {
+            var changed = 0;
+            foreach (var discovered in discoveredServers.Where(item => item.Allowed))
+            {
+                var normalizedUrl = NormalizeServerBaseUrl(discovered.BaseUrl);
+                var normalizedName = BuildDiscoveredWorkspaceName(discovered, normalizedUrl);
+
+                var existing = _state.Workspaces.FirstOrDefault(item =>
+                    string.Equals(item.ServerBaseUrl, normalizedUrl, StringComparison.OrdinalIgnoreCase));
+                if (existing is not null)
+                {
+                    var updated = false;
+                    if (!string.Equals(existing.Name, normalizedName, StringComparison.Ordinal))
+                    {
+                        existing.Name = normalizedName;
+                        updated = true;
+                    }
+
+                    var inferredMode = InferWorkspaceMode(normalizedUrl);
+                    if (!string.Equals(existing.Mode, inferredMode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        existing.Mode = inferredMode;
+                        updated = true;
+                    }
+
+                    if (updated)
+                    {
+                        existing.UpdatedAtUtc = DateTime.UtcNow;
+                        changed++;
+                    }
+
+                    continue;
+                }
+
+                _state.Workspaces.Add(new ClientWorkspaceRecord
+                {
+                    Id = CreateWorkspaceId(),
+                    Name = normalizedName,
+                    Mode = InferWorkspaceMode(normalizedUrl),
+                    ServerBaseUrl = normalizedUrl,
+                    WorkspaceRoot = _defaultWorkspaceRoot,
+                    UpdatedAtUtc = DateTime.UtcNow
+                });
+                changed++;
+            }
+
+            if (changed > 0)
+                SaveState();
+
+            return changed;
+        }
+    }
+
     public ClientWorkspaceRecord DeleteWorkspace(string workspaceId)
     {
         lock (_gate)
@@ -298,6 +369,14 @@ public sealed class ClientWorkspaceStore
 
     private static string CreateWorkspaceId()
         => $"ws-{Guid.NewGuid():N}"[..11];
+
+    private static string BuildDiscoveredWorkspaceName(DiscoveredServerInfo discovered, string normalizedUrl)
+    {
+        if (Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var uri))
+            return uri.Host;
+
+        return normalizedUrl;
+    }
 
     private sealed class WorkspaceConfigState
     {

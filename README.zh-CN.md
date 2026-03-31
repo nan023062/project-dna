@@ -24,15 +24,15 @@ dotnet build
 # 先启动知识服务器（仅知识库 / API / Dashboard）
 cd /data/dna/my-project && dna --db         # 当前目录作为知识库
 dna --db /data/dna/my-project               # 指定知识库路径
-dna --db /data/dna/my-project --port 5051   # 指定端口（示例）
 
 # 再启动客户端（MCP + 决策执行入口）
-Client --server http://localhost:5051 --port 5052
+Client --server http://localhost:5051
 Client --stdio --server http://localhost:5051   # stdio 模式（由 IDE 启动）
 ```
 
 `--db` 必须指定，指向知识库存储目录。
 Server 不访问项目源码，只负责知识数据一致性与多端共享；Client 承载 MCP 与决策执行能力。
+当前默认固定端口与单实例：`Server=5051`，`Client=5052`。
 
 ### 3. 接入 IDE
 
@@ -56,6 +56,13 @@ Server 不访问项目源码，只负责知识数据一致性与多端共享；C
 - 架构拓扑图浏览（只读）
 - 记忆增删查改
 - LLM 配置 + AI 对话
+
+客户端浏览器打开 `http://localhost:5052`：
+- 概览 / 拓扑 / 记忆三页签
+- 手动填写 Server 地址连接（不再自动扫描局域网）
+- 只读展示当前客户端 IP 的白名单权限（角色/备注）
+- MCP 工具清单、外置 Agent 使用说明与治理流程图
+- Cursor / Codex 一键安装（先选择目标项目目录，再写入工作流配置）
 
 ### 5. CLI
 
@@ -110,6 +117,8 @@ dna cli stats                           # 知识库统计
 | `run_execution_pipeline` | 执行“架构师->开发者”管线 |
 | `get_latest_pipeline_run` | 查看最近一次执行结果 |
 
+客户端可通过 `GET /api/client/mcp/tools` 获取全部 MCP 工具清单（含参数说明），用于 Web UI 展示与自动化接入。
+
 ## 设计哲学
 
 > **大道至简，万物归一。**
@@ -133,6 +142,13 @@ dna cli stats                           # 知识库统计
 - 不再依赖 `architecture.json`、`modules.json`、`memory/entries/*.json`。
 - 记忆按 `NodeId` 归属到单节点，短期记忆可提炼为节点长期知识（`NodeKnowledge`）。
 - 支持模块知识压缩（单模块 / 全量）及可配置的定时压缩调度（API / Dashboard）。
+
+## 2026-04 连接与安装收敛说明
+
+- 账号登录链路从当前 MVP 主路径移除，连接授权改由 Server 白名单控制（按客户端 IP 绑定角色）。
+- Client 不再自动扫描局域网 Server，改为手动填写 `IP/URL` 连接。
+- Client 仅展示自己的权限信息，不提供权限修改能力。
+- 工具安装流程升级：点击 Cursor/Codex 安装时先弹系统文件夹选择窗口，再把配置写入用户选定项目目录。
 
 ## 许可证
 

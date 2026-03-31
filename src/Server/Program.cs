@@ -5,19 +5,19 @@ using Dna.Core.Framework;
 using Dna.Interfaces.Api;
 using Dna.Interfaces.Cli;
 using Dna.Knowledge;
-using Dna.Review;
 using Dna.Services;
 using Dna.Web.Shared.AgentShell;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var runtimeOptions = ServerBootstrap.CreateRuntimeOptions(args);
+var appArgs = ServerBootstrap.SanitizeArgsForFixedPort(args);
 
-var app = DnaApp.Create(args, new AppOptions
+var app = DnaApp.Create(appArgs, new AppOptions
 {
     AppName = "Project DNA",
     AppDescription = "项目认知引擎",
     DefaultPort = 5051,
-    LockScopeProvider = _ => runtimeOptions.DataPath,
+    AllowPortAutoFallback = false,
+    LockScopeProvider = _ => "project-dna-server",
     LogDirectoryProvider = _ => runtimeOptions.DataPath,
     BannerExtras = (_, port) =>
     {
@@ -52,32 +52,17 @@ app.ConfigureServices(services =>
     if (app.Mode != AppRunMode.Stdio)
         services.AddHostedService<KnowledgeCondenseScheduler>();
 
-    var jwtService = new JwtService();
-    services.AddSingleton(jwtService);
-    services.AddSingleton<UserStore>(sp =>
-    {
-        var store = new UserStore();
-        store.Initialize(sp.GetRequiredService<ServerRuntimeOptions>().DataPath);
-        return store;
-    });
-    services.AddSingleton<MemoryReviewStore>(sp =>
-    {
-        var store = new MemoryReviewStore();
-        store.Initialize(sp.GetRequiredService<ServerRuntimeOptions>().DataPath);
-        return store;
-    });
-
-    services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(opts => opts.TokenValidationParameters = jwtService.GetValidationParameters());
+    services.AddSingleton<ServerAllowlistStore>();
+    services.AddAuthentication();
     services.AddAuthorization(ServerPolicies.Configure);
 });
 
 app.ConfigureWebApp(web =>
 {
     web.UseMiddleware<RequestLoggingMiddleware>();
+    web.UseMiddleware<ServerAccessControlMiddleware>();
     web.UseAuthentication();
     web.UseAuthorization();
-    web.MapAuthEndpoints();
     web.MapApiEndpoints(DateTime.UtcNow);
 });
 

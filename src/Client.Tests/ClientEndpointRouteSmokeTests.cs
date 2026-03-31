@@ -23,13 +23,16 @@ public class ClientEndpointRouteSmokeTests
             WorkspaceConfigPath = workspaceConfigPath
         });
         builder.Services.AddSingleton(new HttpClient());
+        builder.Services.AddSingleton<ServerDiscoveryService>();
         builder.Services.AddSingleton<ClientWorkspaceStore>();
         builder.Services.AddSingleton<DnaServerApi>();
+        builder.Services.AddSingleton<ClientFolderPickerService>();
         builder.Services.AddClientToolingServices();
         var app = builder.Build();
 
         app.MapClientStatusEndpoints();
         app.MapClientWorkspaceEndpoints();
+        app.MapClientDiscoveryEndpoints();
         app.MapClientProxyEndpoints();
         app.MapClientAgentProxyEndpoints();
         app.MapClientToolingEndpoints();
@@ -48,17 +51,12 @@ public class ClientEndpointRouteSmokeTests
         AssertRoute(routes, "/api/client/workspaces/{id}", "PUT");
         AssertRoute(routes, "/api/client/workspaces/current", "PUT");
         AssertRoute(routes, "/api/client/workspaces/{id}", "DELETE");
+        AssertRoute(routes, "/api/client/workspaces/discover", "GET");
+        AssertRoute(routes, "/api/client/workspaces/current-server", "PUT");
 
         AssertRoute(routes, "/api/status", "GET");
         AssertRoute(routes, "/api/topology", "GET");
-        AssertRoute(routes, "/api/auth/login", "POST");
-        AssertRoute(routes, "/api/auth/register", "POST");
-        AssertRoute(routes, "/api/auth/me", "GET");
-        AssertRoute(routes, "/api/auth/users", "GET");
-        AssertRoute(routes, "/api/auth/users", "POST");
-        AssertRoute(routes, "/api/auth/users/{id}/role", "PUT");
-        AssertRoute(routes, "/api/auth/users/{id}/password", "PUT");
-        AssertRoute(routes, "/api/auth/users/{id}", "DELETE");
+        AssertRoute(routes, "/api/connection/access", "GET");
 
         AssertRoute(routes, "/api/memory/stats", "GET");
         AssertRoute(routes, "/api/memory/query", "GET");
@@ -66,12 +64,6 @@ public class ClientEndpointRouteSmokeTests
         AssertRoute(routes, "/api/memory/{id}", "PUT");
         AssertRoute(routes, "/api/memory/{id}", "DELETE");
         AssertRoute(routes, "/api/memory/remember", "POST");
-
-        AssertRoute(routes, "/api/review/memory/submissions/mine", "GET");
-        AssertRoute(routes, "/api/review/memory/submissions/{id}", "GET");
-        AssertRoute(routes, "/api/review/memory/submissions/{id}", "PUT");
-        AssertRoute(routes, "/api/review/memory/submissions/{id}", "DELETE");
-        AssertRoute(routes, "/api/review/memory/submissions", "POST");
 
         AssertRoute(routes, "/agent/chat", "POST");
         AssertRoute(routes, "/agent/sessions", "GET");
@@ -87,6 +79,8 @@ public class ClientEndpointRouteSmokeTests
 
         AssertRoute(routes, "/api/client/tooling/list", "GET");
         AssertRoute(routes, "/api/client/tooling/install", "POST");
+        AssertRoute(routes, "/api/client/tooling/select-folder", "POST");
+        AssertRoute(routes, "/api/client/mcp/tools", "GET");
     }
 
     private static void AssertRoute(IReadOnlyCollection<RouteInfo> routes, string pattern, string method)

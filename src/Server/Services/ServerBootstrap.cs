@@ -5,6 +5,25 @@ namespace Dna.Services;
 
 public static class ServerBootstrap
 {
+    public static string[] SanitizeArgsForFixedPort(string[] args)
+    {
+        var sanitized = new List<string>(args.Length);
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (string.Equals(args[i], "--port", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(args[i], "-p", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
+                    i++;
+                continue;
+            }
+
+            sanitized.Add(args[i]);
+        }
+
+        return sanitized.ToArray();
+    }
+
     public static ServerRuntimeOptions CreateRuntimeOptions(string[] args)
     {
         var dataPath = ResolveDataPath(args);
@@ -56,8 +75,7 @@ public static class ServerBootstrap
         Console.WriteLine("用法：");
         Console.WriteLine("  dna --db                          # 用当前目录作为知识库");
         Console.WriteLine("  dna --db <知识库目录>");
-        Console.WriteLine("  dna --db --port 5051              # 当前目录 + 指定端口");
-        Console.WriteLine("  dna --db ~/.dna/my-game --port 5051");
+        Console.WriteLine("  dna --db ~/.dna/my-game");
         Console.WriteLine();
         Console.WriteLine("或设置环境变量 DNA_STORE_PATH。");
         Environment.Exit(1);

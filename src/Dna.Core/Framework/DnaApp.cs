@@ -210,7 +210,9 @@ public sealed class DnaApp
     private async Task<int> RunWebAsync()
     {
         ParseWebArgs();
-        _port = FindAvailablePort(_port);
+        var requestedPort = _port;
+        if (_options.AllowPortAutoFallback)
+            _port = FindAvailablePort(_port);
 
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -231,7 +233,7 @@ public sealed class DnaApp
         return await StartWithLockAsync(async () =>
         {
             await InitializeServicesAsync();
-            PrintBanner(_port);
+            PrintBanner(_port, requestedPort);
             if (_openBrowser) LaunchBrowser(_port);
             await webApp.RunAsync();
         });
@@ -417,7 +419,7 @@ public sealed class DnaApp
     //  横幅
     // ═══════════════════════════════════════════
 
-    private void PrintBanner(int port)
+    private void PrintBanner(int port, int requestedPort)
     {
         var name = _options.AppName;
         var desc = string.IsNullOrEmpty(_options.AppDescription) ? "" : $" — {_options.AppDescription}";
@@ -440,10 +442,10 @@ public sealed class DnaApp
             foreach (var (label, value) in extras)
                 PrintLine(label, value);
 
-        if (port != _options.DefaultPort)
+        if (_options.AllowPortAutoFallback && port != requestedPort)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"  * Port {_options.DefaultPort} is in use, switched to {port}");
+            Console.WriteLine($"  * Port {requestedPort} is in use, switched to {port}");
             Console.ResetColor();
         }
         Console.WriteLine();

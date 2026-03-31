@@ -10,8 +10,14 @@ public sealed class WebUiAssetSmokeTests
         var html = ReadRepoFile("Client", "wwwroot", "index.html");
 
         Assert.Contains("workspace-tab", html);
-        Assert.Contains("panelAccount", html);
-        Assert.Contains("clientAccountRoot", html);
+        Assert.Contains("panelConnections", html);
+        Assert.Contains("manualServerAddress", html);
+        Assert.Contains("connect-manual-server", html);
+        Assert.Contains("mcpToolList", html);
+        Assert.Contains("mcpFlowDiagram", html);
+        Assert.Contains("accessProfileRole", html);
+        Assert.Contains("accessProfileIp", html);
+        Assert.Contains("accessProfileName", html);
         Assert.Contains("panelMemory", html);
         Assert.Contains("chatPanel", html);
         Assert.Contains("chatInput", html);
@@ -24,9 +30,9 @@ public sealed class WebUiAssetSmokeTests
     {
         var html = ReadRepoFile("Server", "wwwroot", "index.html");
 
-        Assert.Contains("reviewQueue", html);
         Assert.Contains("panelUsers", html);
-        Assert.Contains("userAdminRoot", html);
+        Assert.Contains("whitelistList", html);
+        Assert.Contains("whitelistEditorForm", html);
         Assert.Contains("panelMemoryMgmt", html);
         Assert.Contains("chatPanel", html);
     }

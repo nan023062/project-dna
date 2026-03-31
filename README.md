@@ -111,14 +111,14 @@ dotnet build
 # 1) Start knowledge server
 cd /path/to/knowledge-store && dna --db       # current dir as store
 dna --db /path/to/knowledge-store             # specify store path
-dna --db /path/to/store --port 5051           # custom port example
 
 # 2) Start client (MCP + agent entry)
-Client --server http://localhost:5051 --port 5052
+Client --server http://localhost:5051
 Client --stdio --server http://localhost:5051    # stdio mode for IDE
 ```
 
 `--db` is required. The server stores all data (SQLite) in this directory.
+Current MVP uses fixed ports and single-instance runtime: `Server=5051`, `Client=5052`.
 
 ### 3. Connect from Cursor / Codex
 
@@ -143,6 +143,13 @@ Open `http://localhost:5051` in your browser:
 - Topology visualization (read-only)
 - Memory CRUD (create, search, edit, delete)
 - LLM configuration and AI chat
+
+Open `http://localhost:5052` for the client workbench:
+- Three tabs: Overview / Topology / Memory
+- Manual server address connection (LAN auto-scan removed)
+- Read-only display of current client IP permission (role/name/note)
+- MCP tool inventory, external agent usage guide, and governance flow diagram
+- One-click Cursor/Codex setup (choose target folder first, then install files)
 
 ### 5. CLI
 
@@ -197,12 +204,21 @@ Client now provides a configurable execution pipeline with default order "retros
 | `run_execution_pipeline` | Run architect->developer pipeline |
 | `get_latest_pipeline_run` | Get latest pipeline run result |
 
+Client also exposes `GET /api/client/mcp/tools` to return the full MCP tool catalog (including parameter descriptions) for UI and automation.
+
 ## 2026-03 Client/Server Split Notes
 
 - `Server` is now a standalone knowledge service (`REST API + Dashboard + SQLite`).
 - `Client` is now a standalone MCP gateway and execution entry.
 - Why split: multi-end knowledge writes need online conflict-safe coordination; Git/P4 are great for source control, but not ideal as the runtime knowledge write arbiter.
 - Transport, auth, and real-time delivery decision: [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
+
+## 2026-04 Connection & Tooling Convergence Notes
+
+- Login flow is removed from current MVP path; access is controlled by server IP allowlist with per-IP role assignment.
+- Client no longer performs automatic LAN server scanning; users connect by manually entering server IP/URL.
+- Client only displays current permission profile and cannot modify roles.
+- IDE tooling install flow is upgraded: choose target project folder via system picker, then install Cursor/Codex workflow files into that folder.
 
 ## Ecosystem (Planned)
 

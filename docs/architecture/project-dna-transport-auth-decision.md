@@ -1,8 +1,20 @@
 # Project DNA 连接与鉴权决策
 
-> Status: Accepted
+> Status: Superseded (2026-04 MVP 收敛后)
 > Date: 2026-03-30
 > Scope: Client / Server 连接协议、接口分层、鉴权边界
+
+> 更新说明（2026-04-01）：
+> 当前 MVP 主路径已从“JWT 登录 + 审核流”收敛为“Server 白名单（按 IP 分配角色）+ Client 手动地址连接”。
+> 本文保留为历史方案记录，不再作为当前实现的唯一依据。
+
+## 0. 当前生效策略（2026-04）
+
+- 主业务仍走 `REST`，MCP 仍只作为 IDE/Agent 接入协议。
+- `Server` 不再要求客户端账号登录；改为维护可连接 IP 白名单并为每个 IP 分配角色（admin/editor/viewer）。
+- `Client` 不自动扫描局域网，改为手动填写 `IP/URL` 连接。
+- `Client` 只显示自己的权限信息，不允许客户端修改权限。
+- 当前 MVP 的治理主路径：`get_context / recall / remember` + 记忆压缩，不走审核发布主流程。
 
 ## 1. 决策结论
 
@@ -322,4 +334,3 @@ SSE 只负责服务端到客户端的单向流式推送：
 
 - 先把权限边界收紧
 - 再补用户体验层的实时性
-

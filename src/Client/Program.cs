@@ -11,13 +11,15 @@ var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
 var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
 var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
 var defaultClientPort = ClientBootstrap.ResolveClientDefaultPort(args);
+var appArgs = ClientBootstrap.SanitizeArgsForFixedPort(args);
 
-var app = DnaApp.Create(args, new AppOptions
+var app = DnaApp.Create(appArgs, new AppOptions
 {
     AppName = "Project DNA Client",
     AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
     DefaultPort = defaultClientPort,
-    LockScopeProvider = _ => $"client:{workspaceRoot}:{Environment.ProcessId}",
+    AllowPortAutoFallback = false,
+    LockScopeProvider = _ => "project-dna-client",
     BannerExtras = (_, port) =>
     {
         var host = ClientBootstrap.GetLocalIp();
@@ -41,7 +43,6 @@ app.ConfigureServices(services =>
         WorkspaceConfigPath = workspaceConfigPath
     });
     services.AddSingleton<ClientWorkspaceStore>();
-    services.AddHttpContextAccessor();
     services.AddSingleton<IAgentShellContext, ClientAgentShellContext>();
     services.AddSingleton(sp => new AgentShellStorageOptions
     {
@@ -51,12 +52,16 @@ app.ConfigureServices(services =>
             "client-agent-shell")
     });
     services.AddSingleton<AgentShellService>();
-    services.AddTransient<ForwardAuthHeaderHandler>();
     services.AddHttpClient<DnaServerApi>((_, client) =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
-    }).AddHttpMessageHandler<ForwardAuthHeaderHandler>();
+    });
+    services.AddHttpClient<ServerDiscoveryService>((_, client) =>
+    {
+        client.Timeout = TimeSpan.FromMilliseconds(400);
+    });
     services.AddClientToolingServices();
+    services.AddSingleton<ClientFolderPickerService>();
 
     if (app.Mode == AppRunMode.Stdio)
     {
@@ -78,6 +83,7 @@ app.ConfigureWebApp(web =>
 {
     web.MapClientStatusEndpoints();
     web.MapClientWorkspaceEndpoints();
+    web.MapClientDiscoveryEndpoints();
     web.MapClientProxyEndpoints();
     web.MapClientAgentProxyEndpoints();
     web.MapClientToolingEndpoints();

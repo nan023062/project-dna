@@ -3,13 +3,8 @@
  * Keeps the shell lifecycle, fullscreen tabs, and refresh flow in one place.
  */
 
-import { $, api, getAuthToken } from './utils.js';
-import {
-  registerEditSidebarOpener,
-  registerFileTreeActions,
-  registerModuleAdminActions,
-  registerRefreshHandler
-} from './app-runtime.js';
+import { $, api } from './utils.js';
+import { registerRefreshHandler } from './app-runtime.js';
 import {
   applyMetricValues,
   formatCompactNumber,
@@ -43,36 +38,12 @@ import {
   addTag
 } from './panels/memory-editor.js';
 import {
-  loadReviewQueue,
-} from './panels/review-admin.js';
-import {
-  loadUsers,
-  selectUser,
-  createUser,
-  updateSelectedUserRole,
-  resetSelectedUserPassword,
-  deleteSelectedUser
-} from './panels/user-admin.js';
-import {
-  loadModuleManagement,
-  saveModule,
-  deleteModule,
-  saveCrosswork,
-  deleteCrosswork,
-  newModule,
-  newCrosswork,
-  onDisciplineChanged,
-  addCrossworkParticipant,
-  newDiscipline,
-  saveDiscipline,
-  deleteDiscipline,
-  addLayerRow
-} from './panels/arch-config.js';
-import { loadFileTree, refreshFileTree } from './panels/file-tree.js';
-import {
-  initEditSidebar,
-  openEditSidebar,
-} from './dialogs/module-editor.js';
+  loadWhitelist,
+  selectWhitelistEntry,
+  newWhitelistEntry,
+  saveWhitelistEntry,
+  deleteWhitelistEntry
+} from './panels/connection-admin.js';
 import { initDetail } from './panels/detail.js';
 import {
   newChat,
@@ -87,30 +58,11 @@ import {
 } from './chat/chat-panel.js';
 import { openLlmSettings, closeLlmSettings } from './chat/llm-settings.js';
 
-registerModuleAdminActions({
-  loadModuleManagement,
-  saveModule,
-  deleteModule,
-  saveCrosswork,
-  deleteCrosswork,
-  newModule,
-  newCrosswork,
-  onDisciplineChanged,
-  addCrossworkParticipant,
-  newDiscipline,
-  saveDiscipline,
-  deleteDiscipline,
-  addLayerRow
-});
-registerFileTreeActions({ loadFileTree, refreshFileTree });
-registerEditSidebarOpener(openEditSidebar);
-
 let refreshTimer = null;
 let topoData = null;
 let stackData = null;
 let isRefreshing = false;
 let visibilityHandlerBound = false;
-let authRefreshPending = false;
 
 function initUI() {
   const mainApp = $('mainApp');
@@ -120,14 +72,8 @@ function initUI() {
 
   registerFullscreenTabs(ui, [
     { id: 'topology', tabButtonSelector: '.tab[data-tab="topology"]', onActivate: () => refreshTopologyOnly() },
-    {
-      id: 'fileTree',
-      tabButtonSelector: '.tab[data-tab="fileTree"]',
-      onActivate: () => initEditSidebar().then(() => loadFileTree({ preserveState: true, showLoading: !_rootsHasRendered() }))
-    },
     { id: 'memoryMgmt', tabButtonSelector: '.tab[data-tab="memoryMgmt"]', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
-    { id: 'reviewQueue', tabButtonSelector: '.tab[data-tab="reviewQueue"]', onActivate: () => loadReviewQueue() },
-    { id: 'users', tabButtonSelector: '.tab[data-tab="users"]', onActivate: () => loadUsers() }
+    { id: 'users', tabButtonSelector: '.tab[data-tab="users"]', onActivate: () => loadWhitelist() }
   ], $);
 }
 
@@ -151,33 +97,10 @@ function getProtectedPanelMessage(error) {
   return error?.message || '无法加载请求的面板。';
 }
 
-function scheduleRefreshAfterAuthChange() {
-  if (authRefreshPending) return;
-  authRefreshPending = true;
-
-  setTimeout(() => {
-    authRefreshPending = false;
-    refresh(true).catch(err => {
-      $('statusText').textContent = `刷新失败：${err?.message || String(err)}`;
-    });
-  }, 0);
-}
-
-function clearReviewFilters() {
-  const status = $('reviewFilterStatus');
-  const submitter = $('reviewFilterSubmitter');
-  if (status) status.value = '';
-  if (submitter) submitter.value = '';
-  return loadReviewQueue();
-}
-
 async function handleStaticAction(action, element, event) {
   switch (action) {
     case 'refresh':
       await refresh(true);
-      break;
-    case 'refresh-file-tree':
-      await refreshFileTree();
       break;
     case 'check-freshness':
       await checkFreshness();
@@ -218,26 +141,17 @@ async function handleStaticAction(action, element, event) {
     case 'delete-memory':
       await deleteMemory();
       break;
-    case 'load-review-queue':
-      await loadReviewQueue();
+    case 'load-whitelist':
+      await loadWhitelist();
       break;
-    case 'load-users':
-      await loadUsers();
+    case 'new-whitelist-entry':
+      newWhitelistEntry();
       break;
-    case 'create-user':
-      await createUser();
+    case 'save-whitelist-entry':
+      await saveWhitelistEntry();
       break;
-    case 'update-user-role':
-      await updateSelectedUserRole();
-      break;
-    case 'reset-user-password':
-      await resetSelectedUserPassword();
-      break;
-    case 'delete-user':
-      await deleteSelectedUser();
-      break;
-    case 'clear-review-filters':
-      await clearReviewFilters();
+    case 'delete-whitelist-entry':
+      await deleteWhitelistEntry();
       break;
     case 'show-session-list':
       showSessionList();
@@ -264,8 +178,8 @@ async function handleStaticAction(action, element, event) {
       closeLlmSettings();
       break;
     default:
-      if (action === 'select-user' && element?.dataset.userId) {
-        selectUser(element.dataset.userId);
+      if (action === 'select-whitelist-entry' && element?.dataset.entryId) {
+        selectWhitelistEntry(element.dataset.entryId);
         break;
       }
       if (action === 'switch-tab' && element?.dataset.tab) {
@@ -282,9 +196,6 @@ async function handleStaticChangeAction(action) {
       break;
     case 'memory-layer-type-changed':
       onLayerTypeChanged();
-      break;
-    case 'load-review-queue':
-      await loadReviewQueue();
       break;
     default:
       break;
@@ -317,12 +228,6 @@ function bindStaticUiEvents() {
       eventName: 'keydown',
       selector: '[data-keydown-action]',
       handler: ({ event, element }) => {
-        if (element.dataset.keydownAction === 'load-review-queue-on-enter' && event.key === 'Enter') {
-          event.preventDefault();
-          void loadReviewQueue();
-          return;
-        }
-
         if (element.dataset.keydownAction === 'chat-keydown') {
           handleChatKeydown(event);
         }
@@ -399,13 +304,6 @@ function shouldSkipAutoRefresh() {
 }
 
 async function refreshTopologyOnly() {
-  if (!getAuthToken()) {
-    resetTopologySummary();
-    showTopologyMessage('需要登录', '请先登录管理员账号后再查看该面板。');
-    $('statusText').textContent = '请先登录管理员账号。';
-    return false;
-  }
-
   $('statusText').textContent = '正在加载拓扑...';
 
   try {
@@ -457,13 +355,6 @@ async function refresh(activeForce = true) {
   try {
     const activeTab = ui.activeTabId || 'topology';
 
-    if (activeTab === 'fileTree') {
-      await refreshFileTree();
-      $('statusText').textContent = `文件树已刷新：${new Date().toLocaleTimeString()}`;
-      $('refreshInfo').textContent = '自动刷新已开启';
-      return;
-    }
-
     if (activeTab === 'memoryMgmt') {
       await Promise.allSettled([loadGovernanceStats(), loadMemories()]);
       $('statusText').textContent = `知识面板已刷新：${new Date().toLocaleTimeString()}`;
@@ -471,15 +362,8 @@ async function refresh(activeForce = true) {
       return;
     }
 
-    if (activeTab === 'reviewQueue') {
-      await loadReviewQueue();
-      $('statusText').textContent = `审核队列已刷新：${new Date().toLocaleTimeString()}`;
-      $('refreshInfo').textContent = '自动刷新已开启';
-      return;
-    }
-
     if (activeTab === 'users') {
-      await loadUsers();
+      await loadWhitelist();
       $('statusText').textContent = `用户列表已刷新：${new Date().toLocaleTimeString()}`;
       $('refreshInfo').textContent = '自动刷新已开启';
       return;
@@ -497,12 +381,6 @@ async function refresh(activeForce = true) {
 
 registerRefreshHandler(refresh);
 
-function _rootsHasRendered() {
-  const container = $('fileTreeContent');
-  return !!container && container.children.length > 0;
-}
-
 initSetup();
 initChatResize();
 bindStaticUiEvents();
-window.addEventListener('dna-admin-auth-changed', scheduleRefreshAfterAuthChange);

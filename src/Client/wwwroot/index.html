@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="/dna-shared/css/topology.css" />
   <link rel="stylesheet" href="/dna-shared/css/memory.css" />
   <link rel="stylesheet" href="/dna-shared/css/graph.css" />
-  <link rel="stylesheet" href="/dna-shared/css/user-admin.css" />
   <link rel="stylesheet" href="css/chat.css" />
   <link rel="stylesheet" href="css/client.css" />
 </head>
@@ -18,27 +17,10 @@
     <header class="client-header">
       <div class="client-header-main">
         <div class="client-brand">Project DNA Client</div>
-        <div class="client-subtitle">本地 MCP 宿主、知识工作区入口，以及后续内置 Agent 的运行外壳。</div>
+        <div class="client-subtitle">本地 MCP 宿主与知识工作区入口。当前模式：无账号登录，按 Server IP 白名单连接。</div>
       </div>
       <div class="client-actions">
-        <div class="client-auth-panel">
-          <div class="client-auth-summary">
-            <div class="client-auth-label">服务器身份</div>
-            <div id="authStateText" class="client-auth-state">未登录</div>
-            <div id="authMessage" class="client-auth-message">登录后可管理正式知识库。</div>
-          </div>
-          <div id="authLoginForm" class="client-auth-form">
-            <input id="authUsername" type="text" placeholder="用户名" />
-            <input id="authPassword" type="password" placeholder="密码" />
-            <button class="btn btn-primary btn-sm" data-action="login">登录</button>
-          </div>
-          <div id="authUserBar" class="client-user-bar hidden">
-            <span id="authUserInfo" class="client-user-info">-</span>
-            <button class="btn btn-secondary btn-sm" data-action="logout">退出</button>
-          </div>
-        </div>
-        <a id="serverDashboardLink" class="btn btn-secondary btn-sm" href="http://127.0.0.1:5051" target="_blank" rel="noreferrer">打开 Server</a>
-        <button class="btn btn-primary btn-sm" data-action="refresh-all">刷新</button>
+        <div id="authMessage" class="client-auth-message">无账号模式：由 Server 白名单控制连接权限。</div>
       </div>
     </header>
 
@@ -60,24 +42,24 @@
           <div class="overview-card">
             <div class="overview-label">工作区</div>
             <div id="targetServer" class="overview-value overview-value-sm">-</div>
-            <select id="workspaceQuickSelect" class="btn btn-secondary btn-sm" data-change-action="quick-switch-workspace" style="margin-top:8px;width:100%;">
-              <option value="">选择工作区...</option>
-            </select>
             <div id="mcpAddress" class="overview-meta">模式: -</div>
           </div>
           <div class="overview-card">
-            <div class="overview-label">知识</div>
-            <div id="memoryTotal" class="overview-value">-</div>
-            <div id="memoryFreshness" class="overview-meta">需要登录</div>
+            <div class="overview-label">手动连接</div>
+            <div id="availableWorkspaceCount" class="overview-value">-</div>
+            <input id="manualServerAddress" class="btn btn-secondary btn-sm" type="text" placeholder="http://127.0.0.1:5051" style="margin-top:8px;width:100%;" />
+            <button class="btn btn-primary btn-sm" data-action="connect-manual-server" style="margin-top:8px;align-self:flex-start;">连接地址</button>
+            <select id="availableWorkspaceSelect" class="btn btn-secondary btn-sm" data-change-action="quick-switch-workspace" style="margin-top:8px;width:100%;">
+              <option value="">选择工作区...</option>
+            </select>
+            <div id="availableWorkspaceHint" class="overview-meta">手动填写地址后连接；下拉可切换已保存工作区</div>
           </div>
         </section>
 
         <section class="workspace-tabs">
           <button class="workspace-tab" data-tab="overview" data-action="switch-tab" data-tab-target="overview">概览</button>
-          <button class="workspace-tab" data-tab="connections" data-action="switch-tab" data-tab-target="connections">连接</button>
-          <button class="workspace-tab" data-tab="account" data-action="switch-tab" data-tab-target="account">账号</button>
           <button class="workspace-tab" data-tab="topology" data-action="switch-tab" data-tab-target="topology">拓扑</button>
-          <button class="workspace-tab" data-tab="memory" data-action="switch-tab" data-tab-target="memory">知识</button>
+          <button class="workspace-tab" data-tab="memory" data-action="switch-tab" data-tab-target="memory">记忆</button>
         </section>
 
         <section class="overview-panel workspace-panel" id="panelOverview">
@@ -89,7 +71,7 @@
           </div>
           <div class="quick-actions">
             <button class="btn btn-primary btn-sm" data-action="switch-tab" data-tab-target="topology">打开拓扑</button>
-            <button class="btn btn-secondary btn-sm" data-action="switch-tab" data-tab-target="memory">打开知识</button>
+            <button class="btn btn-secondary btn-sm" data-action="switch-tab" data-tab-target="memory">打开记忆</button>
             <button class="btn btn-secondary btn-sm" data-action="refresh-tooling-status">刷新工具状态</button>
             <button class="btn btn-primary btn-sm" data-action="install-tooling" data-target="cursor">安装 Cursor 工具</button>
             <button class="btn btn-primary btn-sm" data-action="install-tooling" data-target="codex">安装 Codex 工具</button>
@@ -114,7 +96,7 @@
             </div>
             <div class="status-card">
               <div class="status-card-title">当前职责</div>
-              <p id="overviewSummary" class="status-copy">Client 承载本地 MCP、工作区管理和知识入口；Server 管理正式知识库、拓扑与鉴权。</p>
+              <p id="overviewSummary" class="status-copy">Client 承载本地 MCP、连接管理和知识入口；Server 管理正式知识库、拓扑与白名单。</p>
             </div>
             <div class="status-card">
               <div class="status-card-title">IDE 工具接入</div>
@@ -131,34 +113,77 @@
               </ul>
             </div>
           </div>
+
+          <div class="section-heading mcp-section-heading">
+            <div>
+              <h2>MCP 接口与治理说明</h2>
+              <p>展示 Client 对外暴露的全部 MCP 工具，帮助团队快速理解外置 Agent 的接入方式与知识治理闭环。</p>
+            </div>
+            <button class="btn btn-secondary btn-sm" data-action="refresh-mcp-tools">刷新接口清单</button>
+          </div>
+
+          <div class="mcp-detail-grid">
+            <div class="status-card mcp-detail-card">
+              <div class="status-card-title">MCP 工具清单</div>
+              <div id="mcpToolSummary" class="status-copy">加载中...</div>
+              <div id="mcpToolList" class="mcp-tool-list"></div>
+            </div>
+
+            <div class="status-card mcp-detail-card">
+              <div class="status-card-title">外置 Agent 使用方式</div>
+              <div id="mcpUsageDescription" class="status-copy">
+                1. 在目标项目安装 Cursor/Codex 工具后，IDE 会写入 MCP 配置并连接到本地 Client。<br />
+                2. Agent 开始任务前先调用 <code>get_context</code> 获取模块边界，再调用 <code>recall</code> 拉取历史决策与约束。<br />
+                3. 任务中关键决策和完成结果通过 <code>remember</code> 写回知识库，形成团队可复用的长期知识。
+              </div>
+              <pre id="mcpFlowDiagram" class="mcp-flow-diagram">
+外置 Agent (Cursor / Codex)
+          |
+          v
+   Project DNA Client (/mcp)
+          |
+          +--> get_context / search_modules ----> Graph 知识图谱
+          |
+          +--> recall --------------------------> Memory 短期/历史记忆
+          |
+          +--> remember -----------------------> 写入记忆 + 标签分类
+                                                 |
+                                                 v
+                                         Governance / Condense
+                                                 |
+                                                 v
+                                    物化知识视图回流到下次检索
+              </pre>
+              <div class="status-copy">
+                治理机制：通过结构化标签（如 <code>#decision</code>、<code>#completed-task</code>）把经验沉淀为可检索资产，避免同类问题反复讨论。
+              </div>
+            </div>
+          </div>
         </section>
 
         <section id="panelConnections" class="workspace-panel">
           <div class="section-heading">
             <div>
-              <h2>连接工作区</h2>
-              <p>工作区由 Server 侧维护，Client 侧只允许查看与切换当前工作区。</p>
-            </div>
-            <div class="quick-actions">
-              <button class="btn btn-secondary btn-sm" data-action="refresh-workspaces">刷新连接</button>
+              <h2>连接服务器</h2>
+              <p>请手动填写 Server 地址并连接。仅白名单允许连接。</p>
             </div>
           </div>
 
           <div class="connection-layout">
             <aside class="connection-sidebar">
-              <div class="status-card-title">已保存工作区</div>
+              <div class="status-card-title">可连接列表（手动维护）</div>
               <div id="workspaceList" class="workspace-list"></div>
             </aside>
 
             <div class="connection-editor">
-              <div class="status-card-title">工作区配置</div>
-              <div id="workspaceFormMessage" class="status-copy">切换当前工作区时，会同时切换目标 Server、工作区根目录，以及本地工具安装目标。</div>
+              <div class="status-card-title">当前连接</div>
+              <div id="workspaceFormMessage" class="status-copy">选择并切换后，Client 将把该 Server 作为当前知识与拓扑数据源。</div>
 
               <input id="workspaceId" type="hidden" />
 
               <div class="connection-form-grid">
                 <div class="connection-form-group">
-                  <label for="workspaceName">显示名称</label>
+                  <label for="workspaceName">服务器名称</label>
                   <input id="workspaceName" type="text" placeholder="我的本地工作区" readonly />
                 </div>
                 <div class="connection-form-group">
@@ -190,14 +215,34 @@
               </div>
 
               <div class="connection-actions">
-                <button class="btn btn-secondary btn-sm" data-action="set-current-workspace">设为当前</button>
+                <button class="btn btn-primary btn-sm" data-action="set-current-workspace">连接选中服务器</button>
               </div>
+
+              <hr />
+
+              <div class="status-card-title">我的访问权限（只读）</div>
+              <div id="accessProfileMessage" class="status-copy">权限由 Server 按客户端 IP 分配，客户端仅可查看，不可修改。</div>
+              <div class="connection-preview access-profile-grid">
+                <div class="connection-preview-item">
+                  <div class="connection-preview-label">权限角色</div>
+                  <div id="accessProfileRole" class="connection-preview-value">-</div>
+                </div>
+                <div class="connection-preview-item">
+                  <div class="connection-preview-label">客户端 IP</div>
+                  <div id="accessProfileIp" class="connection-preview-value connection-preview-compact">-</div>
+                </div>
+                <div class="connection-preview-item">
+                  <div class="connection-preview-label">白名单名称</div>
+                  <div id="accessProfileName" class="connection-preview-value connection-preview-compact">-</div>
+                </div>
+                <div class="connection-preview-item access-profile-note">
+                  <div class="connection-preview-label">备注</div>
+                  <div id="accessProfileNote" class="connection-preview-value connection-preview-compact">-</div>
+                </div>
+              </div>
+              <div id="accessProfileRule" class="status-copy access-profile-rule">尚未选择服务器。</div>
             </div>
           </div>
-        </section>
-
-        <section id="panelAccount" class="workspace-panel">
-          <div id="clientAccountRoot" class="account-panel-shell"></div>
         </section>
 
         <section id="panelTopology" class="workspace-panel">
@@ -223,10 +268,10 @@
         <section id="panelMemory" class="workspace-panel">
           <div class="section-heading">
             <div>
-              <h2>知识管理</h2>
-              <p>管理员可直接读写正式知识库。</p>
+              <h2>记忆管理</h2>
+              <p>管理员可直接读写正式记忆库。</p>
             </div>
-            <button class="btn btn-secondary btn-sm" data-action="refresh-memories">刷新知识</button>
+            <button class="btn btn-secondary btn-sm" data-action="refresh-memories">刷新记忆</button>
           </div>
 
           <div class="memory-layout">

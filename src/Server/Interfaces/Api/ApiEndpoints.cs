@@ -9,14 +9,12 @@ public static class ApiEndpoints
     public static void MapApiEndpoints(this WebApplication app, DateTime startedAt)
     {
         app.MapStatusEndpoints(startedAt);
+        app.MapConnectionEndpoints();
         app.MapAgentEndpoints();
         app.MapTopologyEndpoints();
         app.MapGraphEndpoints();
         app.MapGovernanceEndpoints();
         app.MapConfigEndpoints();
         app.MapMemoryEndpoints();
-        app.MapReviewEndpoints();
-        app.MapModuleManagementEndpoints();
-        app.MapFileTreeEndpoints();
     }
 }

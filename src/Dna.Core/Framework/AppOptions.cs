@@ -14,6 +14,12 @@ public sealed class AppOptions
     /// <summary>默认端口</summary>
     public int DefaultPort { get; init; } = 5000;
 
+    /// <summary>
+    /// 是否允许端口自动回退到可用端口。
+    /// false 时严格使用 DefaultPort / --port，端口被占用将直接启动失败。
+    /// </summary>
+    public bool AllowPortAutoFallback { get; init; } = true;
+
     /// <summary>是否自动打开浏览器</summary>
     public bool OpenBrowser { get; init; } = true;
 

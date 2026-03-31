@@ -1,12 +1,8 @@
 import {
   $,
   api,
-  getAuthToken,
-  getAuthUser,
-  setAuthScope,
-  setAuthToken,
-  setAuthUser,
-  clearAuthState
+  escapeHtml,
+  setAuthScope
 } from './utils.js';
 import {
   applyMetricValues,
@@ -15,13 +11,10 @@ import {
   renderSidebarMessage
 } from '/dna-shared/js/core/host-shell.js';
 import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js';
-import { formatUserIdentity } from '/dna-shared/js/auth/user-session.js';
 import { ui } from '/dna-shared/js/ui/ui-manager.js';
 import { renderTopology } from '/dna-shared/js/panels/topology.js';
-import { initAccountPanel, refreshAccountPanel } from './panels/account-panel.js';
 import {
   loadMemories,
-  loadSubmissions,
   createNew,
   saveMemory,
   deleteMemory,
@@ -31,14 +24,6 @@ import {
   addNodeId,
   addTag
 } from './panels/memory-editor.js';
-import {
-  loadUsers,
-  selectUser,
-  createUser,
-  updateSelectedUserRole,
-  resetSelectedUserPassword,
-  deleteSelectedUser
-} from './panels/user-admin.js';
 import {
   newChat,
   sendChatMessage,
@@ -52,11 +37,10 @@ import {
 } from './chat/chat-panel.js';
 import { openLlmSettings, closeLlmSettings } from './chat/llm-settings.js';
 
-let currentUser = null;
 let workspaceSnapshot = null;
 let selectedWorkspaceId = null;
 
-const DEFAULT_AUTH_MESSAGE = '登录后可管理正式知识库。';
+const DEFAULT_CONNECTION_MESSAGE = '无账号模式：由 Server 白名单控制连接权限。';
 
 function initUI() {
   const mainArea = $('clientMain');
@@ -66,8 +50,6 @@ function initUI() {
 
   registerFullscreenTabs(ui, [
     { id: 'overview', tabButtonSelector: '.workspace-tab[data-tab="overview"]' },
-    { id: 'connections', tabButtonSelector: '.workspace-tab[data-tab="connections"]' },
-    { id: 'account', tabButtonSelector: '.workspace-tab[data-tab="account"]' },
     { id: 'topology', tabButtonSelector: '.workspace-tab[data-tab="topology"]' },
     { id: 'memory', tabButtonSelector: '.workspace-tab[data-tab="memory"]' }
   ], $);
@@ -77,16 +59,11 @@ function formatWorkspaceMode(mode) {
   return mode === 'team' ? '团队' : '个人';
 }
 
-function formatRole(role) {
-  switch (String(role || '').toLowerCase()) {
-    case 'admin':
-      return '管理员';
-    case 'viewer':
-      return '只读';
-    case 'editor':
-      return '编辑';
-    default:
-      return role || '未知角色';
+function getHostName(baseUrl) {
+  try {
+    return new URL(baseUrl).hostname;
+  } catch {
+    return baseUrl || '-';
   }
 }
 
@@ -98,24 +75,15 @@ function buildWorkspaceAuthScope(workspace) {
 
 function syncAuthScope(workspace) {
   if (!workspace) return false;
-
-  const changed = setAuthScope(buildWorkspaceAuthScope(workspace));
-  currentUser = getAuthUser();
-  renderAuthState();
-  return changed;
+  return setAuthScope(buildWorkspaceAuthScope(workspace));
 }
 
 function handleWorkspaceAuthChanged(workspace, fallbackMessage) {
   syncAuthScope(workspace);
-
-  if (getAuthToken() && currentUser) {
-    setAuthMessage(`已切换到“${workspace?.name || '当前工作区'}”，已恢复该工作区的登录态。`, false);
-    return;
-  }
-
-  setAuthMessage(fallbackMessage, false);
-  resetProtectedOverview('需要登录');
+  setAuthMessage(`已切换到“${workspace?.name || '当前工作区'}”`, false);
+  resetProtectedOverview('等待连接');
   $('memoryEmptyState')?.classList.remove('hidden');
+  if (fallbackMessage) setStatus(fallbackMessage);
 }
 
 function createWorkspaceDraft(defaults = {}) {
@@ -136,6 +104,11 @@ function setStatus(text) {
 function setRefreshInfo(text) {
   const refreshInfo = $('refreshInfo');
   if (refreshInfo) refreshInfo.textContent = text;
+}
+
+function setText(id, value) {
+  const element = $(id);
+  if (element) element.textContent = value;
 }
 
 function getClientAddressMeta() {
@@ -189,12 +162,19 @@ function renderWorkspaceSummary(workspace) {
   if (currentServer) currentServer.textContent = `${workspace.serverBaseUrl} · ${workspace.workspaceRoot}`;
 }
 
+function syncManualServerAddress(workspace) {
+  const input = $('manualServerAddress');
+  if (!input) return;
+  input.value = workspace?.serverBaseUrl || '';
+}
+
 function renderWorkspaceQuickSelect() {
-  const select = $('workspaceQuickSelect');
+  const select = $('availableWorkspaceSelect') || $('workspaceQuickSelect');
   if (!select) return;
 
-  const workspaces = workspaceSnapshot?.workspaces || [];
+  const workspaces = getVisibleWorkspaces();
   select.innerHTML = '';
+  setText('availableWorkspaceCount', String(workspaces.length));
 
   if (!workspaces.length) {
     const option = document.createElement('option');
@@ -202,19 +182,21 @@ function renderWorkspaceQuickSelect() {
     option.textContent = '暂无工作区';
     select.appendChild(option);
     select.disabled = true;
+    setText('availableWorkspaceHint', '请先手动填写 Server 地址并连接');
     return;
   }
 
   for (const workspace of workspaces) {
     const option = document.createElement('option');
     option.value = workspace.id;
-    option.textContent = `${workspace.name} (${formatWorkspaceMode(workspace.mode)})`;
+    option.textContent = getHostName(workspace.serverBaseUrl);
     if (workspace.id === workspaceSnapshot?.currentWorkspaceId) {
       option.selected = true;
     }
     select.appendChild(option);
   }
   select.disabled = false;
+  setText('availableWorkspaceHint', '下拉切换已保存工作区，或手动填写地址连接');
 }
 
 function populateWorkspaceForm(workspace) {
@@ -237,17 +219,11 @@ function getCurrentWorkspace() {
   return workspaceSnapshot?.currentWorkspace || getSelectedWorkspace() || null;
 }
 
-async function refreshAccountPanelIfVisible() {
-  if (!ui.activeTabId || ui.activeTabId === 'account') {
-    await refreshAccountPanel();
-  }
-}
-
 function renderWorkspaceList() {
   const container = $('workspaceList');
   if (!container) return;
 
-  const workspaces = workspaceSnapshot?.workspaces || [];
+  const workspaces = getVisibleWorkspaces();
   if (!workspaces.length) {
     container.innerHTML = '<div class="empty">还没有保存的工作区。</div>';
     return;
@@ -267,14 +243,65 @@ function renderWorkspaceList() {
         data-action="select-workspace"
         data-workspace-id="${workspace.id}">
         <div class="workspace-list-title">
-          <span>${workspace.name}</span>
+          <span>${getHostName(workspace.serverBaseUrl) || workspace.name}</span>
           ${badge}
         </div>
-        <div class="workspace-list-meta">${formatWorkspaceMode(workspace.mode)} · ${workspace.serverBaseUrl}</div>
-        <div class="workspace-list-path">${workspace.workspaceRoot}</div>
+        <div class="workspace-list-meta">${formatWorkspaceMode(workspace.mode)}</div>
       </button>
     `;
   }).join('');
+}
+
+function getVisibleWorkspaces() {
+  return workspaceSnapshot?.workspaces || [];
+}
+
+function formatPermissionLabel(role) {
+  switch (String(role || '').toLowerCase()) {
+    case 'admin':
+      return '管理员';
+    case 'editor':
+      return '编辑';
+    case 'viewer':
+      return '只读';
+    default:
+      return '未知';
+  }
+}
+
+function renderAccessProfile(access, workspace) {
+  if (!workspace) {
+    setText('accessProfileRole', '-');
+    setText('accessProfileIp', '-');
+    setText('accessProfileName', '-');
+    setText('accessProfileNote', '-');
+    setText('accessProfileRule', '尚未选择服务器。');
+    return;
+  }
+
+  if (!access) {
+    setText('accessProfileRole', '-');
+    setText('accessProfileIp', '-');
+    setText('accessProfileName', '-');
+    setText('accessProfileNote', '-');
+    setText('accessProfileRule', '正在读取当前客户端权限...');
+    return;
+  }
+
+  if (access.allowed === false) {
+    setText('accessProfileRole', '未授权');
+    setText('accessProfileIp', access.remoteIp || '-');
+    setText('accessProfileName', '-');
+    setText('accessProfileNote', '-');
+    setText('accessProfileRule', access.reason || '当前客户端 IP 不在白名单中。');
+    return;
+  }
+
+  setText('accessProfileRole', formatPermissionLabel(access.role));
+  setText('accessProfileIp', access.remoteIp || '-');
+  setText('accessProfileName', access.entryName || '-');
+  setText('accessProfileNote', access.note || '-');
+  setText('accessProfileRule', '权限由服务器白名单分配，客户端仅展示不可修改。');
 }
 
 function didCurrentWorkspaceIdentityChange(previousWorkspace, nextWorkspace) {
@@ -285,9 +312,8 @@ function didCurrentWorkspaceIdentityChange(previousWorkspace, nextWorkspace) {
     previousWorkspace.serverBaseUrl !== nextWorkspace.serverBaseUrl;
 }
 
-function resetProtectedOverview(message = '需要登录') {
-  $('memoryTotal').textContent = '-';
-  $('memoryFreshness').textContent = message;
+function resetProtectedOverview(message = '暂不可用') {
+  setText('availableWorkspaceHint', message);
   $('statModules').textContent = '-';
   $('statEdges').textContent = '-';
   $('statContainment').textContent = '-';
@@ -296,19 +322,19 @@ function resetProtectedOverview(message = '需要登录') {
 
 async function loadWorkspaces(options = {}) {
   const preserveSelection = options.preserveSelection ?? true;
-  const snapshot = await api('/client/workspaces', { skipAuth: true });
-  workspaceSnapshot = snapshot;
+  workspaceSnapshot = await api('/client/workspaces', { skipAuth: true });
 
-  if (!preserveSelection || !selectedWorkspaceId || !snapshot.workspaces.some(item => item.id === selectedWorkspaceId)) {
-    selectedWorkspaceId = snapshot.currentWorkspaceId;
+  if (!preserveSelection || !selectedWorkspaceId || !workspaceSnapshot.workspaces.some(item => item.id === selectedWorkspaceId)) {
+    selectedWorkspaceId = workspaceSnapshot.currentWorkspaceId;
   }
 
-  syncAuthScope(snapshot.currentWorkspace);
-  renderWorkspaceSummary(snapshot.currentWorkspace);
+  syncAuthScope(workspaceSnapshot.currentWorkspace);
+  renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
   renderWorkspaceQuickSelect();
   renderWorkspaceList();
-  populateWorkspaceForm(getSelectedWorkspace() || createWorkspaceDraft(snapshot.defaults));
-  await refreshAccountPanelIfVisible();
+  syncManualServerAddress(workspaceSnapshot.currentWorkspace);
+  populateWorkspaceForm(getSelectedWorkspace() || createWorkspaceDraft(workspaceSnapshot.defaults));
+  renderAccessProfile(null, workspaceSnapshot.currentWorkspace || null);
 }
 
 function newWorkspace() {
@@ -359,11 +385,12 @@ async function saveWorkspace() {
   workspaceSnapshot = result.snapshot;
   selectedWorkspaceId = result.workspace?.id || workspaceSnapshot.currentWorkspaceId;
   renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
+  syncManualServerAddress(workspaceSnapshot.currentWorkspace);
   renderWorkspaceList();
   populateWorkspaceForm(getSelectedWorkspace());
 
   if (didCurrentWorkspaceIdentityChange(previousCurrent, workspaceSnapshot.currentWorkspace)) {
-    handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已更新，请登录对应服务器账号。');
+    handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已更新。');
   }
 
   setStatus(`工作区已保存：${result.workspace?.name || '未命名工作区'}`);
@@ -373,6 +400,39 @@ async function saveWorkspace() {
 async function setCurrentWorkspace() {
   const workspaceId = $('workspaceId')?.value?.trim() || selectedWorkspaceId || '';
   await setCurrentWorkspaceById(workspaceId);
+}
+
+async function connectManualServer() {
+  const input = $('manualServerAddress');
+  const rawAddress = input?.value?.trim() || '';
+
+  if (!rawAddress) {
+    setStatus('请先填写 Server 地址。');
+    input?.focus();
+    return;
+  }
+
+  const previousCurrent = workspaceSnapshot?.currentWorkspace || null;
+  const result = await api('/client/workspaces/current-server', {
+    method: 'PUT',
+    skipAuth: true,
+    body: { serverBaseUrl: rawAddress }
+  });
+
+  workspaceSnapshot = result.snapshot;
+  selectedWorkspaceId = workspaceSnapshot.currentWorkspaceId;
+  renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
+  syncManualServerAddress(workspaceSnapshot.currentWorkspace);
+  renderWorkspaceQuickSelect();
+  renderWorkspaceList();
+  populateWorkspaceForm(getSelectedWorkspace());
+
+  if (didCurrentWorkspaceIdentityChange(previousCurrent, workspaceSnapshot.currentWorkspace)) {
+    handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '已切换到手动连接的服务器。');
+  }
+
+  setStatus(`已连接：${result.selected?.displayName || result.selected?.baseUrl || rawAddress}`);
+  await loadStatus();
 }
 
 async function setCurrentWorkspaceById(workspaceId) {
@@ -390,10 +450,11 @@ async function setCurrentWorkspaceById(workspaceId) {
   workspaceSnapshot = result.snapshot;
   selectedWorkspaceId = result.workspace?.id || workspaceSnapshot.currentWorkspaceId;
   renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
+  syncManualServerAddress(workspaceSnapshot.currentWorkspace);
   renderWorkspaceQuickSelect();
   renderWorkspaceList();
   populateWorkspaceForm(getSelectedWorkspace());
-  handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已切换，请登录对应服务器账号。');
+  handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已切换。');
   setStatus(`当前工作区：${result.workspace?.name || workspaceId}`);
   await loadStatus();
 }
@@ -424,11 +485,12 @@ async function deleteWorkspace() {
   workspaceSnapshot = result.snapshot;
   selectedWorkspaceId = workspaceSnapshot.currentWorkspaceId;
   renderWorkspaceSummary(workspaceSnapshot.currentWorkspace);
+  syncManualServerAddress(workspaceSnapshot.currentWorkspace);
   renderWorkspaceList();
   populateWorkspaceForm(getSelectedWorkspace());
 
   if (wasCurrent) {
-    handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已删除，请登录新的活动工作区。');
+    handleWorkspaceAuthChanged(workspaceSnapshot.currentWorkspace, '当前工作区已删除，已切换到新的活动工作区。');
   }
 
   setStatus(`工作区已删除：${result.removedWorkspace?.name || workspaceId}`);
@@ -451,8 +513,21 @@ function applyToolState(elementId, installed) {
 }
 
 async function loadToolingStatus() {
+  await loadToolingStatusByWorkspaceRoot();
+}
+
+function buildToolingListPath(workspaceRoot) {
+  if (!workspaceRoot) return '/client/tooling/list';
+  return `/client/tooling/list?workspaceRoot=${encodeURIComponent(workspaceRoot)}`;
+}
+
+function formatToolingTargetName(target) {
+  return String(target || '').toLowerCase() === 'cursor' ? 'Cursor' : 'Codex';
+}
+
+async function loadToolingStatusByWorkspaceRoot(workspaceRoot = '') {
   try {
-    const tooling = await api('/client/tooling/list', { skipAuth: true });
+    const tooling = await api(buildToolingListPath(workspaceRoot), { skipAuth: true });
     $('toolingWorkspace').textContent = `工作区: ${tooling.workspaceRoot || '-'}`;
 
     const cursor = (tooling.targets || []).find(target => target.id === 'cursor');
@@ -476,15 +551,42 @@ async function loadToolingStatus() {
   }
 }
 
+async function pickToolingWorkspaceRoot(target) {
+  const defaultWorkspaceRoot = getCurrentWorkspace()?.workspaceRoot
+    || workspaceSnapshot?.defaults?.workspaceRoot
+    || '';
+
+  const result = await api('/client/tooling/select-folder', {
+    method: 'POST',
+    skipAuth: true,
+    body: {
+      defaultWorkspaceRoot,
+      prompt: `选择要安装 ${formatToolingTargetName(target)} 工作流配置的项目目录`
+    }
+  });
+
+  if (!result?.selected || !result?.workspaceRoot) {
+    setStatus('已取消目录选择。');
+    return null;
+  }
+
+  return result.workspaceRoot;
+}
+
 async function installTooling(target) {
   try {
-    setStatus(`正在安装 ${target} 工具链...`);
+    setStatus(`正在选择 ${formatToolingTargetName(target)} 安装目录...`);
+    const workspaceRoot = await pickToolingWorkspaceRoot(target);
+    if (!workspaceRoot) return;
+
+    setStatus(`正在安装 ${formatToolingTargetName(target)} 工具链...`);
     const result = await api('/client/tooling/install', {
       method: 'POST',
       skipAuth: true,
       body: {
         target,
-        replaceExisting: true
+        replaceExisting: true,
+        workspaceRoot
       }
     });
 
@@ -492,11 +594,65 @@ async function installTooling(target) {
     const written = reports.reduce((sum, report) => sum + (report.writtenFiles?.length || 0), 0);
     const skipped = reports.reduce((sum, report) => sum + (report.skippedFiles?.length || 0), 0);
     const warnings = reports.reduce((sum, report) => sum + (report.warnings?.length || 0), 0);
-    setStatus(`工具安装完成：写入 ${written}，跳过 ${skipped}，警告 ${warnings}`);
+    setStatus(`工具安装完成：${formatToolingTargetName(target)} -> ${workspaceRoot}（写入 ${written}，跳过 ${skipped}，警告 ${warnings}）`);
     setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
-    await loadToolingStatus();
+    await loadToolingStatusByWorkspaceRoot(workspaceRoot);
   } catch (error) {
     setStatus(`工具安装失败：${error.message}`);
+  }
+}
+
+function renderMcpToolParameters(parameters) {
+  if (!Array.isArray(parameters) || parameters.length === 0) {
+    return '<div class="mcp-tool-param">参数：无</div>';
+  }
+
+  return parameters.map(parameter => {
+    const required = parameter.required ? '必填' : '可选';
+    const description = parameter.description ? ` - ${escapeHtml(parameter.description)}` : '';
+    const defaultValue = parameter.defaultValue != null ? `，默认=${escapeHtml(String(parameter.defaultValue))}` : '';
+    return `<div class="mcp-tool-param"><code>${escapeHtml(parameter.name)}</code>: <code>${escapeHtml(parameter.type)}</code> (${required}${defaultValue})${description}</div>`;
+  }).join('');
+}
+
+function renderMcpToolCatalog(data) {
+  const summary = $('mcpToolSummary');
+  const list = $('mcpToolList');
+  if (!summary || !list) return;
+
+  const tools = Array.isArray(data?.tools) ? data.tools : [];
+  const endpoint = data?.mcpEndpoint || getMcpAddress();
+  summary.textContent = `MCP 入口：${endpoint} · 共 ${tools.length} 个工具`;
+
+  if (!tools.length) {
+    list.innerHTML = '<div class="mcp-tool-item"><div class="mcp-tool-desc">暂无可展示工具。</div></div>';
+    return;
+  }
+
+  list.innerHTML = tools.map(tool => `
+    <div class="mcp-tool-item">
+      <div class="mcp-tool-title">
+        <code>${escapeHtml(tool.name || '-')}</code>
+        <span class="mcp-tool-group">${escapeHtml(tool.group || 'General')}</span>
+      </div>
+      <div class="mcp-tool-desc">${escapeHtml(tool.description || '无描述')}</div>
+      <div class="mcp-tool-params">${renderMcpToolParameters(tool.parameters)}</div>
+    </div>
+  `).join('');
+}
+
+async function loadMcpToolCatalog() {
+  const summary = $('mcpToolSummary');
+  const list = $('mcpToolList');
+  if (!summary || !list) return;
+
+  try {
+    summary.textContent = '加载中...';
+    const catalog = await api('/client/mcp/tools', { skipAuth: true });
+    renderMcpToolCatalog(catalog);
+  } catch (error) {
+    summary.textContent = `加载失败：${error.message}`;
+    list.innerHTML = '<div class="mcp-tool-item"><div class="mcp-tool-desc">无法读取 MCP 工具清单。</div></div>';
   }
 }
 
@@ -520,102 +676,6 @@ function setAuthMessage(text, isError = false) {
   element.classList.toggle('error', isError);
 }
 
-function renderAuthState() {
-  const user = currentUser || getAuthUser();
-  const hasToken = Boolean(getAuthToken());
-  const loginForm = $('authLoginForm');
-  const userBar = $('authUserBar');
-  const authStateText = $('authStateText');
-  const authUserInfo = $('authUserInfo');
-
-  if (loginForm) loginForm.classList.toggle('hidden', hasToken && Boolean(user));
-  if (userBar) userBar.classList.toggle('hidden', !(hasToken && user));
-
-  if (!hasToken || !user) {
-    if (authStateText) authStateText.textContent = '未登录';
-    if (authUserInfo) authUserInfo.textContent = '-';
-    return;
-  }
-
-  if (authStateText) authStateText.textContent = `已登录为${formatRole(user.role)}`;
-  if (authUserInfo) authUserInfo.textContent = formatUserIdentity(user);
-}
-
-async function ensureAuthenticatedUser(options = {}) {
-  if (!getAuthToken()) {
-    currentUser = null;
-    renderAuthState();
-    await refreshAccountPanelIfVisible();
-    return null;
-  }
-
-  try {
-    const result = await api('/auth/me');
-    currentUser = result.user || result;
-    setAuthUser(currentUser);
-    renderAuthState();
-    await refreshAccountPanelIfVisible();
-    return currentUser;
-  } catch (error) {
-    if (error.status === 401 || error.status === 403) {
-      currentUser = null;
-      clearAuthState();
-      renderAuthState();
-      await refreshAccountPanelIfVisible();
-      setAuthMessage('登录态已过期，请重新登录。', true);
-      if (!options.silent) {
-        setStatus('登录态已过期，请重新登录。');
-      }
-      return null;
-    }
-
-    throw error;
-  }
-}
-
-async function login() {
-  const username = $('authUsername')?.value?.trim() || '';
-  const password = $('authPassword')?.value || '';
-
-  if (!username || !password) {
-    setAuthMessage('请输入用户名和密码。', true);
-    return;
-  }
-
-  try {
-    setAuthMessage('正在登录...', false);
-    const result = await api('/auth/login', {
-      method: 'POST',
-      body: { username, password },
-      skipAuth: true
-    });
-
-    setAuthToken(result.token);
-    currentUser = result.user || null;
-    setAuthUser(currentUser);
-    if ($('authPassword')) $('authPassword').value = '';
-    renderAuthState();
-    setAuthMessage(`已登录：${currentUser?.username || username}`, false);
-    await refreshAccountPanelIfVisible();
-    await refreshAll();
-  } catch (error) {
-    setAuthMessage(error.message, true);
-    setStatus(`登录失败：${error.message}`);
-  }
-}
-
-async function logout() {
-  currentUser = null;
-  clearAuthState();
-  renderAuthState();
-  setAuthMessage('已退出登录，受保护的数据已隐藏。', false);
-  resetProtectedOverview();
-  $('memoryEmptyState')?.classList.remove('hidden');
-  setStatus('已退出登录');
-  await refreshAccountPanelIfVisible();
-  await loadStatus();
-}
-
 async function loadStatus() {
   try {
     const clientStatus = await api('/client/status', { skipAuth: true });
@@ -626,10 +686,12 @@ async function loadStatus() {
     $('clientPort').textContent = getClientAddressMeta();
     $('serverAddress').textContent = `地址: ${clientStatus.targetServer || '-'}`;
     renderWorkspaceSummary(workspace);
-    $('serverDashboardLink').href = clientStatus.targetServer || 'http://127.0.0.1:5051';
+    syncManualServerAddress(workspace);
     await loadToolingStatus();
 
     const serverStatus = clientStatus.serverStatus || null;
+    const access = clientStatus.access || null;
+    renderAccessProfile(access, workspace);
     if (serverStatus && !clientStatus.error) {
       $('serverHealth').classList.remove('error');
       $('serverHealth').classList.add('healthy');
@@ -651,25 +713,19 @@ async function loadStatus() {
       return;
     }
 
-    const user = await ensureAuthenticatedUser({ silent: true });
-    if (!user) {
-      resetProtectedOverview('需要登录');
+    if (access && access.allowed === false) {
+      resetProtectedOverview('未在白名单');
       $('overviewSummary').textContent =
-        `${workspace?.name || '当前工作区'} 已连接，但当前还没有可用的服务器身份。`;
-      setStatus(DEFAULT_AUTH_MESSAGE);
+        `${workspace?.name || '当前工作区'} 可发现目标服务器，但当前客户端 IP 不在白名单中。`;
+      setStatus(access.reason || '当前客户端 IP 不在白名单中。');
       setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
       return;
     }
 
-    const memoryStats = await api('/memory/stats');
-    $('memoryTotal').textContent = formatCompactNumber(memoryStats.total ?? 0);
-    const freshness = memoryStats.byFreshness || {};
-    $('memoryFreshness').textContent =
-      `新鲜 ${freshness.Fresh ?? freshness.fresh ?? 0} / 待整理 ${freshness.Aging ?? freshness.aging ?? 0}`;
-
     setStatus('客户端状态已刷新');
     setRefreshInfo(new Date().toLocaleTimeString('zh-CN'));
   } catch (error) {
+    renderAccessProfile(null, getCurrentWorkspace());
     $('clientHealth').classList.add('error');
     $('clientHealth').textContent = '错误';
     $('serverHealth').classList.add('error');
@@ -681,16 +737,6 @@ async function loadStatus() {
 
 async function loadTopology() {
   try {
-    const user = await ensureAuthenticatedUser({ silent: true });
-    if (!user) {
-      resetProtectedOverview('需要登录');
-      if ($('archSidebar')) {
-        renderSidebarMessage($, 'archSidebar', '需要登录', '请先登录服务器账号，再加载正式知识拓扑。');
-      }
-      setStatus('请先登录再加载拓扑。');
-      return;
-    }
-
     setStatus('正在加载拓扑...');
     const topoData = await api('/topology');
     renderTopology(topoData);
@@ -715,36 +761,20 @@ async function loadTopology() {
 
 async function loadKnowledge() {
   try {
-    const user = await ensureAuthenticatedUser({ silent: true });
-    if (!user) {
-      $('memoryEmptyState')?.classList.remove('hidden');
-      setStatus('请先登录再使用知识工作区。');
-      return;
-    }
-
-    setStatus('正在加载知识工作区...');
+    setStatus('正在加载记忆工作区...');
     await loadMemories();
     if ($('memoryEditorForm').style.display !== 'none') $('memoryEmptyState')?.classList.add('hidden');
     else $('memoryEmptyState')?.classList.remove('hidden');
-    setStatus('知识工作区已刷新');
+    setStatus('记忆工作区已刷新');
   } catch (error) {
-    setStatus(`知识工作区加载失败：${error.message}`);
+    setStatus(`记忆工作区加载失败：${error.message}`);
   }
 }
 
 async function refreshTab(tabId) {
   if (tabId === 'overview') {
     await loadStatus();
-    return;
-  }
-
-  if (tabId === 'connections') {
-    await loadWorkspaces();
-    return;
-  }
-
-  if (tabId === 'account') {
-    await refreshAccountPanel();
+    await loadMcpToolCatalog();
     return;
   }
 
@@ -761,14 +791,15 @@ async function refreshAll() {
   await loadStatus();
 
   const activeTabId = ui.activeTabId || 'overview';
-  if (activeTabId !== 'overview' && activeTabId !== 'connections') {
+  if (activeTabId !== 'overview') {
     await refreshTab(activeTabId);
   }
 }
 
 function resolveInitialTab() {
   const hash = window.location.hash.replace(/^#/, '').trim();
-  return hash || 'overview';
+  if (!hash) return 'overview';
+  return ['overview', 'topology', 'memory'].includes(hash) ? hash : 'overview';
 }
 
 async function switchTab(tabId) {
@@ -781,20 +812,17 @@ async function switchTab(tabId) {
 
 async function handleAction(action, element) {
   switch (action) {
-    case 'login':
-      await login();
-      break;
-    case 'logout':
-      await logout();
-      break;
-    case 'refresh-all':
-      await refreshAll();
-      break;
     case 'copy-mcp-address':
       await copyMcpAddress();
       break;
+    case 'refresh-mcp-tools':
+      await loadMcpToolCatalog();
+      break;
     case 'switch-tab':
       if (element?.dataset.tabTarget) await switchTab(element.dataset.tabTarget);
+      break;
+    case 'connect-manual-server':
+      await connectManualServer();
       break;
     case 'refresh-workspaces':
       await loadWorkspaces();
@@ -814,21 +842,6 @@ async function handleAction(action, element) {
     case 'delete-workspace':
       await deleteWorkspace();
       break;
-    case 'load-users':
-      await loadUsers();
-      break;
-    case 'create-user':
-      await createUser();
-      break;
-    case 'update-user-role':
-      await updateSelectedUserRole();
-      break;
-    case 'reset-user-password':
-      await resetSelectedUserPassword();
-      break;
-    case 'delete-user':
-      await deleteSelectedUser();
-      break;
     case 'refresh-tooling-status':
       await loadToolingStatus();
       break;
@@ -843,9 +856,6 @@ async function handleAction(action, element) {
       break;
     case 'create-memory':
       createNew();
-      break;
-    case 'load-submissions':
-      await loadSubmissions();
       break;
     case 'apply-memory-template':
       applyTemplate();
@@ -890,10 +900,6 @@ async function handleAction(action, element) {
       closeLlmSettings();
       break;
     default:
-      if (action === 'select-user' && element?.dataset.userId) {
-        selectUser(element.dataset.userId);
-        break;
-      }
       break;
   }
 }
@@ -902,7 +908,7 @@ async function handleChangeAction(action) {
   switch (action) {
     case 'quick-switch-workspace':
     {
-      const workspaceId = $('workspaceQuickSelect')?.value || '';
+      const workspaceId = $('availableWorkspaceSelect')?.value || $('workspaceQuickSelect')?.value || '';
       if (workspaceId) await setCurrentWorkspaceById(workspaceId);
       break;
     }
@@ -941,16 +947,6 @@ function bindUiEvents() {
     },
     {
       eventName: 'keydown',
-      selector: '#authPassword',
-      handler: ({ event }) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          void login();
-        }
-      }
-    },
-    {
-      eventName: 'keydown',
       selector: '[data-keydown-action]',
       handler: ({ event, element }) => {
         if (element.dataset.keydownAction === 'chat-keydown') {
@@ -973,16 +969,9 @@ function bindUiEvents() {
 document.addEventListener('DOMContentLoaded', async () => {
   bindUiEvents();
   initUI();
-  initAccountPanel({
-    getCurrentUser: () => currentUser || getAuthUser(),
-    getCurrentWorkspace,
-    loadUsers
-  });
   initChatResize();
   await loadWorkspaces({ preserveSelection: false });
-  currentUser = getAuthUser();
-  renderAuthState();
-  setAuthMessage(DEFAULT_AUTH_MESSAGE, false);
+  setAuthMessage(DEFAULT_CONNECTION_MESSAGE, false);
   await loadStatus();
   await switchTab(resolveInitialTab());
 });
