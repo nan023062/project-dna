@@ -141,7 +141,7 @@ function showTopologyMessage(title, message) {
 
 function getProtectedPanelMessage(error) {
   if (error?.status === 401) {
-    return '请先在审核队列中以管理员身份登录，再访问这个面板。';
+    return '请先登录管理员账号后再访问这个面板。';
   }
 
   if (error?.status === 403) {
@@ -401,8 +401,8 @@ function shouldSkipAutoRefresh() {
 async function refreshTopologyOnly() {
   if (!getAuthToken()) {
     resetTopologySummary();
-    showTopologyMessage('需要登录', '请先在审核队列中以管理员身份登录，再查看该面板。');
-    $('statusText').textContent = '请先登录管理员账号后再查看拓扑。';
+    showTopologyMessage('需要登录', '请先登录管理员账号后再查看该面板。');
+    $('statusText').textContent = '请先登录管理员账号。';
     return false;
   }
 

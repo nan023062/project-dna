@@ -18,25 +18,7 @@ import {
 } from '/dna-shared/js/panels/memory-editor-structured.js';
 
 let _memories = [];
-let _submissions = [];
 let _currentMemoryId = null;
-let _latestSubmissionId = null;
-
-const REVIEW_STATUS_META = {
-  0: { key: 'draft', label: '草稿' },
-  1: { key: 'pending', label: '待审核' },
-  2: { key: 'approved', label: '已通过' },
-  3: { key: 'rejected', label: '已驳回' },
-  4: { key: 'published', label: '已发布' },
-  5: { key: 'withdrawn', label: '已撤回' },
-  6: { key: 'superseded', label: '已替代' }
-};
-
-const REVIEW_OPERATION_LABEL = {
-  0: '新增',
-  1: '修改',
-  2: '删除'
-};
 
 const TEMPLATE_BY_NODE_TYPE = {
   Project: {
@@ -73,41 +55,10 @@ const TEMPLATE_BY_NODE_TYPE = {
   }
 };
 
-function normalizeStatusMeta(status) {
-  if (typeof status === 'number' && REVIEW_STATUS_META[status]) {
-    return REVIEW_STATUS_META[status];
-  }
-
-  const name = String(status ?? '').toLowerCase();
-  return Object.values(REVIEW_STATUS_META).find(meta => meta.key === name) ?? REVIEW_STATUS_META[1];
-}
-
-function normalizeOperationLabel(operation) {
-  if (typeof operation === 'number' && REVIEW_OPERATION_LABEL[operation]) {
-    return REVIEW_OPERATION_LABEL[operation];
-  }
-
-  const name = String(operation ?? '').toLowerCase();
-  if (name === 'create') return REVIEW_OPERATION_LABEL[0];
-  if (name === 'update') return REVIEW_OPERATION_LABEL[1];
-  if (name === 'delete') return REVIEW_OPERATION_LABEL[2];
-  return '变更';
-}
-
 function unwrapListResult(result) {
   if (Array.isArray(result)) return result;
   if (Array.isArray(result?.value)) return result.value;
   return [];
-}
-
-function sortSubmissionsByRecent(submissions) {
-  return submissions
-    .slice()
-    .sort((a, b) => {
-      const aTime = Date.parse(a?.updatedAt ?? a?.createdAt ?? '') || parseMemoryTimestamp(a);
-      const bTime = Date.parse(b?.updatedAt ?? b?.createdAt ?? '') || parseMemoryTimestamp(b);
-      return bTime - aTime;
-    });
 }
 
 function getCheckedDisciplines() {
@@ -227,54 +178,9 @@ function formatDateTime(value) {
   return date.toLocaleString('zh-CN', { hour12: false });
 }
 
-function formatSubmissionTitle(submission) {
-  return submission?.title ||
-    submission?.proposedPayload?.summary ||
-    submission?.normalizedPayload?.summary ||
-    `${normalizeOperationLabel(submission?.operation)}申请`;
-}
-
-function formatSubmissionMeta(submission) {
-  const status = normalizeStatusMeta(submission?.status);
-  if (status.key === 'published' && submission?.publishedTargetId) {
-    return `已发布到正式知识 ID：${submission.publishedTargetId}`;
-  }
-  if (status.key === 'approved') {
-    return '已通过审核，等待管理员发布到正式知识库。';
-  }
-  if (status.key === 'rejected') {
-    return submission?.reviewNote ? `已驳回：${submission.reviewNote}` : '已驳回，请根据审核意见调整后重新提交。';
-  }
-  if (status.key === 'withdrawn') {
-    return '该申请已由提交者撤回。';
-  }
-  return '该申请正在预审队列中，等待管理员审核与发布。';
-}
-
 function setEditorHint(text) {
   const hint = $('memoryEditorHint');
   if (hint) hint.textContent = text;
-}
-
-function setSubmissionNotice(submission) {
-  const notice = $('submissionNotice');
-  if (!notice) return;
-
-  if (!submission) {
-    notice.classList.add('hidden');
-    notice.textContent = '';
-    return;
-  }
-
-  const operation = normalizeOperationLabel(submission.operation);
-  const status = normalizeStatusMeta(submission.status);
-  const tail = submission.publishedTargetId
-    ? `正式知识 ID：${submission.publishedTargetId}`
-    : '正式知识库尚未发布，当前变更仍停留在预审队列。';
-
-  notice.textContent =
-    `${operation}申请当前状态：${status.label}。提交单号：${submission.id}。${tail}`;
-  notice.classList.remove('hidden');
 }
 
 function renderMemoryList() {
@@ -301,39 +207,8 @@ function renderMemoryList() {
   });
 }
 
-function renderSubmissionList() {
-  const container = $('submissionList');
-  if (!container) return;
-
-  if (_submissions.length === 0) {
-    container.innerHTML = '<div class="submission-empty">你还没有提交过预审申请。新的创建、修改和删除操作会显示在这里。</div>';
-    return;
-  }
-
-  container.innerHTML = _submissions.map(submission => {
-    const status = normalizeStatusMeta(submission.status);
-    const operation = normalizeOperationLabel(submission.operation);
-    return `
-      <div class="submission-item ${_latestSubmissionId === submission.id ? 'active' : ''}">
-        <div class="submission-item-header">
-          <span class="submission-op">${escapeHtml(operation)}</span>
-          <span class="submission-status ${escapeHtml(status.key)}">${escapeHtml(status.label)}</span>
-        </div>
-        <div class="submission-title">${escapeHtml(formatSubmissionTitle(submission))}</div>
-        <div class="submission-meta">更新时间：${escapeHtml(formatDateTime(submission.updatedAt || submission.createdAt))}</div>
-        <div class="submission-meta">${escapeHtml(formatSubmissionMeta(submission))}</div>
-      </div>
-    `;
-  }).join('');
-}
-
 async function refreshLists() {
-  await Promise.all([loadMemories(), loadSubmissions()]);
-}
-
-function rememberLatestSubmission(submission) {
-  _latestSubmissionId = submission?.id ?? null;
-  setSubmissionNotice(submission);
+  await loadMemories();
 }
 
 function hideEmptyState() {
@@ -400,8 +275,7 @@ export function selectMemory(id) {
   updateGeneratedContent();
 
   $('btnDeleteMemory').style.display = 'inline-block';
-  setEditorHint('编辑正式知识不会直接写入正式库，保存后会生成一条对应的预审申请，等待管理员审核与发布。');
-  setSubmissionNotice(null);
+  setEditorHint('编辑后将直接更新正式知识库。');
   hideEmptyState();
 }
 
@@ -411,7 +285,7 @@ export function createNew() {
   renderMemoryList();
 
   $('memoryEditorForm').style.display = 'block';
-  $('memId').textContent = '新建预审申请';
+  $('memId').textContent = '新增知识';
   $('memSummary').value = '';
   $('memType').value = 'Semantic';
   $('memLayer').value = 'Technical';
@@ -426,8 +300,7 @@ export function createNew() {
   fillTemplate('Technical');
 
   $('btnDeleteMemory').style.display = 'none';
-  setEditorHint('新建内容会先进入预审队列。审核发布前，正式知识库中不会立即出现这条知识。');
-  setSubmissionNotice(null);
+  setEditorHint('新建内容会直接写入正式知识库。');
   hideEmptyState();
 }
 
@@ -469,32 +342,21 @@ export async function saveMemory() {
   }
 
   try {
-    const submission = _currentMemoryId
-      ? await api('/review/memory/submissions', {
-          method: 'POST',
-          body: {
-            operation: 'update',
-            targetId: _currentMemoryId,
-            memory: request
-          }
-        })
-      : await api('/review/memory/submissions', {
-          method: 'POST',
-          body: {
-            operation: 'create',
-            memory: request
-          }
-        });
-
-    rememberLatestSubmission(submission);
+    if (_currentMemoryId) {
+      await api(`/memory/${encodeURIComponent(_currentMemoryId)}`, {
+        method: 'PUT',
+        body: request
+      });
+    } else {
+      await api('/memory/remember', {
+        method: 'POST',
+        body: request
+      });
+    }
     await refreshLists();
-    _showToast(
-      _currentMemoryId
-        ? '修改申请已提交，正式知识不会立即变更。'
-        : '新建申请已提交，正式知识将在审核发布后可见。'
-    );
+    _showToast(_currentMemoryId ? '已更新正式知识。' : '已新增正式知识。');
   } catch (error) {
-    _showToast(`提交预审失败: ${error.message}`, true);
+    _showToast(`保存失败: ${error.message}`, true);
   }
 }
 
@@ -502,25 +364,23 @@ export async function deleteMemory() {
   if (!_currentMemoryId) return;
 
   const confirmed = await _showConfirmModal(
-    '提交删除申请',
-    '确定要把这条正式知识提交为“删除申请”吗？在管理员审核并发布前，正式知识不会立即删除。'
+    '删除知识',
+    '确定要删除这条正式知识吗？此操作将直接生效。'
   );
   if (!confirmed) return;
 
   try {
-    const submission = await api('/review/memory/submissions', {
-      method: 'POST',
-      body: {
-        operation: 'delete',
-        targetId: _currentMemoryId
-      }
+    await api(`/memory/${encodeURIComponent(_currentMemoryId)}`, {
+      method: 'DELETE'
     });
 
-    rememberLatestSubmission(submission);
     await refreshLists();
-    _showToast('删除申请已提交，等待管理员审核。');
+    _currentMemoryId = null;
+    $('memoryEditorForm').style.display = 'none';
+    $('memoryEmptyState')?.classList.remove('hidden');
+    _showToast('已删除正式知识。');
   } catch (error) {
-    _showToast(`提交删除申请失败: ${error.message}`, true);
+    _showToast(`删除失败: ${error.message}`, true);
   }
 }
 

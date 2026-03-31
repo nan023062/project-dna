@@ -43,52 +43,9 @@ public static class ClientProxyEndpoints
             "nodeTypes", "layers", "disciplines", "features", "types", "tags", "nodeId", "freshness", "limit", "offset");
 
         MapProxyGetById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
-        app.MapPost("/api/memory/remember", async (JsonElement request, DnaServerApi api) =>
-        {
-            try
-            {
-                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
-                {
-                    operation = "create",
-                    memory = request
-                }));
-            }
-            catch (Exception ex)
-            {
-                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
-            }
-        });
-        app.MapPut("/api/memory/{id}", async (string id, JsonElement request, DnaServerApi api) =>
-        {
-            try
-            {
-                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
-                {
-                    operation = "update",
-                    targetId = id,
-                    memory = request
-                }));
-            }
-            catch (Exception ex)
-            {
-                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
-            }
-        });
-        app.MapDelete("/api/memory/{id}", async (string id, DnaServerApi api) =>
-        {
-            try
-            {
-                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
-                {
-                    operation = "delete",
-                    targetId = id
-                }));
-            }
-            catch (Exception ex)
-            {
-                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
-            }
-        });
+        MapProxyPost(app, "/api/memory/remember");
+        MapProxyPutById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
+        MapProxyDeleteById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
     }
 
     private static void MapReviewProxyEndpoints(IEndpointRouteBuilder app)

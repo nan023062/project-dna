@@ -25,7 +25,7 @@
           <div class="client-auth-summary">
             <div class="client-auth-label">服务器身份</div>
             <div id="authStateText" class="client-auth-state">未登录</div>
-            <div id="authMessage" class="client-auth-message">登录后可读取正式知识并提交预审。</div>
+            <div id="authMessage" class="client-auth-message">登录后可管理正式知识库。</div>
           </div>
           <div id="authLoginForm" class="client-auth-form">
             <input id="authUsername" type="text" placeholder="用户名" />
@@ -79,7 +79,7 @@
           <div class="section-heading">
             <div>
               <h2>状态</h2>
-              <p>当前版本先聚焦运行状态、拓扑预览、正式知识预览，以及预审提交流程。</p>
+              <p>本地管理员工作台：运行状态、拓扑预览、知识管理、MCP 接入。</p>
             </div>
           </div>
           <div class="quick-actions">
@@ -93,23 +93,23 @@
             <div class="status-card">
               <div class="status-card-title">当前已包含</div>
               <ul class="status-list">
-                <li>状态页</li>
+                <li>状态页与连接管理</li>
                 <li>拓扑预览</li>
-                <li>正式知识预览</li>
-                <li>手动预审提交</li>
+                <li>正式知识直接读写</li>
+                <li>MCP 接入 Cursor / Codex</li>
               </ul>
             </div>
             <div class="status-card">
-              <div class="status-card-title">下一步自然演进</div>
+              <div class="status-card-title">下一步演进</div>
               <ul class="status-list">
-                <li>统一 Agent 壳层继续收口</li>
+                <li>审核流与团队协作</li>
                 <li>内置 Agent 会话面板</li>
                 <li>本地宿主与托盘集成</li>
               </ul>
             </div>
             <div class="status-card">
               <div class="status-card-title">当前职责</div>
-              <p id="overviewSummary" class="status-copy">Client 承载本地 MCP、工作区切换和知识入口；Server 管理共享知识、鉴权、审核与发布。</p>
+              <p id="overviewSummary" class="status-copy">Client 承载本地 MCP、工作区管理和知识入口；Server 管理正式知识库、拓扑与鉴权。</p>
             </div>
             <div class="status-card">
               <div class="status-card-title">IDE 工具接入</div>
@@ -221,15 +221,10 @@
         <section id="panelMemory" class="workspace-panel">
           <div class="section-heading">
             <div>
-              <h2>知识预览与预审编辑</h2>
-              <p>这里的正式知识保持只读。普通客户端的编辑会进入预审队列，而不是直接写入正式知识库。</p>
+              <h2>知识管理</h2>
+              <p>管理员可直接读写正式知识库。</p>
             </div>
             <button class="btn btn-secondary btn-sm" data-action="refresh-memories">刷新知识</button>
-          </div>
-
-          <div class="review-mode-banner">
-            <div class="review-mode-title">预审提审模式</div>
-            <div class="review-mode-copy">对普通用户来说，正式知识始终只读。所有新增、修改和删除操作都会先进入审核队列。</div>
           </div>
 
           <div class="memory-layout">
@@ -249,23 +244,11 @@
                   <option value="Episodic">Episodic</option>
                   <option value="Procedural">Procedural</option>
                 </select>
-                <button class="btn btn-primary btn-sm memory-new-btn" data-action="create-memory">新建预审</button>
+                <button class="btn btn-primary btn-sm memory-new-btn" data-action="create-memory">新增知识</button>
               </div>
 
               <div class="memory-sidebar-section">
-                <div class="memory-sidebar-heading">正式知识</div>
                 <div id="memoryList" class="memory-list"></div>
-              </div>
-
-              <div class="memory-sidebar-section submission-section">
-                <div class="submission-panel-header">
-                  <div>
-                    <div class="memory-sidebar-heading">我的提交</div>
-                    <div class="submission-panel-copy">你提交到预审队列的变更会显示在这里。</div>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" type="button" data-action="load-submissions">刷新</button>
-                </div>
-                <div id="submissionList" class="submission-list"></div>
               </div>
             </div>
 
@@ -274,12 +257,9 @@
                 <div class="memory-page-header">
                   <div>
                     <h3>知识编辑 <span id="memId" class="memory-page-subtitle"></span></h3>
-                    <div id="memoryEditorHint" class="memory-editor-hint">这里的编辑会生成预审提交，而不是直接改正式知识。</div>
                   </div>
                   <button class="btn btn-secondary btn-sm" data-action="apply-memory-template">应用模板</button>
                 </div>
-
-                <div id="submissionNotice" class="submission-notice hidden"></div>
 
                 <div class="memory-form-group">
                   <label>摘要</label>
@@ -378,12 +358,12 @@
                 </div>
 
                 <div class="memory-actions">
-                  <button class="btn btn-primary btn-sm" data-action="save-memory">提交预审</button>
-                  <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color:#ef4444;border-color:#ef4444;">提交删除申请</button>
+                  <button class="btn btn-primary btn-sm" data-action="save-memory">保存</button>
+                  <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color:#ef4444;border-color:#ef4444;">删除</button>
                 </div>
               </div>
 
-              <div id="memoryEmptyState" class="empty">先从左侧选择一条正式知识，或者新建一条预审申请。</div>
+              <div id="memoryEmptyState" class="empty">选择左侧知识条目进行编辑，或新增一条知识。</div>
             </div>
           </div>
         </section>

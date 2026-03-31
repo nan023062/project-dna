@@ -62,7 +62,9 @@ public sealed class DnaServerApi(HttpClient httpClient, ClientWorkspaceStore wor
 
     private Uri BuildUri(string path)
     {
-        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute))
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute) &&
+            (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
             return absolute;
 
         var baseUrl = string.IsNullOrWhiteSpace(BaseUrl) ? options.ServerBaseUrl : BaseUrl;

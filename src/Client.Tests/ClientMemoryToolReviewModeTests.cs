@@ -6,28 +6,28 @@ using Xunit;
 
 namespace Client.Tests;
 
-public sealed class ClientMemoryToolReviewModeTests
+public sealed class ClientMemoryToolDirectWriteTests
 {
     [Fact]
-    public async Task Remember_ShouldSubmitCreateReviewRequest()
+    public async Task Remember_ShouldWriteFormalMemoryDirectly()
     {
         var recorder = new RequestRecorder(request =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.EndsWith("/api/review/memory/submissions", request.RequestUri!.AbsoluteUri);
-            return CreateJsonResponse("""{"id":"sub-create"}""");
+            Assert.EndsWith("/api/memory/remember", request.RequestUri!.AbsoluteUri);
+            return CreateJsonResponse("""{"id":"mem-create"}""");
         });
 
         var tools = CreateTools(recorder);
         var result = await tools.remember("test content", "Semantic", "engineering", nodeType: "Technical");
 
-        Assert.Contains("sub-create", result);
+        Assert.Contains("mem-create", result);
         Assert.Single(recorder.Requests);
-        Assert.Contains(@"""operation"":""create""", recorder.Requests[0].Body);
+        Assert.DoesNotContain(@"""operation"":""create""", recorder.Requests[0].Body);
     }
 
     [Fact]
-    public async Task UpdateMemory_ShouldReadFormalMemoryThenSubmitUpdateReviewRequest()
+    public async Task UpdateMemory_ShouldReadThenWriteFormalMemoryDirectly()
     {
         var recorder = new RequestRecorder(request =>
         {
@@ -52,37 +52,36 @@ public sealed class ClientMemoryToolReviewModeTests
                     """);
             }
 
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.EndsWith("/api/review/memory/submissions", request.RequestUri!.AbsoluteUri);
-            return CreateJsonResponse("""{"id":"sub-update"}""");
+            Assert.Equal(HttpMethod.Put, request.Method);
+            Assert.EndsWith("/api/memory/mem-1", request.RequestUri!.AbsoluteUri);
+            return CreateJsonResponse("""{"id":"mem-1","summary":"updated summary"}""");
         });
 
         var tools = CreateTools(recorder);
         var result = await tools.update_memory("mem-1", summary: "updated summary");
 
-        Assert.Contains("sub-update", result);
+        Assert.Contains("updated", result);
         Assert.Equal(2, recorder.Requests.Count);
-        Assert.Contains(@"""operation"":""update""", recorder.Requests[1].Body);
-        Assert.Contains(@"""targetId"":""mem-1""", recorder.Requests[1].Body);
+        Assert.DoesNotContain(@"""operation"":""update""", recorder.Requests[1].Body);
+        Assert.Contains(@"""Summary"":""updated summary""", recorder.Requests[1].Body);
     }
 
     [Fact]
-    public async Task DeleteMemory_ShouldSubmitDeleteReviewRequest()
+    public async Task DeleteMemory_ShouldDeleteFormalMemoryDirectly()
     {
         var recorder = new RequestRecorder(request =>
         {
-            Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.EndsWith("/api/review/memory/submissions", request.RequestUri!.AbsoluteUri);
-            return CreateJsonResponse("""{"id":"sub-delete"}""");
+            Assert.Equal(HttpMethod.Delete, request.Method);
+            Assert.EndsWith("/api/memory/mem-2", request.RequestUri!.AbsoluteUri);
+            return CreateJsonResponse("""{"message":"Deleted [mem-2]"}""");
         });
 
         var tools = CreateTools(recorder);
         var result = await tools.delete_memory("mem-2");
 
-        Assert.Contains("sub-delete", result);
+        Assert.Contains("Deleted [mem-2]", result);
         Assert.Single(recorder.Requests);
-        Assert.Contains(@"""operation"":""delete""", recorder.Requests[0].Body);
-        Assert.Contains(@"""targetId"":""mem-2""", recorder.Requests[0].Body);
+        Assert.True(string.IsNullOrWhiteSpace(recorder.Requests[0].Body));
     }
 
     private static MemoryTools CreateTools(RequestRecorder recorder)

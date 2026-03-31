@@ -13,7 +13,7 @@ public sealed class MemoryTools(DnaServerApi api)
 {
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
 
-    [McpServerTool, Description("Create a review submission for a new memory entry.")]
+    [McpServerTool, Description("Create a new memory entry directly.")]
     public async Task<string> remember(
         [Description("Memory content in text or JSON format.")] string content,
         [Description("Memory type: Structural/Semantic/Episodic/Working/Procedural")] string type,
@@ -49,8 +49,8 @@ public sealed class MemoryTools(DnaServerApi api)
                 Importance = Math.Clamp(importance, 0, 1)
             };
 
-            var result = await SubmitReviewSubmissionAsync("create", null, payload);
-            return $"Review submission created [{GetString(result, "id")}].";
+            var result = await api.PostAsync("/api/memory/remember", payload);
+            return $"Memory created [{GetString(result, "id")}].";
         }
         catch (Exception ex)
         {
@@ -121,7 +121,7 @@ public sealed class MemoryTools(DnaServerApi api)
         }
     }
 
-    [McpServerTool, Description("Create review submissions for multiple new memories.")]
+    [McpServerTool, Description("Create multiple new memories directly.")]
     public async Task<string> batch_remember([Description("JSON array of entries.")] string entries)
     {
         try
@@ -172,28 +172,24 @@ public sealed class MemoryTools(DnaServerApi api)
             if (requests.Count == 0)
                 return $"Error: all entries failed validation.\n{string.Join("\n", errors)}";
 
-            var submissionIds = new List<string>();
-            foreach (var request in requests)
-            {
-                var result = await SubmitReviewSubmissionAsync("create", null, request);
-                var submissionId = GetString(result, "id");
-                if (!string.IsNullOrWhiteSpace(submissionId))
-                    submissionIds.Add(submissionId);
-            }
+            var result = await api.PostAsync("/api/memory/batch", requests);
+            var ids = result.TryGetProperty("ids", out var idArray) && idArray.ValueKind == JsonValueKind.Array
+                ? idArray.EnumerateArray().Select(item => item.GetString()).Where(value => !string.IsNullOrWhiteSpace(value)).ToList()
+                : [];
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Batch review submissions created: {submissionIds.Count}, validation failures: {errors.Count}.");
+            sb.AppendLine($"Batch memories created: {ids.Count}, validation failures: {errors.Count}.");
             if (errors.Count > 0)
             {
                 sb.AppendLine("Validation failures:");
                 foreach (var error in errors)
                     sb.AppendLine($"- {error}");
             }
-            if (submissionIds.Count > 0)
+            if (ids.Count > 0)
             {
-                sb.AppendLine("Submission ids:");
-                foreach (var submissionId in submissionIds)
-                    sb.AppendLine($"- {submissionId}");
+                sb.AppendLine("Memory ids:");
+                foreach (var memoryId in ids)
+                    sb.AppendLine($"- {memoryId}");
             }
             return sb.ToString();
         }
@@ -203,7 +199,7 @@ public sealed class MemoryTools(DnaServerApi api)
         }
     }
 
-    [McpServerTool, Description("Create a review submission for updating an existing memory.")]
+    [McpServerTool, Description("Update an existing memory directly.")]
     public async Task<string> update_memory(
         [Description("Target memory id.")] string id,
         [Description("New content, optional.")] string? content = null,
@@ -247,8 +243,8 @@ public sealed class MemoryTools(DnaServerApi api)
                 Importance = importance ?? GetDouble(existing, "importance", 0.5)
             };
 
-            var result = await SubmitReviewSubmissionAsync("update", id, payload);
-            return $"Review submission created [{GetString(result, "id")}] for memory [{id}].";
+            var result = await api.PutAsync($"/api/memory/{Uri.EscapeDataString(id)}", payload);
+            return $"Memory [{id}] updated ({GetString(result, "summary") ?? "ok"}).";
         }
         catch (Exception ex)
         {
@@ -256,13 +252,13 @@ public sealed class MemoryTools(DnaServerApi api)
         }
     }
 
-    [McpServerTool, Description("Create a review submission for deleting a memory.")]
+    [McpServerTool, Description("Delete a memory directly.")]
     public async Task<string> delete_memory([Description("Target memory id.")] string id)
     {
         try
         {
-            var result = await SubmitReviewSubmissionAsync("delete", id, null);
-            return $"Delete review submission created [{GetString(result, "id")}] for memory [{id}].";
+            var result = await api.DeleteAsync($"/api/memory/{Uri.EscapeDataString(id)}");
+            return GetString(result, "message") ?? $"Memory [{id}] deleted.";
         }
         catch (Exception ex)
         {
@@ -378,16 +374,6 @@ public sealed class MemoryTools(DnaServerApi api)
         {
             return $"Error: {ex.Message}";
         }
-    }
-
-    private Task<JsonElement> SubmitReviewSubmissionAsync(string operation, string? targetId, RememberRequest? memory)
-    {
-        return api.PostAsync("/api/review/memory/submissions", new
-        {
-            operation,
-            targetId,
-            memory
-        });
     }
 
     private static string FormatRecallResult(JsonElement result)

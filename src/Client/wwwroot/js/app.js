@@ -56,7 +56,7 @@ let currentUser = null;
 let workspaceSnapshot = null;
 let selectedWorkspaceId = null;
 
-const DEFAULT_AUTH_MESSAGE = '登录后可读取正式知识并提交预审。';
+const DEFAULT_AUTH_MESSAGE = '登录后可管理正式知识库。';
 
 function initUI() {
   const mainArea = $('clientMain');
@@ -656,7 +656,7 @@ async function loadKnowledge() {
     }
 
     setStatus('正在加载知识工作区...');
-    await Promise.all([loadMemories(), loadSubmissions()]);
+    await loadMemories();
     if ($('memoryEditorForm').style.display !== 'none') $('memoryEmptyState')?.classList.add('hidden');
     else $('memoryEmptyState')?.classList.remove('hidden');
     setStatus('知识工作区已刷新');
