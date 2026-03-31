@@ -11,7 +11,7 @@ public class UserStore : IDisposable
     {
         Directory.CreateDirectory(dataDir);
         var dbPath = Path.Combine(dataDir, "users.db");
-        _db = new SqliteConnection($"Data Source={dbPath}");
+        _db = new SqliteConnection($"Data Source={dbPath};Pooling=False");
         _db.Open();
 
         using var cmd = _db.CreateCommand();
@@ -107,6 +107,77 @@ public class UserStore : IDisposable
         return (true, "登录成功", user);
     }
 
+    public (bool Success, string Message, UserInfo? User) UpdateRole(string id, string role)
+    {
+        if (role is not ("admin" or "editor" or "viewer"))
+            return (false, "角色必须是 admin/editor/viewer", null);
+
+        var current = GetById(id);
+        if (current == null)
+            return (false, $"用户 '{id}' 不存在", null);
+
+        if (string.Equals(current.Role, "admin", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) &&
+            CountUsersByRole("admin") <= 1)
+        {
+            return (false, "至少需要保留一个管理员账号", null);
+        }
+
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = "UPDATE users SET role = @role WHERE id = @id";
+        cmd.Parameters.AddWithValue("@role", role);
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.ExecuteNonQuery();
+
+        return (true, "角色已更新", GetById(id));
+    }
+
+    public (bool Success, string Message, UserInfo? User) ResetPassword(string id, string password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 4)
+            return (false, "密码至少 4 个字符", null);
+
+        var current = GetById(id);
+        if (current == null)
+            return (false, $"用户 '{id}' 不存在", null);
+
+        var salt = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        var hash = HashPassword(password, salt);
+
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = """
+            UPDATE users
+            SET password_hash = @hash, salt = @salt
+            WHERE id = @id
+            """;
+        cmd.Parameters.AddWithValue("@hash", hash);
+        cmd.Parameters.AddWithValue("@salt", salt);
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.ExecuteNonQuery();
+
+        return (true, "密码已重置", GetById(id));
+    }
+
+    public (bool Success, string Message, UserInfo? User) DeleteUser(string id)
+    {
+        var current = GetById(id);
+        if (current == null)
+            return (false, $"用户 '{id}' 不存在", null);
+
+        if (string.Equals(current.Role, "admin", StringComparison.OrdinalIgnoreCase) &&
+            CountUsersByRole("admin") <= 1)
+        {
+            return (false, "至少需要保留一个管理员账号", null);
+        }
+
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = "DELETE FROM users WHERE id = @id";
+        cmd.Parameters.AddWithValue("@id", id);
+        cmd.ExecuteNonQuery();
+
+        return (true, "用户已删除", current);
+    }
+
     private void EnsureAdminExists()
     {
         using var cmd = _db!.CreateCommand();
@@ -126,6 +197,14 @@ public class UserStore : IDisposable
         return Convert.ToBase64String(hash);
     }
 
+    private int CountUsersByRole(string role)
+    {
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM users WHERE role = @role";
+        cmd.Parameters.AddWithValue("@role", role);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
     private static UserInfo ReadUser(SqliteDataReader reader) => new()
     {
         Id = reader.GetString(0),
@@ -138,8 +217,19 @@ public class UserStore : IDisposable
 
     public void Dispose()
     {
-        _db?.Dispose();
-        _db = null;
+        if (_db is not null)
+        {
+            try
+            {
+                _db.Close();
+            }
+            finally
+            {
+                _db.Dispose();
+                _db = null;
+            }
+        }
+
         GC.SuppressFinalize(this);
     }
 }

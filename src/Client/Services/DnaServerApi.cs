@@ -3,42 +3,70 @@ using System.Text.Json;
 
 namespace Dna.Client.Services;
 
-public sealed class DnaServerApi(HttpClient httpClient, ClientRuntimeOptions options)
+public sealed class DnaServerApi(HttpClient httpClient, ClientWorkspaceStore workspaceStore, ClientRuntimeOptions options)
 {
-    public string BaseUrl => options.ServerBaseUrl;
+    public string BaseUrl => workspaceStore.GetCurrentWorkspace().ServerBaseUrl;
 
     public async Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default)
     {
-        using var response = await httpClient.GetAsync(path, cancellationToken);
+        using var request = CreateRequest(HttpMethod.Get, path);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
         return await ReadJsonAsync(response, cancellationToken);
     }
 
     public async Task<JsonElement> PostAsync(string path, object? body = null, CancellationToken cancellationToken = default)
     {
-        using var content = new StringContent(
-            body == null ? "{}" : JsonSerializer.Serialize(body),
-            Encoding.UTF8,
-            "application/json");
-
-        using var response = await httpClient.PostAsync(path, content, cancellationToken);
+        using var request = CreateRequest(HttpMethod.Post, path, body ?? new { });
+        using var response = await httpClient.SendAsync(request, cancellationToken);
         return await ReadJsonAsync(response, cancellationToken);
     }
 
     public async Task<JsonElement> PutAsync(string path, object body, CancellationToken cancellationToken = default)
     {
-        using var content = new StringContent(
-            JsonSerializer.Serialize(body),
-            Encoding.UTF8,
-            "application/json");
-
-        using var response = await httpClient.PutAsync(path, content, cancellationToken);
+        using var request = CreateRequest(HttpMethod.Put, path, body);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
         return await ReadJsonAsync(response, cancellationToken);
     }
 
     public async Task<JsonElement> DeleteAsync(string path, CancellationToken cancellationToken = default)
     {
-        using var response = await httpClient.DeleteAsync(path, cancellationToken);
+        using var request = CreateRequest(HttpMethod.Delete, path);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
         return await ReadJsonAsync(response, cancellationToken);
+    }
+
+    public Task<HttpResponseMessage> SendAsync(
+        HttpMethod method,
+        string path,
+        object? body = null,
+        CancellationToken cancellationToken = default,
+        HttpCompletionOption completionOption = HttpCompletionOption.ResponseContentRead)
+    {
+        var request = CreateRequest(method, path, body);
+        return httpClient.SendAsync(request, completionOption, cancellationToken);
+    }
+
+    private HttpRequestMessage CreateRequest(HttpMethod method, string path, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, BuildUri(path));
+        if (body is not null)
+        {
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(body),
+                Encoding.UTF8,
+                "application/json");
+        }
+
+        return request;
+    }
+
+    private Uri BuildUri(string path)
+    {
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute))
+            return absolute;
+
+        var baseUrl = string.IsNullOrWhiteSpace(BaseUrl) ? options.ServerBaseUrl : BaseUrl;
+        return new Uri(new Uri($"{baseUrl.TrimEnd('/')}/"), path.TrimStart('/'));
     }
 
     private async Task<JsonElement> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)

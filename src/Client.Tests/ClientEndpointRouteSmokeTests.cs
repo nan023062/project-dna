@@ -1,6 +1,5 @@
 using Dna.Client.Interfaces.Api;
 using Dna.Client.Services;
-using Dna.Client.Services.Pipeline;
 using Dna.Client.Services.Tooling;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -15,18 +14,24 @@ public class ClientEndpointRouteSmokeTests
     [Fact]
     public void ClientRouteMappings_ShouldRegisterExpectedEndpoints()
     {
+        var workspaceConfigPath = Path.Combine(Path.GetTempPath(), "dna-client-route-tests", $"{Guid.NewGuid():N}.json");
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddSingleton(new ClientRuntimeOptions { ServerBaseUrl = "http://localhost:5051" });
+        builder.Services.AddSingleton(new ClientRuntimeOptions
+        {
+            ServerBaseUrl = "http://localhost:5051",
+            WorkspaceRoot = Directory.GetCurrentDirectory(),
+            WorkspaceConfigPath = workspaceConfigPath
+        });
         builder.Services.AddSingleton(new HttpClient());
+        builder.Services.AddSingleton<ClientWorkspaceStore>();
         builder.Services.AddSingleton<DnaServerApi>();
-        builder.Services.AddSingleton<ClientPipelineStore>();
-        builder.Services.AddSingleton<AgentPipelineRunner>();
         builder.Services.AddClientToolingServices();
         var app = builder.Build();
 
         app.MapClientStatusEndpoints();
+        app.MapClientWorkspaceEndpoints();
         app.MapClientProxyEndpoints();
-        app.MapClientPipelineEndpoints();
+        app.MapClientAgentProxyEndpoints();
         app.MapClientToolingEndpoints();
 
         var routes = ((IEndpointRouteBuilder)app).DataSources
@@ -38,6 +43,11 @@ public class ClientEndpointRouteSmokeTests
             .ToList();
 
         AssertRoute(routes, "/api/client/status", "GET");
+        AssertRoute(routes, "/api/client/workspaces", "GET");
+        AssertRoute(routes, "/api/client/workspaces", "POST");
+        AssertRoute(routes, "/api/client/workspaces/{id}", "PUT");
+        AssertRoute(routes, "/api/client/workspaces/current", "PUT");
+        AssertRoute(routes, "/api/client/workspaces/{id}", "DELETE");
 
         AssertRoute(routes, "/api/status", "GET");
         AssertRoute(routes, "/api/topology", "GET");
@@ -45,6 +55,10 @@ public class ClientEndpointRouteSmokeTests
         AssertRoute(routes, "/api/auth/register", "POST");
         AssertRoute(routes, "/api/auth/me", "GET");
         AssertRoute(routes, "/api/auth/users", "GET");
+        AssertRoute(routes, "/api/auth/users", "POST");
+        AssertRoute(routes, "/api/auth/users/{id}/role", "PUT");
+        AssertRoute(routes, "/api/auth/users/{id}/password", "PUT");
+        AssertRoute(routes, "/api/auth/users/{id}", "DELETE");
 
         AssertRoute(routes, "/api/memory/stats", "GET");
         AssertRoute(routes, "/api/memory/query", "GET");
@@ -59,10 +73,18 @@ public class ClientEndpointRouteSmokeTests
         AssertRoute(routes, "/api/review/memory/submissions/{id}", "DELETE");
         AssertRoute(routes, "/api/review/memory/submissions", "POST");
 
-        AssertRoute(routes, "/api/client/pipeline/config", "GET");
-        AssertRoute(routes, "/api/client/pipeline/config", "PUT");
-        AssertRoute(routes, "/api/client/pipeline/runs/latest", "GET");
-        AssertRoute(routes, "/api/client/pipeline/run", "POST");
+        AssertRoute(routes, "/agent/chat", "POST");
+        AssertRoute(routes, "/agent/sessions", "GET");
+        AssertRoute(routes, "/agent/sessions/{id}", "GET");
+        AssertRoute(routes, "/agent/sessions/save", "POST");
+        AssertRoute(routes, "/agent/providers", "GET");
+        AssertRoute(routes, "/agent/providers", "POST");
+        AssertRoute(routes, "/agent/providers/active", "POST");
+        AssertRoute(routes, "/agent/providers/active", "PUT");
+        AssertRoute(routes, "/agent/providers/{id}", "DELETE");
+        AssertRoute(routes, "/api/agent/edits/keep", "POST");
+        AssertRoute(routes, "/api/agent/edits/undo", "POST");
+
         AssertRoute(routes, "/api/client/tooling/list", "GET");
         AssertRoute(routes, "/api/client/tooling/install", "POST");
     }

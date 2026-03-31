@@ -46,6 +46,14 @@ import {
   loadReviewQueue,
 } from './panels/review-admin.js';
 import {
+  loadUsers,
+  selectUser,
+  createUser,
+  updateSelectedUserRole,
+  resetSelectedUserPassword,
+  deleteSelectedUser
+} from './panels/user-admin.js';
+import {
   loadModuleManagement,
   saveModule,
   deleteModule,
@@ -118,7 +126,8 @@ function initUI() {
       onActivate: () => initEditSidebar().then(() => loadFileTree({ preserveState: true, showLoading: !_rootsHasRendered() }))
     },
     { id: 'memoryMgmt', tabButtonSelector: '.tab[data-tab="memoryMgmt"]', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
-    { id: 'reviewQueue', tabButtonSelector: '.tab[data-tab="reviewQueue"]', onActivate: () => loadReviewQueue() }
+    { id: 'reviewQueue', tabButtonSelector: '.tab[data-tab="reviewQueue"]', onActivate: () => loadReviewQueue() },
+    { id: 'users', tabButtonSelector: '.tab[data-tab="users"]', onActivate: () => loadUsers() }
   ], $);
 }
 
@@ -132,14 +141,14 @@ function showTopologyMessage(title, message) {
 
 function getProtectedPanelMessage(error) {
   if (error?.status === 401) {
-    return 'Sign in as admin in Review Queue to unlock this panel.';
+    return '请先在审核队列中以管理员身份登录，再访问这个面板。';
   }
 
   if (error?.status === 403) {
-    return 'The current account does not have permission to load this panel.';
+    return '当前账号没有权限加载这个面板。';
   }
 
-  return error?.message || 'Unable to load the requested panel.';
+  return error?.message || '无法加载请求的面板。';
 }
 
 function scheduleRefreshAfterAuthChange() {
@@ -149,7 +158,7 @@ function scheduleRefreshAfterAuthChange() {
   setTimeout(() => {
     authRefreshPending = false;
     refresh(true).catch(err => {
-      $('statusText').textContent = `Refresh failed: ${err?.message || String(err)}`;
+      $('statusText').textContent = `刷新失败：${err?.message || String(err)}`;
     });
   }, 0);
 }
@@ -212,6 +221,21 @@ async function handleStaticAction(action, element, event) {
     case 'load-review-queue':
       await loadReviewQueue();
       break;
+    case 'load-users':
+      await loadUsers();
+      break;
+    case 'create-user':
+      await createUser();
+      break;
+    case 'update-user-role':
+      await updateSelectedUserRole();
+      break;
+    case 'reset-user-password':
+      await resetSelectedUserPassword();
+      break;
+    case 'delete-user':
+      await deleteSelectedUser();
+      break;
     case 'clear-review-filters':
       await clearReviewFilters();
       break;
@@ -240,6 +264,10 @@ async function handleStaticAction(action, element, event) {
       closeLlmSettings();
       break;
     default:
+      if (action === 'select-user' && element?.dataset.userId) {
+        selectUser(element.dataset.userId);
+        break;
+      }
       if (action === 'switch-tab' && element?.dataset.tab) {
         switchTab(element.dataset.tab);
       }
@@ -318,7 +346,7 @@ export function enterApp(projectRoot) {
   $('mainApp').classList.add('active');
   $('appWrapper').classList.add('active');
   $('projectPath').textContent = projectRoot;
-  $('projectPath').title = `Current project: ${projectRoot}`;
+  $('projectPath').title = `当前项目：${projectRoot}`;
 
   initUI();
   ui.switchTab('topology');
@@ -338,7 +366,7 @@ function startAutoRefresh() {
     refresh(false);
   }, 8000);
 
-  $('refreshInfo').textContent = 'Auto refresh on';
+  $('refreshInfo').textContent = '自动刷新已开启';
 
   if (!visibilityHandlerBound) {
     visibilityHandlerBound = true;
@@ -346,14 +374,14 @@ function startAutoRefresh() {
       if (document.hidden) {
         clearInterval(refreshTimer);
         refreshTimer = null;
-        $('refreshInfo').textContent = 'Paused';
+        $('refreshInfo').textContent = '已暂停';
       } else {
         refresh(true);
         refreshTimer = setInterval(() => {
           if (document.hidden) return;
           refresh(false);
         }, 8000);
-        $('refreshInfo').textContent = 'Auto refresh on';
+        $('refreshInfo').textContent = '自动刷新已开启';
       }
     });
   }
@@ -373,12 +401,12 @@ function shouldSkipAutoRefresh() {
 async function refreshTopologyOnly() {
   if (!getAuthToken()) {
     resetTopologySummary();
-    showTopologyMessage('Access required', 'Sign in as admin in Review Queue to unlock this panel.');
-    $('statusText').textContent = 'Sign in as admin in Review Queue to unlock this panel.';
+    showTopologyMessage('需要登录', '请先在审核队列中以管理员身份登录，再查看该面板。');
+    $('statusText').textContent = '请先登录管理员账号后再查看拓扑。';
     return false;
   }
 
-  $('statusText').textContent = 'Loading topology...';
+  $('statusText').textContent = '正在加载拓扑...';
 
   try {
     topoData = await api('/topology');
@@ -399,17 +427,17 @@ async function refreshTopologyOnly() {
     ], formatCompactNumber);
 
     const sidebar = $('archSidebar');
-    if (sidebar && sidebar.querySelector('.sidebar-title')?.textContent === 'Access required') {
+    if (sidebar && sidebar.querySelector('.sidebar-title')?.textContent === '需要登录') {
       sidebar.style.display = 'none';
       sidebar.innerHTML = '';
     }
 
-    $('statusText').textContent = 'Topology refreshed';
+    $('statusText').textContent = '拓扑已刷新';
     return true;
   } catch (error) {
     resetTopologySummary();
     showTopologyMessage(
-      error?.status === 401 || error?.status === 403 ? 'Access required' : 'Topology unavailable',
+      error?.status === 401 || error?.status === 403 ? '需要登录' : '拓扑不可用',
       getProtectedPanelMessage(error)
     );
     $('statusText').textContent = getProtectedPanelMessage(error);
@@ -421,7 +449,7 @@ async function refresh(activeForce = true) {
   if (isRefreshing) return;
 
   if (!activeForce && shouldSkipAutoRefresh()) {
-    $('refreshInfo').textContent = 'Auto refresh paused while editing';
+    $('refreshInfo').textContent = '编辑中，自动刷新已暂停';
     return;
   }
 
@@ -431,30 +459,37 @@ async function refresh(activeForce = true) {
 
     if (activeTab === 'fileTree') {
       await refreshFileTree();
-      $('statusText').textContent = `File tree refreshed at ${new Date().toLocaleTimeString()}`;
-      $('refreshInfo').textContent = 'Auto refresh on';
+      $('statusText').textContent = `文件树已刷新：${new Date().toLocaleTimeString()}`;
+      $('refreshInfo').textContent = '自动刷新已开启';
       return;
     }
 
     if (activeTab === 'memoryMgmt') {
       await Promise.allSettled([loadGovernanceStats(), loadMemories()]);
-      $('statusText').textContent = `Knowledge panel refreshed at ${new Date().toLocaleTimeString()}`;
-      $('refreshInfo').textContent = 'Auto refresh on';
+      $('statusText').textContent = `知识面板已刷新：${new Date().toLocaleTimeString()}`;
+      $('refreshInfo').textContent = '自动刷新已开启';
       return;
     }
 
     if (activeTab === 'reviewQueue') {
       await loadReviewQueue();
-      $('statusText').textContent = `Review queue refreshed at ${new Date().toLocaleTimeString()}`;
-      $('refreshInfo').textContent = 'Auto refresh on';
+      $('statusText').textContent = `审核队列已刷新：${new Date().toLocaleTimeString()}`;
+      $('refreshInfo').textContent = '自动刷新已开启';
+      return;
+    }
+
+    if (activeTab === 'users') {
+      await loadUsers();
+      $('statusText').textContent = `用户列表已刷新：${new Date().toLocaleTimeString()}`;
+      $('refreshInfo').textContent = '自动刷新已开启';
       return;
     }
 
     const ok = await refreshTopologyOnly();
     if (ok) {
-      $('statusText').textContent = `Refreshed at ${new Date().toLocaleTimeString()}`;
+      $('statusText').textContent = `已刷新：${new Date().toLocaleTimeString()}`;
     }
-    $('refreshInfo').textContent = 'Auto refresh on';
+    $('refreshInfo').textContent = '自动刷新已开启';
   } finally {
     isRefreshing = false;
   }

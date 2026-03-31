@@ -7,6 +7,7 @@ using Dna.Interfaces.Cli;
 using Dna.Knowledge;
 using Dna.Review;
 using Dna.Services;
+using Dna.Web.Shared.AgentShell;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 var runtimeOptions = ServerBootstrap.CreateRuntimeOptions(args);
@@ -39,6 +40,14 @@ app.ConfigureServices(services =>
     services.AddSingleton<ServerStartupWorkflow>();
     services.AddSingleton<ProjectConfig>();
     services.AddKnowledgeGraph();
+    services.AddSingleton<IAgentShellContext, ServerAgentShellContext>();
+    services.AddSingleton(sp => new AgentShellStorageOptions
+    {
+        RootDirectory = Path.Combine(
+            sp.GetRequiredService<ServerRuntimeOptions>().DataPath,
+            "agent-shell")
+    });
+    services.AddSingleton<AgentShellService>();
 
     if (app.Mode != AppRunMode.Stdio)
         services.AddHostedService<KnowledgeCondenseScheduler>();

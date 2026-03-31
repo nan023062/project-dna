@@ -52,8 +52,16 @@ function normalizeTypeName(type) {
   return type || DEFAULT_MEMORY_TYPE;
 }
 
-function syncNodeTypeSelectOptions(getById) {
-  const filterSelect = getById('memFilterLayer');
+function syncNodeTypeSelectOptions(getById = null) {
+  const resolveById = typeof getById === 'function'
+    ? getById
+    : (typeof document !== 'undefined' ? document.getElementById.bind(document) : null);
+
+  if (!resolveById) {
+    return;
+  }
+
+  const filterSelect = resolveById('memFilterLayer');
   if (filterSelect) {
     const current = normalizeNodeTypeName(filterSelect.value || '');
     filterSelect.innerHTML = [
@@ -63,7 +71,7 @@ function syncNodeTypeSelectOptions(getById) {
     filterSelect.value = NODE_TYPE_OPTIONS.some(option => option.value === current) ? current : '';
   }
 
-  const editorSelect = getById('memLayer');
+  const editorSelect = resolveById('memLayer');
   if (editorSelect) {
     const current = normalizeNodeTypeName(editorSelect.value || '');
     editorSelect.innerHTML = NODE_TYPE_OPTIONS

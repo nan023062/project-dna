@@ -14,6 +14,8 @@ public class ClientProxyErrorContractTests
     [Fact]
     public async Task DnaServerApi_ShouldThrowStructuredException_OnHttpFailure()
     {
+        var workspaceRoot = CreateWorkspaceRoot();
+        var store = CreateWorkspaceStore("http://dna-server", workspaceRoot);
         using var httpClient = new HttpClient(new StubHttpMessageHandler(_ =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.Conflict)
             {
@@ -23,7 +25,7 @@ public class ClientProxyErrorContractTests
             BaseAddress = new Uri("http://dna-server")
         };
 
-        var api = new DnaServerApi(httpClient, new ClientRuntimeOptions { ServerBaseUrl = "http://dna-server" });
+        var api = new DnaServerApi(httpClient, store, new ClientRuntimeOptions { ServerBaseUrl = "http://dna-server", WorkspaceRoot = workspaceRoot });
 
         var exception = await Assert.ThrowsAsync<DnaServerApiException>(() => api.PostAsync("/api/review/memory/submissions"));
 
@@ -85,5 +87,23 @@ public class ClientProxyErrorContractTests
             _ = cancellationToken;
             return sendAsync(request);
         }
+    }
+
+    private static ClientWorkspaceStore CreateWorkspaceStore(string serverBaseUrl, string workspaceRoot)
+    {
+        var configPath = Path.Combine(Path.GetTempPath(), "dna-client-proxy-tests", $"{Guid.NewGuid():N}.json");
+        return new ClientWorkspaceStore(new ClientRuntimeOptions
+        {
+            ServerBaseUrl = serverBaseUrl,
+            WorkspaceRoot = workspaceRoot,
+            WorkspaceConfigPath = configPath
+        });
+    }
+
+    private static string CreateWorkspaceRoot()
+    {
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), "dna-client-proxy-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspaceRoot);
+        return workspaceRoot;
     }
 }

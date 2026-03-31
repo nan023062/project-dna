@@ -1,19 +1,22 @@
 using Dna.Client.Interfaces.Api;
 using Dna.Client.Interfaces.Cli;
 using Dna.Client.Services;
-using Dna.Client.Services.Pipeline;
 using Dna.Client.Services.Tooling;
 using Dna.Core.Framework;
+using Dna.Web.Shared.AgentShell;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Server;
 
 var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
+var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
+var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
 
 var app = DnaApp.Create(args, new AppOptions
 {
     AppName = "Project DNA Client",
-    AppDescription = "决策与执行客户端（MCP + Agent 入口）",
+    AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
     DefaultPort = 5052,
+    LockScopeProvider = _ => $"client:{workspaceRoot}",
     BannerExtras = (_, port) =>
     {
         var host = ClientBootstrap.GetLocalIp();
@@ -30,16 +33,28 @@ app.AddCliCommand(new DefaultCliCommand());
 
 app.ConfigureServices(services =>
 {
-    services.AddSingleton(new ClientRuntimeOptions { ServerBaseUrl = serverBaseUrl });
+    services.AddSingleton(new ClientRuntimeOptions
+    {
+        ServerBaseUrl = serverBaseUrl,
+        WorkspaceRoot = workspaceRoot,
+        WorkspaceConfigPath = workspaceConfigPath
+    });
+    services.AddSingleton<ClientWorkspaceStore>();
     services.AddHttpContextAccessor();
+    services.AddSingleton<IAgentShellContext, ClientAgentShellContext>();
+    services.AddSingleton(sp => new AgentShellStorageOptions
+    {
+        RootDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".dna",
+            "client-agent-shell")
+    });
+    services.AddSingleton<AgentShellService>();
     services.AddTransient<ForwardAuthHeaderHandler>();
     services.AddHttpClient<DnaServerApi>((_, client) =>
     {
-        client.BaseAddress = new Uri(serverBaseUrl.TrimEnd('/'));
         client.Timeout = TimeSpan.FromSeconds(30);
     }).AddHttpMessageHandler<ForwardAuthHeaderHandler>();
-    services.AddSingleton<ClientPipelineStore>();
-    services.AddSingleton<AgentPipelineRunner>();
     services.AddClientToolingServices();
 
     if (app.Mode == AppRunMode.Stdio)
@@ -61,8 +76,9 @@ app.ConfigureServices(services =>
 app.ConfigureWebApp(web =>
 {
     web.MapClientStatusEndpoints();
+    web.MapClientWorkspaceEndpoints();
     web.MapClientProxyEndpoints();
-    web.MapClientPipelineEndpoints();
+    web.MapClientAgentProxyEndpoints();
     web.MapClientToolingEndpoints();
     web.MapMcp("/mcp");
 });

@@ -4,12 +4,8 @@ public static class ClientBootstrap
 {
     public static string ResolveServerBaseUrl(string[] args)
     {
-        for (var i = 0; i < args.Length; i++)
-        {
-            if (!string.Equals(args[i], "--server", StringComparison.OrdinalIgnoreCase)) continue;
-            if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
-                return NormalizeUrl(args[i + 1]);
-        }
+        if (TryResolveOption(args, "--server", out var cliValue))
+            return NormalizeUrl(cliValue);
 
         var env = Environment.GetEnvironmentVariable("DNA_SERVER_URL")
                   ?? Environment.GetEnvironmentVariable("DNA_URL");
@@ -37,5 +33,77 @@ public static class ClientBootstrap
         return "localhost";
     }
 
-    private static string NormalizeUrl(string raw) => raw.Trim().TrimEnd('/');
+    public static string ResolveWorkspaceRoot(string[]? args = null, string? requested = null)
+    {
+        if (!string.IsNullOrWhiteSpace(requested))
+            return Path.GetFullPath(requested);
+
+        if (TryResolveOption(args, "--workspace-root", out var cliWorkspaceRoot))
+            return Path.GetFullPath(cliWorkspaceRoot);
+
+        var envWorkspace = Environment.GetEnvironmentVariable("DNA_WORKSPACE_ROOT");
+        if (!string.IsNullOrWhiteSpace(envWorkspace))
+            return Path.GetFullPath(envWorkspace);
+
+        var cwd = Directory.GetCurrentDirectory();
+        if (!LooksLikeClientProjectDirectory(cwd))
+            return cwd;
+
+        var repoRoot = Path.GetFullPath(Path.Combine(cwd, "..", ".."));
+        return Directory.Exists(repoRoot) ? repoRoot : cwd;
+    }
+
+    public static string? ResolveWorkspaceConfigPath(string[]? args = null)
+    {
+        if (TryResolveOption(args, "--workspace-config", out var cliPath))
+            return Path.GetFullPath(cliPath);
+
+        var envPath = Environment.GetEnvironmentVariable("DNA_CLIENT_WORKSPACE_CONFIG");
+        if (!string.IsNullOrWhiteSpace(envPath))
+            return Path.GetFullPath(envPath);
+
+        return null;
+    }
+
+    public static string NormalizeUrl(string raw) => raw.Trim().TrimEnd('/');
+
+    private static bool TryResolveOption(string[]? args, string optionName, out string value)
+    {
+        value = string.Empty;
+        if (args is null || args.Length == 0)
+            return false;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            if (!string.Equals(args[i], optionName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
+            {
+                value = args[i + 1];
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool LooksLikeClientProjectDirectory(string path)
+    {
+        try
+        {
+            if (!File.Exists(Path.Combine(path, "Client.csproj")))
+                return false;
+            if (!Directory.Exists(Path.Combine(path, "wwwroot")))
+                return false;
+
+            var repoRoot = Path.GetFullPath(Path.Combine(path, "..", ".."));
+            return Directory.Exists(Path.Combine(repoRoot, "src")) &&
+                   Directory.Exists(Path.Combine(repoRoot, "client-tools"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

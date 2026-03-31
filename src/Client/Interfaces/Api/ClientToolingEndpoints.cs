@@ -1,3 +1,4 @@
+using Dna.Client.Services;
 using Dna.Client.Services.Tooling;
 
 namespace Dna.Client.Interfaces.Api;
@@ -6,9 +7,10 @@ public static class ClientToolingEndpoints
 {
     public static void MapClientToolingEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/client/tooling/list", (HttpRequest request, ClientIdeToolingService tooling) =>
+        app.MapGet("/api/client/tooling/list", (HttpRequest request, ClientIdeToolingService tooling, ClientWorkspaceStore workspaces) =>
         {
-            var workspaceRoot = ResolveWorkspaceRoot();
+            var currentWorkspace = workspaces.GetCurrentWorkspace();
+            var workspaceRoot = ResolveWorkspaceRoot(workspaces);
             var mcpEndpoint = ResolveMcpEndpoint(request);
             const string serverName = "project-dna";
 
@@ -20,6 +22,7 @@ public static class ClientToolingEndpoints
 
             return Results.Ok(new
             {
+                currentWorkspace,
                 workspaceRoot,
                 mcpEndpoint,
                 serverName,
@@ -27,9 +30,10 @@ public static class ClientToolingEndpoints
             });
         });
 
-        app.MapPost("/api/client/tooling/install", (ClientToolingInstallRequest request, HttpRequest httpRequest, ClientIdeToolingService tooling) =>
+        app.MapPost("/api/client/tooling/install", (ClientToolingInstallRequest request, HttpRequest httpRequest, ClientIdeToolingService tooling, ClientWorkspaceStore workspaces) =>
         {
-            var workspaceRoot = ResolveWorkspaceRoot(request.WorkspaceRoot);
+            var currentWorkspace = workspaces.GetCurrentWorkspace();
+            var workspaceRoot = ResolveWorkspaceRoot(workspaces, request.WorkspaceRoot);
             if (!Directory.Exists(workspaceRoot))
             {
                 return Results.BadRequest(new
@@ -68,6 +72,7 @@ public static class ClientToolingEndpoints
 
             return Results.Ok(new
             {
+                currentWorkspace,
                 workspaceRoot,
                 mcpEndpoint,
                 serverName,
@@ -81,40 +86,12 @@ public static class ClientToolingEndpoints
     private static string ResolveMcpEndpoint(HttpRequest request)
         => $"{request.Scheme}://{request.Host}/mcp";
 
-    private static string ResolveWorkspaceRoot(string? requestWorkspaceRoot = null)
+    private static string ResolveWorkspaceRoot(ClientWorkspaceStore workspaces, string? requestWorkspaceRoot = null)
     {
         if (!string.IsNullOrWhiteSpace(requestWorkspaceRoot))
             return Path.GetFullPath(requestWorkspaceRoot);
 
-        var envWorkspace = Environment.GetEnvironmentVariable("DNA_WORKSPACE_ROOT");
-        if (!string.IsNullOrWhiteSpace(envWorkspace))
-            return Path.GetFullPath(envWorkspace);
-
-        var cwd = Directory.GetCurrentDirectory();
-        if (!LooksLikeClientProjectDirectory(cwd))
-            return cwd;
-
-        var repoRoot = Path.GetFullPath(Path.Combine(cwd, "..", ".."));
-        return Directory.Exists(repoRoot) ? repoRoot : cwd;
-    }
-
-    private static bool LooksLikeClientProjectDirectory(string path)
-    {
-        try
-        {
-            if (!File.Exists(Path.Combine(path, "Client.csproj")))
-                return false;
-            if (!Directory.Exists(Path.Combine(path, "wwwroot")))
-                return false;
-
-            var repoRoot = Path.GetFullPath(Path.Combine(path, "..", ".."));
-            return Directory.Exists(Path.Combine(repoRoot, "src")) &&
-                   Directory.Exists(Path.Combine(repoRoot, "client-tools"));
-        }
-        catch
-        {
-            return false;
-        }
+        return workspaces.GetCurrentWorkspace().WorkspaceRoot;
     }
 }
 

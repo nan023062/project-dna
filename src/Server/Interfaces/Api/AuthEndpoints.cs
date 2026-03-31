@@ -25,7 +25,7 @@ public static class AuthEndpoints
             {
                 return Results.Json(new
                 {
-                    error = "Self-registration is disabled. Ask an admin to create your account."
+                    error = "自助注册已关闭，请联系管理员创建账号。"
                 }, statusCode: 403);
             }
 
@@ -77,14 +77,94 @@ public static class AuthEndpoints
 
         api.MapGet("/users", (ClaimsPrincipal principal, UserStore users) =>
         {
-            if (!principal.IsInRole("admin"))
-                return Results.Json(new { error = "仅管理员可查看用户列表" }, statusCode: 403);
+            if (!principal.IsInRole(ServerRoles.Admin))
+                return Results.Json(new { error = "仅管理员可查看用户列表。" }, statusCode: 403);
 
             var list = users.ListUsers().Select(u => new
             {
                 u.Id, u.Username, u.Role, u.CreatedAt
             });
             return Results.Json(new { users = list }, JsonOpts);
+        }).RequireAuthorization();
+
+        api.MapPost("/users", (AdminCreateUserRequest req, ClaimsPrincipal principal, UserStore users) =>
+        {
+            if (!principal.IsInRole(ServerRoles.Admin))
+                return Results.Json(new { error = "仅管理员可创建用户。" }, statusCode: 403);
+
+            var requestedRole = NormalizeRequestedRole(req.Role, isAdmin: true);
+            var (success, message, user) = users.Register(req.Username, req.Password, requestedRole);
+            if (!success)
+                return Results.Json(new { error = message }, statusCode: 400);
+
+            return Results.Json(new
+            {
+                user = new { user!.Id, user.Username, user.Role, user.CreatedAt }
+            }, JsonOpts);
+        }).RequireAuthorization();
+
+        api.MapPut("/users/{id}/role", (string id, UpdateUserRoleRequest req, ClaimsPrincipal principal, UserStore users) =>
+        {
+            if (!principal.IsInRole(ServerRoles.Admin))
+                return Results.Json(new { error = "仅管理员可修改用户角色。" }, statusCode: 403);
+
+            var currentUserId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var role = NormalizeRequestedRole(req.Role, isAdmin: true);
+            var target = users.GetById(id);
+            if (target == null)
+                return Results.Json(new { error = $"用户 '{id}' 不存在。" }, statusCode: 404);
+
+            if (string.Equals(currentUserId, id, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(target.Role, ServerRoles.Admin, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(role, ServerRoles.Admin, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Json(new { error = "不能将当前登录的管理员账号降级。" }, statusCode: 409);
+            }
+
+            var (success, message, user) = users.UpdateRole(id, role);
+            if (!success)
+                return Results.Json(new { error = message }, statusCode: 400);
+
+            return Results.Json(new
+            {
+                user = new { user!.Id, user.Username, user.Role, user.CreatedAt }
+            }, JsonOpts);
+        }).RequireAuthorization();
+
+        api.MapPut("/users/{id}/password", (string id, ResetUserPasswordRequest req, ClaimsPrincipal principal, UserStore users) =>
+        {
+            if (!principal.IsInRole(ServerRoles.Admin))
+                return Results.Json(new { error = "仅管理员可重置密码。" }, statusCode: 403);
+
+            var (success, message, user) = users.ResetPassword(id, req.Password);
+            if (!success)
+                return Results.Json(new { error = message }, statusCode: 400);
+
+            return Results.Json(new
+            {
+                user = new { user!.Id, user.Username, user.Role, user.CreatedAt },
+                message
+            }, JsonOpts);
+        }).RequireAuthorization();
+
+        api.MapDelete("/users/{id}", (string id, ClaimsPrincipal principal, UserStore users) =>
+        {
+            if (!principal.IsInRole(ServerRoles.Admin))
+                return Results.Json(new { error = "仅管理员可删除用户。" }, statusCode: 403);
+
+            var currentUserId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.Equals(currentUserId, id, StringComparison.OrdinalIgnoreCase))
+                return Results.Json(new { error = "不能删除当前登录的管理员账号。" }, statusCode: 409);
+
+            var (success, message, user) = users.DeleteUser(id);
+            if (!success)
+                return Results.Json(new { error = message }, statusCode: 400);
+
+            return Results.Json(new
+            {
+                user = new { user!.Id, user.Username, user.Role, user.CreatedAt },
+                message
+            }, JsonOpts);
         }).RequireAuthorization();
     }
 
@@ -116,3 +196,6 @@ public static class AuthEndpoints
 
 public record RegisterRequest(string Username, string Password, string? Role);
 public record LoginRequest(string Username, string Password);
+public record AdminCreateUserRequest(string Username, string Password, string? Role);
+public record UpdateUserRoleRequest(string Role);
+public record ResetUserPasswordRequest(string Password);

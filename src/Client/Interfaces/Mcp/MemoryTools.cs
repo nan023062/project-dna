@@ -13,26 +13,26 @@ public sealed class MemoryTools(DnaServerApi api)
 {
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
 
-    [McpServerTool, Description("写入一条项目记忆。")]
+    [McpServerTool, Description("Create a review submission for a new memory entry.")]
     public async Task<string> remember(
-        [Description("知识正文（文本或 JSON）")] string content,
-        [Description("记忆类型: Structural/Semantic/Episodic/Working/Procedural")] string type,
-        [Description("关联职能域，逗号分隔")] string disciplines,
-        [Description("节点类型: Project/Department/Technical/Team")] string? nodeType = null,
-        [Description("兼容旧参数，已废弃")] string? layer = null,
-        [Description("标签，逗号分隔")] string? tags = null,
-        [Description("一句话摘要")] string? summary = null,
-        [Description("关联业务系统，逗号分隔")] string? features = null,
-        [Description("所属节点 ID")] string? nodeId = null,
-        [Description("上层约束记忆 ID")] string? parentId = null,
-        [Description("重要度 0.0-1.0")] double importance = 0.5)
+        [Description("Memory content in text or JSON format.")] string content,
+        [Description("Memory type: Structural/Semantic/Episodic/Working/Procedural")] string type,
+        [Description("Disciplines, comma separated.")] string disciplines,
+        [Description("Node type: Project/Department/Technical/Team")] string? nodeType = null,
+        [Description("Legacy alias for node type.")] string? layer = null,
+        [Description("Tags, comma separated.")] string? tags = null,
+        [Description("Short summary.")] string? summary = null,
+        [Description("Features, comma separated.")] string? features = null,
+        [Description("Related node id.")] string? nodeId = null,
+        [Description("Parent memory id.")] string? parentId = null,
+        [Description("Importance between 0.0 and 1.0.")] double importance = 0.5)
     {
         try
         {
             if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
-                return $"错误：无效的记忆类型 '{type}'。";
+                return $"Error: invalid memory type '{type}'.";
             if (!NodeTypeCompat.TryParse(nodeType ?? layer, out var parsedNodeType))
-                return $"错误：无效的节点类型 '{nodeType ?? layer}'。";
+                return $"Error: invalid node type '{nodeType ?? layer}'.";
 
             var payload = new RememberRequest
             {
@@ -49,26 +49,26 @@ public sealed class MemoryTools(DnaServerApi api)
                 Importance = Math.Clamp(importance, 0, 1)
             };
 
-            var result = await api.PostAsync("/api/memory/remember", payload);
-            return $"✓ 记忆已写入 [{GetString(result, "id")}]";
+            var result = await SubmitReviewSubmissionAsync("create", null, payload);
+            return $"Review submission created [{GetString(result, "id")}].";
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("语义检索项目记忆。")]
+    [McpServerTool, Description("Recall memories semantically.")]
     public async Task<string> recall(
-        [Description("自然语言问题")] string question,
-        [Description("限定职能域，逗号分隔")] string? disciplines = null,
-        [Description("限定业务系统，逗号分隔")] string? features = null,
-        [Description("限定节点 ID")] string? nodeId = null,
-        [Description("精确匹配标签，逗号分隔")] string? tags = null,
-        [Description("限定节点类型，逗号分隔: Project/Department/Technical/Team")] string? nodeTypes = null,
-        [Description("兼容旧参数，已废弃")] string? layers = null,
-        [Description("是否展开约束链")] bool expandChain = true,
-        [Description("最多返回条数")] int maxResults = 10)
+        [Description("Natural language question.")] string question,
+        [Description("Disciplines, comma separated.")] string? disciplines = null,
+        [Description("Features, comma separated.")] string? features = null,
+        [Description("Node id filter.")] string? nodeId = null,
+        [Description("Tags, comma separated.")] string? tags = null,
+        [Description("Node types, comma separated: Project/Department/Technical/Team")] string? nodeTypes = null,
+        [Description("Legacy alias for node types.")] string? layers = null,
+        [Description("Expand constraint chain.")] bool expandChain = true,
+        [Description("Max results.")] int maxResults = 10)
     {
         try
         {
@@ -89,12 +89,12 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("确认一条记忆仍然有效。")]
-    public async Task<string> verify_memory([Description("记忆 ID")] string memoryId)
+    [McpServerTool, Description("Verify that a memory is still valid.")]
+    public async Task<string> verify_memory([Description("Memory id.")] string memoryId)
     {
         try
         {
@@ -103,12 +103,12 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("获取业务系统（Feature）的全职能知识汇总。")]
-    public async Task<string> get_feature_summary([Description("业务系统 ID")] string featureId)
+    [McpServerTool, Description("Get the summary of a feature.")]
+    public async Task<string> get_feature_summary([Description("Feature id.")] string featureId)
     {
         try
         {
@@ -117,18 +117,18 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("批量写入多条项目记忆。")]
-    public async Task<string> batch_remember([Description("JSON 数组")] string entries)
+    [McpServerTool, Description("Create review submissions for multiple new memories.")]
+    public async Task<string> batch_remember([Description("JSON array of entries.")] string entries)
     {
         try
         {
             var items = JsonSerializer.Deserialize<List<BatchEntry>>(entries);
-            if (items == null || items.Count == 0) return "错误：entries 为空。";
-            if (items.Count > 50) return $"错误：单次最多 50 条，当前 {items.Count} 条。";
+            if (items == null || items.Count == 0) return "Error: entries is empty.";
+            if (items.Count > 50) return $"Error: a single batch supports at most 50 entries, current count is {items.Count}.";
 
             var requests = new List<RememberRequest>();
             var errors = new List<string>();
@@ -137,27 +137,27 @@ public sealed class MemoryTools(DnaServerApi api)
                 var item = items[i];
                 if (string.IsNullOrWhiteSpace(item.Content))
                 {
-                    errors.Add($"[{i}] content 为空");
+                    errors.Add($"[{i}] content is empty");
                     continue;
                 }
 
-                if (!Enum.TryParse<MemoryType>(item.Type, true, out var mt))
+                if (!Enum.TryParse<MemoryType>(item.Type, true, out var memoryType))
                 {
-                    errors.Add($"[{i}] 无效 type '{item.Type}'");
+                    errors.Add($"[{i}] invalid type '{item.Type}'");
                     continue;
                 }
 
-                if (!NodeTypeCompat.TryParse(item.NodeType ?? item.Layer, out var nt))
+                if (!NodeTypeCompat.TryParse(item.NodeType ?? item.Layer, out var parsedNodeType))
                 {
-                    errors.Add($"[{i}] 无效 nodeType/layer '{item.NodeType ?? item.Layer}'");
+                    errors.Add($"[{i}] invalid nodeType/layer '{item.NodeType ?? item.Layer}'");
                     continue;
                 }
 
                 requests.Add(new RememberRequest
                 {
                     Content = item.Content,
-                    Type = mt,
-                    NodeType = nt,
+                    Type = memoryType,
+                    NodeType = parsedNodeType,
                     Source = MemorySource.Ai,
                     Summary = item.Summary,
                     Disciplines = SplitCsv(item.Disciplines),
@@ -170,50 +170,66 @@ public sealed class MemoryTools(DnaServerApi api)
             }
 
             if (requests.Count == 0)
-                return $"错误：全部条目校验失败\n{string.Join("\n", errors)}";
+                return $"Error: all entries failed validation.\n{string.Join("\n", errors)}";
 
-            var result = await api.PostAsync("/api/memory/batch", requests);
+            var submissionIds = new List<string>();
+            foreach (var request in requests)
+            {
+                var result = await SubmitReviewSubmissionAsync("create", null, request);
+                var submissionId = GetString(result, "id");
+                if (!string.IsNullOrWhiteSpace(submissionId))
+                    submissionIds.Add(submissionId);
+            }
+
             var sb = new StringBuilder();
-            sb.AppendLine($"✓ 批量写入完成：成功 {requests.Count} 条，失败 {errors.Count} 条");
+            sb.AppendLine($"Batch review submissions created: {submissionIds.Count}, validation failures: {errors.Count}.");
             if (errors.Count > 0)
             {
-                sb.AppendLine("失败详情：");
-                foreach (var error in errors) sb.AppendLine($"- {error}");
+                sb.AppendLine("Validation failures:");
+                foreach (var error in errors)
+                    sb.AppendLine($"- {error}");
             }
-            sb.AppendLine(JsonSerializer.Serialize(result, PrettyJson));
+            if (submissionIds.Count > 0)
+            {
+                sb.AppendLine("Submission ids:");
+                foreach (var submissionId in submissionIds)
+                    sb.AppendLine($"- {submissionId}");
+            }
             return sb.ToString();
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("修改一条已有的项目记忆。")]
+    [McpServerTool, Description("Create a review submission for updating an existing memory.")]
     public async Task<string> update_memory(
-        [Description("要修改的记忆 ID")] string id,
-        [Description("新的知识正文（不修改则留空）")] string? content = null,
-        [Description("新的摘要（不修改则留空）")] string? summary = null,
-        [Description("新的记忆类型（不修改则留空）")] string? type = null,
-        [Description("新的节点类型（不修改则留空）")] string? nodeType = null,
-        [Description("兼容旧参数，已废弃")] string? layer = null,
-        [Description("新的标签，逗号分隔（会替换原有标签；不修改则留空）")] string? tags = null,
-        [Description("新的关联职能域，逗号分隔（不修改则留空）")] string? disciplines = null,
-        [Description("新的重要度 0.0-1.0（不修改则留空）")] double? importance = null)
+        [Description("Target memory id.")] string id,
+        [Description("New content, optional.")] string? content = null,
+        [Description("New summary, optional.")] string? summary = null,
+        [Description("New memory type, optional.")] string? type = null,
+        [Description("New node type, optional.")] string? nodeType = null,
+        [Description("Legacy alias for node type.")] string? layer = null,
+        [Description("Replacement tags, comma separated.")] string? tags = null,
+        [Description("Replacement disciplines, comma separated.")] string? disciplines = null,
+        [Description("New importance, optional.")] double? importance = null)
     {
         try
         {
             var existing = await api.GetAsync($"/api/memory/{Uri.EscapeDataString(id)}");
-            if (existing.ValueKind != JsonValueKind.Object) return $"错误：记忆不存在 [{id}]";
+            if (existing.ValueKind != JsonValueKind.Object)
+                return $"Error: memory [{id}] was not found.";
 
             var typeValue = ParseMemoryType(existing);
             var nodeTypeValue = ParseNodeType(existing);
             if (!string.IsNullOrWhiteSpace(type) && !Enum.TryParse<MemoryType>(type, true, out typeValue))
-                return $"错误：无效的记忆类型 '{type}'";
+                return $"Error: invalid memory type '{type}'.";
+
             if (!string.IsNullOrWhiteSpace(nodeType) || !string.IsNullOrWhiteSpace(layer))
             {
                 if (!NodeTypeCompat.TryParse(nodeType ?? layer, out nodeTypeValue))
-                    return $"错误：无效的节点类型 '{nodeType ?? layer}'";
+                    return $"Error: invalid node type '{nodeType ?? layer}'.";
             }
 
             var payload = new RememberRequest
@@ -231,47 +247,44 @@ public sealed class MemoryTools(DnaServerApi api)
                 Importance = importance ?? GetDouble(existing, "importance", 0.5)
             };
 
-            var result = await api.PutAsync($"/api/memory/{Uri.EscapeDataString(id)}", payload);
-            return $"✓ 记忆 [{id}] 已更新\n{JsonSerializer.Serialize(result, PrettyJson)}";
+            var result = await SubmitReviewSubmissionAsync("update", id, payload);
+            return $"Review submission created [{GetString(result, "id")}] for memory [{id}].";
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("删除一条项目记忆。")]
-    public async Task<string> delete_memory([Description("要删除的记忆 ID")] string id)
+    [McpServerTool, Description("Create a review submission for deleting a memory.")]
+    public async Task<string> delete_memory([Description("Target memory id.")] string id)
     {
         try
         {
-            var result = await api.DeleteAsync($"/api/memory/{Uri.EscapeDataString(id)}");
-            return JsonSerializer.Serialize(result, PrettyJson);
+            var result = await SubmitReviewSubmissionAsync("delete", id, null);
+            return $"Delete review submission created [{GetString(result, "id")}] for memory [{id}].";
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("按条件筛选项目记忆列表。")]
+    [McpServerTool, Description("Query memories by filters.")]
     public async Task<string> query_memories(
-        [Description("节点类型过滤，逗号分隔")] string? nodeTypes = null,
-        [Description("兼容旧参数，已废弃")] string? layers = null,
-        [Description("记忆类型过滤，逗号分隔")] string? types = null,
-        [Description("职能域过滤，逗号分隔")] string? disciplines = null,
-        [Description("业务系统过滤，逗号分隔")] string? features = null,
-        [Description("节点 ID 过滤")] string? nodeId = null,
-        [Description("标签过滤，逗号分隔")] string? tags = null,
-        [Description("鲜活度过滤")] string? freshness = null,
-        [Description("最多返回条数（默认 20，上限 100）")] int limit = 20)
+        [Description("Node types, comma separated.")] string? nodeTypes = null,
+        [Description("Legacy alias for node types.")] string? layers = null,
+        [Description("Memory types, comma separated.")] string? types = null,
+        [Description("Disciplines, comma separated.")] string? disciplines = null,
+        [Description("Features, comma separated.")] string? features = null,
+        [Description("Node id filter.")] string? nodeId = null,
+        [Description("Tags, comma separated.")] string? tags = null,
+        [Description("Freshness filter.")] string? freshness = null,
+        [Description("Max results, default 20, up to 100.")] int limit = 20)
     {
         try
         {
-            var parts = new List<string>
-            {
-                $"limit={Math.Clamp(limit, 1, 100)}"
-            };
+            var parts = new List<string> { $"limit={Math.Clamp(limit, 1, 100)}" };
             if (!string.IsNullOrWhiteSpace(nodeTypes)) parts.Add($"nodeTypes={Uri.EscapeDataString(nodeTypes)}");
             if (!string.IsNullOrWhiteSpace(layers)) parts.Add($"layers={Uri.EscapeDataString(layers)}");
             if (!string.IsNullOrWhiteSpace(types)) parts.Add($"types={Uri.EscapeDataString(types)}");
@@ -283,24 +296,22 @@ public sealed class MemoryTools(DnaServerApi api)
 
             var result = await api.GetAsync($"/api/memory/query?{string.Join("&", parts)}");
             if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() == 0)
-                return "未找到匹配的记忆条目。";
+                return "No matching memories were found.";
 
             var sb = new StringBuilder();
-            sb.AppendLine($"共 {result.GetArrayLength()} 条匹配记忆：");
+            sb.AppendLine($"Matched memories: {result.GetArrayLength()}");
             foreach (var item in result.EnumerateArray())
-            {
-                sb.AppendLine($"- [{GetString(item, "id")}] {GetString(item, "summary") ?? "(无摘要)"}");
-            }
+                sb.AppendLine($"- [{GetString(item, "id")}] {GetString(item, "summary") ?? "(no summary)"}");
             return sb.ToString();
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("按 ID 获取一条记忆的完整内容。")]
-    public async Task<string> get_memory([Description("记忆 ID")] string id)
+    [McpServerTool, Description("Get a memory by id.")]
+    public async Task<string> get_memory([Description("Memory id.")] string id)
     {
         try
         {
@@ -309,11 +320,11 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("获取知识库整体统计信息。")]
+    [McpServerTool, Description("Get memory statistics.")]
     public async Task<string> get_memory_stats()
     {
         try
@@ -323,12 +334,12 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("兼容旧命名：重建记忆搜索索引（FTS）。")]
-    public async Task<string> import_from_json([Description("保留参数，无实际作用")] bool rewriteJson = false)
+    [McpServerTool, Description("Legacy alias: rebuild the memory index.")]
+    public async Task<string> import_from_json([Description("Legacy flag, ignored.")] bool rewriteJson = false)
     {
         try
         {
@@ -337,11 +348,11 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("兼容旧命名：执行索引刷新。")]
+    [McpServerTool, Description("Legacy alias: sync the memory index.")]
     public async Task<string> import_new_from_json()
     {
         try
@@ -351,11 +362,11 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
     }
 
-    [McpServerTool, Description("兼容旧命名：纯 DB 存储下不再导出记忆 JSON。")]
+    [McpServerTool, Description("Legacy alias: export index data.")]
     public async Task<string> export_to_json()
     {
         try
@@ -365,42 +376,53 @@ public sealed class MemoryTools(DnaServerApi api)
         }
         catch (Exception ex)
         {
-            return $"错误：{ex.Message}";
+            return $"Error: {ex.Message}";
         }
+    }
+
+    private Task<JsonElement> SubmitReviewSubmissionAsync(string operation, string? targetId, RememberRequest? memory)
+    {
+        return api.PostAsync("/api/review/memory/submissions", new
+        {
+            operation,
+            targetId,
+            memory
+        });
     }
 
     private static string FormatRecallResult(JsonElement result)
     {
         var confidence = GetDouble(result, "confidence", 0);
         var sb = new StringBuilder();
-        var memories = result.TryGetProperty("memories", out var mArr) && mArr.ValueKind == JsonValueKind.Array
-            ? mArr.EnumerateArray().ToList()
+        var memories = result.TryGetProperty("memories", out var memoryArray) && memoryArray.ValueKind == JsonValueKind.Array
+            ? memoryArray.EnumerateArray().ToList()
             : [];
-        var chain = result.TryGetProperty("constraintChain", out var cArr) && cArr.ValueKind == JsonValueKind.Array
-            ? cArr.EnumerateArray().ToList()
+        var chain = result.TryGetProperty("constraintChain", out var chainArray) && chainArray.ValueKind == JsonValueKind.Array
+            ? chainArray.EnumerateArray().ToList()
             : [];
 
         if (chain.Count > 0)
         {
-            sb.AppendLine("## 约束链");
+            sb.AppendLine("## Constraint Chain");
             foreach (var item in chain)
-                sb.AppendLine($"- {GetString(item, "summary") ?? "(无摘要)"}");
+                sb.AppendLine($"- {GetString(item, "summary") ?? "(no summary)"}");
             sb.AppendLine();
         }
 
         if (memories.Count == 0)
         {
-            sb.AppendLine("未找到相关记忆。");
+            sb.AppendLine("No relevant memories were found.");
             return sb.ToString();
         }
 
-        sb.AppendLine($"## 检索结果（{memories.Count} 条，置信度 {confidence:F2}）");
+        sb.AppendLine($"## Recall Results ({memories.Count}, confidence {confidence:F2})");
         sb.AppendLine();
         foreach (var scored in memories)
         {
-            var entry = scored.TryGetProperty("entry", out var e) ? e : default;
-            sb.AppendLine($"- [{GetString(entry, "id")}] {GetString(entry, "summary") ?? "(无摘要)"}");
+            var entry = scored.TryGetProperty("entry", out var item) ? item : default;
+            sb.AppendLine($"- [{GetString(entry, "id")}] {GetString(entry, "summary") ?? "(no summary)"}");
         }
+
         return sb.ToString();
     }
 
@@ -455,8 +477,8 @@ public sealed class MemoryTools(DnaServerApi api)
     private static List<string> GetStringList(JsonElement element, string propertyName)
     {
         if (element.ValueKind != JsonValueKind.Object) return [];
-        if (!element.TryGetProperty(propertyName, out var arr) || arr.ValueKind != JsonValueKind.Array) return [];
-        return arr.EnumerateArray()
+        if (!element.TryGetProperty(propertyName, out var array) || array.ValueKind != JsonValueKind.Array) return [];
+        return array.EnumerateArray()
             .Where(item => item.ValueKind == JsonValueKind.String)
             .Select(item => item.GetString() ?? string.Empty)
             .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -467,11 +489,12 @@ public sealed class MemoryTools(DnaServerApi api)
     {
         if (entry.TryGetProperty("type", out var type))
         {
-            if (type.ValueKind == JsonValueKind.Number && type.TryGetInt32(out var n) && Enum.IsDefined(typeof(MemoryType), n))
-                return (MemoryType)n;
+            if (type.ValueKind == JsonValueKind.Number && type.TryGetInt32(out var number) && Enum.IsDefined(typeof(MemoryType), number))
+                return (MemoryType)number;
             if (type.ValueKind == JsonValueKind.String && Enum.TryParse<MemoryType>(type.GetString(), true, out var parsed))
                 return parsed;
         }
+
         return MemoryType.Semantic;
     }
 
@@ -479,11 +502,12 @@ public sealed class MemoryTools(DnaServerApi api)
     {
         if (entry.TryGetProperty("source", out var source))
         {
-            if (source.ValueKind == JsonValueKind.Number && source.TryGetInt32(out var n) && Enum.IsDefined(typeof(MemorySource), n))
-                return (MemorySource)n;
+            if (source.ValueKind == JsonValueKind.Number && source.TryGetInt32(out var number) && Enum.IsDefined(typeof(MemorySource), number))
+                return (MemorySource)number;
             if (source.ValueKind == JsonValueKind.String && Enum.TryParse<MemorySource>(source.GetString(), true, out var parsed))
                 return parsed;
         }
+
         return MemorySource.Ai;
     }
 
@@ -491,11 +515,12 @@ public sealed class MemoryTools(DnaServerApi api)
     {
         if (entry.TryGetProperty("nodeType", out var nodeType))
         {
-            if (nodeType.ValueKind == JsonValueKind.Number && nodeType.TryGetInt32(out var n) && Enum.IsDefined(typeof(NodeType), n))
-                return (NodeType)n;
+            if (nodeType.ValueKind == JsonValueKind.Number && nodeType.TryGetInt32(out var number) && Enum.IsDefined(typeof(NodeType), number))
+                return (NodeType)number;
             if (nodeType.ValueKind == JsonValueKind.String && NodeTypeCompat.TryParse(nodeType.GetString(), out var parsed))
                 return parsed;
         }
+
         return NodeType.Technical;
     }
 

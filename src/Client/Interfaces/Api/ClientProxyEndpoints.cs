@@ -27,6 +27,13 @@ public static class ClientProxyEndpoints
         MapProxyPost(app, "/api/auth/register");
         MapProxyGet(app, "/api/auth/me");
         MapProxyGet(app, "/api/auth/users");
+        MapProxyPost(app, "/api/auth/users");
+        MapProxyPutById(app, "/api/auth/users/{id}/role",
+            id => $"/api/auth/users/{Uri.EscapeDataString(id)}/role");
+        MapProxyPutById(app, "/api/auth/users/{id}/password",
+            id => $"/api/auth/users/{Uri.EscapeDataString(id)}/password");
+        MapProxyDeleteById(app, "/api/auth/users/{id}",
+            id => $"/api/auth/users/{Uri.EscapeDataString(id)}");
     }
 
     private static void MapMemoryProxyEndpoints(IEndpointRouteBuilder app)
@@ -36,9 +43,52 @@ public static class ClientProxyEndpoints
             "nodeTypes", "layers", "disciplines", "features", "types", "tags", "nodeId", "freshness", "limit", "offset");
 
         MapProxyGetById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
-        MapProxyPost(app, "/api/memory/remember");
-        MapProxyPutById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
-        MapProxyDeleteById(app, "/api/memory/{id}", id => $"/api/memory/{Uri.EscapeDataString(id)}");
+        app.MapPost("/api/memory/remember", async (JsonElement request, DnaServerApi api) =>
+        {
+            try
+            {
+                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
+                {
+                    operation = "create",
+                    memory = request
+                }));
+            }
+            catch (Exception ex)
+            {
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
+            }
+        });
+        app.MapPut("/api/memory/{id}", async (string id, JsonElement request, DnaServerApi api) =>
+        {
+            try
+            {
+                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
+                {
+                    operation = "update",
+                    targetId = id,
+                    memory = request
+                }));
+            }
+            catch (Exception ex)
+            {
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
+            }
+        });
+        app.MapDelete("/api/memory/{id}", async (string id, DnaServerApi api) =>
+        {
+            try
+            {
+                return Results.Json(await api.PostAsync("/api/review/memory/submissions", new
+                {
+                    operation = "delete",
+                    targetId = id
+                }));
+            }
+            catch (Exception ex)
+            {
+                return ClientProxyErrorResults.Create(ex, api.BaseUrl);
+            }
+        });
     }
 
     private static void MapReviewProxyEndpoints(IEndpointRouteBuilder app)

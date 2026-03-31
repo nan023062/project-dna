@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/governance.css" />
   <link rel="stylesheet" href="/dna-shared/css/memory.css" />
   <link rel="stylesheet" href="css/review-admin.css" />
+  <link rel="stylesheet" href="/dna-shared/css/user-admin.css" />
   <link rel="stylesheet" href="css/module-management.css" />
   <link rel="stylesheet" href="css/file-tree.css" />
   <link rel="stylesheet" href="/dna-shared/css/ui-framework.css" />
@@ -21,7 +22,6 @@
 </head>
 <body>
 
-<!-- ═══════════════════ 顶部工具栏 ═══════════════════ -->
 <div class="toolbar">
   <span class="brand">Project DNA</span>
   <div class="sep"></div>
@@ -35,269 +35,266 @@
   </div>
 </div>
 
-<!-- setupPage 保留为空壳，兼容 JS 引用 -->
-
-<!-- ═══════════════════ 主界面 ═══════════════════ -->
 <div class="app-wrapper" id="appWrapper">
-<div id="mainApp" class="app">
-  <div class="tabs">
-    <div class="tab active" data-tab="topology" data-action="switch-tab">架构总览</div>
-    <div class="tab" data-tab="memoryMgmt" data-action="switch-tab">记忆管理</div>
-    <div class="tab" data-tab="reviewQueue" data-action="switch-tab">审核队列</div>
+  <div id="mainApp" class="app">
+    <div class="tabs">
+      <div class="tab active" data-tab="topology" data-action="switch-tab">架构总览</div>
+      <div class="tab" data-tab="fileTree" data-action="switch-tab">工程文件</div>
+      <div class="tab" data-tab="memoryMgmt" data-action="switch-tab">知识治理</div>
+      <div class="tab" data-tab="reviewQueue" data-action="switch-tab">审核队列</div>
+      <div class="tab" data-tab="users" data-action="switch-tab">用户管理</div>
+    </div>
+
+    <div class="panels">
+      <div id="panelTopology" class="panel active">
+        <div class="summary-bar">
+          <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">节点</div></div>
+          <div class="stat"><div id="statEdges" class="val">-</div><div class="lbl">依赖边</div></div>
+          <div class="stat"><div id="statContainment" class="val">-</div><div class="lbl">包含边</div></div>
+          <div class="stat"><div id="statCollaboration" class="val">-</div><div class="lbl">协作边</div></div>
+        </div>
+        <div class="arch-layout">
+          <div id="topoGrid" class="topo-grid"></div>
+          <div id="archSidebar" class="arch-sidebar" style="display:none"></div>
+        </div>
+      </div>
+
+      <div id="panelFileTree" class="panel">
+        <div class="file-tree-toolbar">
+          <button class="btn btn-primary btn-sm" data-action="refresh-file-tree">刷新</button>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-dot registered"></span> 已注册</span>
+            <span class="legend-item"><span class="legend-dot crosswork"></span> 执行团队</span>
+            <span class="legend-item"><span class="legend-dot container"></span> 容器</span>
+            <span class="legend-item"><span class="legend-dot candidate"></span> 候选（双击注册）</span>
+          </div>
+        </div>
+        <div id="fileTreeContent" style="overflow:auto;flex:1;padding:12px;"></div>
+      </div>
+
+      <div id="panelMemoryMgmt" class="panel">
+        <div class="summary-bar">
+          <div class="stat"><div id="statFresh" class="val">-</div><div class="lbl">新鲜</div></div>
+          <div class="stat"><div id="statAging" class="val">-</div><div class="lbl">老化</div></div>
+          <div class="stat"><div id="statStale" class="val">-</div><div class="lbl">陈旧</div></div>
+          <div class="stat"><div id="statConflict" class="val">-</div><div class="lbl">冲突</div></div>
+        </div>
+        <div class="gov-actions" style="padding: 8px 12px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); align-items: center;">
+          <button class="btn btn-primary btn-sm" data-action="check-freshness">检查鲜活度</button>
+          <button class="btn btn-primary btn-sm" data-action="detect-conflicts">检测冲突</button>
+          <button class="btn btn-secondary btn-sm" data-action="archive-stale">归档陈旧</button>
+          <button class="btn btn-primary btn-sm" data-action="condense-node-knowledge">压缩模块知识</button>
+          <button class="btn btn-secondary btn-sm" data-action="condense-all-knowledge">全量知识压缩</button>
+          <button class="btn btn-secondary btn-sm" data-action="configure-condense-schedule">调度设置</button>
+          <div style="flex:1;"></div>
+          <div id="govSchedule" style="font-size:12px;color:var(--text-secondary);margin-right:12px;"></div>
+          <div id="govContent" style="font-size:12px;color:var(--text-secondary);"></div>
+        </div>
+        <div id="govCondenseResult" style="padding: 8px 12px; border-bottom: 1px solid var(--border); font-size:12px; color:var(--text-secondary);">
+          <div class="empty">尚未执行知识压缩。</div>
+        </div>
+
+        <div class="memory-layout">
+          <div class="memory-sidebar">
+            <div class="memory-filters">
+              <select id="memFilterLayer" data-change-action="load-memories">
+                <option value="">所有节点类型</option>
+                <option value="Project">Project（项目）</option>
+                <option value="Department">Department（部门）</option>
+                <option value="Technical">Technical（技术组）</option>
+                <option value="Team">Team（执行团队）</option>
+              </select>
+              <select id="memFilterType" data-change-action="load-memories">
+                <option value="">所有类型</option>
+                <option value="Structural">结构</option>
+                <option value="Semantic">语义</option>
+                <option value="Episodic">事件</option>
+                <option value="Procedural">过程</option>
+              </select>
+              <button class="btn btn-primary btn-sm memory-new-btn" data-action="create-memory">新增</button>
+            </div>
+            <div id="memoryList" class="memory-list"></div>
+          </div>
+
+          <div class="memory-content">
+            <div id="memoryEditorForm" class="memory-form" style="display:none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h2 style="margin: 0; font-size: 18px; color: var(--text-primary);">知识编辑 <span id="memId" style="font-size: 12px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;"></span></h2>
+                <button class="btn btn-secondary btn-sm" data-action="apply-memory-template">初始化模板</button>
+              </div>
+              <div class="memory-form-group">
+                <label>摘要</label>
+                <input type="text" id="memSummary" placeholder="一句话概括这条知识" />
+              </div>
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label>节点类型</label>
+                  <select id="memLayer" data-change-action="memory-layer-type-changed">
+                    <option value="Project">Project（项目）</option>
+                    <option value="Department">Department（部门）</option>
+                    <option value="Technical">Technical（技术组）</option>
+                    <option value="Team">Team（执行团队）</option>
+                  </select>
+                </div>
+                <div class="memory-form-group">
+                  <label>类型</label>
+                  <select id="memType" data-change-action="memory-layer-type-changed">
+                    <option value="Structural">结构</option>
+                    <option value="Semantic">语义</option>
+                    <option value="Episodic">事件</option>
+                    <option value="Procedural">过程</option>
+                    <option value="Working">工作</option>
+                  </select>
+                </div>
+                <div class="memory-form-group">
+                  <label>重要度</label>
+                  <input type="number" id="memImportance" step="0.1" min="0" max="1" value="0.5" />
+                </div>
+              </div>
+              <div class="memory-form-group">
+                <label>职能域</label>
+                <div id="memDisciplines" class="memory-check-grid">
+                  <label><input type="checkbox" value="engineering" /> engineering</label>
+                  <label><input type="checkbox" value="design" /> design</label>
+                  <label><input type="checkbox" value="art" /> art</label>
+                  <label><input type="checkbox" value="ta" /> ta</label>
+                  <label><input type="checkbox" value="audio" /> audio</label>
+                  <label><input type="checkbox" value="devops" /> devops</label>
+                  <label><input type="checkbox" value="qa" /> qa</label>
+                </div>
+              </div>
+              <div class="memory-form-row">
+                <div class="memory-form-group">
+                  <label>业务系统</label>
+                  <div id="memFeaturesList" class="memory-list-editor"></div>
+                  <button class="btn btn-secondary btn-sm" data-action="add-feature">+ 添加</button>
+                </div>
+                <div class="memory-form-group">
+                  <label>模块 ID</label>
+                  <div id="memNodeIdField" class="memory-list-editor"></div>
+                  <button class="btn btn-secondary btn-sm" data-action="add-node-id">+ 添加</button>
+                </div>
+              </div>
+              <div class="memory-form-group">
+                <label>标签</label>
+                <div id="memTagsList" class="memory-list-editor"></div>
+                <button class="btn btn-secondary btn-sm" data-action="add-tag">+ 添加</button>
+              </div>
+              <div class="memory-form-group">
+                <label>结构化内容</label>
+                <div class="memory-form-row">
+                  <div class="memory-form-group"><label>背景</label><input type="text" id="memFieldBackground" placeholder="适用场景" /></div>
+                  <div class="memory-form-group"><label>目标</label><input type="text" id="memFieldGoal" placeholder="目标" /></div>
+                </div>
+                <div class="memory-form-row">
+                  <div class="memory-form-group"><label>规则要点</label><textarea id="memFieldRules" placeholder="每行一条"></textarea></div>
+                  <div class="memory-form-group"><label>执行步骤</label><textarea id="memFieldSteps" placeholder="每行一步"></textarea></div>
+                </div>
+                <div class="memory-form-group"><label>备注</label><textarea id="memFieldNotes" placeholder="补充说明"></textarea></div>
+              </div>
+              <div class="memory-form-group">
+                <label>正文预览</label>
+                <textarea id="memContent" readonly placeholder="自动生成..." style="height: 160px;"></textarea>
+              </div>
+              <div class="memory-actions">
+                <button class="btn btn-primary btn-sm" data-action="save-memory">保存</button>
+                <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color: #ef4444; border-color: #ef4444;">删除</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelReviewQueue" class="panel">
+        <div class="review-admin-page">
+          <div id="reviewAuthSection"></div>
+          <div id="reviewStats" class="review-stats"></div>
+
+          <div class="review-layout">
+            <div class="review-sidebar">
+              <div class="review-sidebar-toolbar">
+                <div class="review-filter-row">
+                  <select id="reviewFilterStatus" data-change-action="load-review-queue">
+                    <option value="">全部状态</option>
+                    <option value="pending">待审核</option>
+                    <option value="approved">已通过</option>
+                    <option value="rejected">已驳回</option>
+                    <option value="published">已发布</option>
+                    <option value="withdrawn">已撤回</option>
+                    <option value="superseded">已过期</option>
+                  </select>
+                  <input
+                    id="reviewFilterSubmitter"
+                    type="text"
+                    placeholder="按提交人筛选"
+                    data-keydown-action="load-review-queue-on-enter"
+                  />
+                </div>
+                <div class="review-filter-actions">
+                  <button class="btn btn-secondary btn-sm" data-action="clear-review-filters">清空筛选</button>
+                  <button class="btn btn-primary btn-sm" data-action="load-review-queue">刷新队列</button>
+                </div>
+              </div>
+              <div id="reviewSubmissionList" class="review-submission-list"></div>
+            </div>
+
+            <div class="review-content">
+              <div id="reviewDetailContent" class="review-detail-content"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelUsers" class="panel">
+        <div id="userAdminRoot" class="user-admin-page"></div>
+      </div>
+    </div>
   </div>
-  <div class="panels">
 
-    <!-- ── 架构总览面板 ── -->
-    <div id="panelTopology" class="panel active">
-      <div class="summary-bar">
-        <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">节点</div></div>
-        <div class="stat"><div id="statEdges" class="val">-</div><div class="lbl">依赖边</div></div>
-        <div class="stat"><div id="statContainment" class="val">-</div><div class="lbl">包含边</div></div>
-        <div class="stat"><div id="statCollaboration" class="val">-</div><div class="lbl">协作边</div></div>
-      </div>
-      <div class="arch-layout">
-        <div id="topoGrid" class="topo-grid"></div>
-        <div id="archSidebar" class="arch-sidebar" style="display:none"></div>
+  <div id="chatPanel" class="chat-panel">
+    <div class="chat-resize-handle" id="chatResizeHandle"></div>
+    <div class="chat-header">
+      <div class="chat-title">AI 助手</div>
+      <div class="chat-header-actions">
+        <button class="chat-header-btn" data-action="show-session-list" title="历史会话">🕒</button>
+        <button class="chat-header-btn" data-action="new-chat" title="新对话">＋</button>
       </div>
     </div>
-
-    <!-- ── 工程文件树面板 ── -->
-    <div id="panelFileTree" class="panel">
-      <div class="file-tree-toolbar">
-        <button class="btn btn-primary btn-sm" data-action="refresh-file-tree">刷新</button>
-        <div class="legend">
-          <span class="legend-item"><span class="legend-dot registered"></span> 已注册</span>
-          <span class="legend-item"><span class="legend-dot crosswork"></span> 执行团队</span>
-          <span class="legend-item"><span class="legend-dot container"></span> 容器</span>
-          <span class="legend-item"><span class="legend-dot candidate"></span> 候选（双击注册）</span>
-        </div>
-      </div>
-      <div id="fileTreeContent" style="overflow:auto;flex:1;padding:12px;"></div>
-    </div>
-
-    <!-- ── 记忆管理面板（治理 + 编辑合并） ── -->
-    <div id="panelMemoryMgmt" class="panel">
-      <!-- 治理统计 + 操作 -->
-      <div class="summary-bar">
-        <div class="stat"><div id="statFresh" class="val">-</div><div class="lbl">新鲜</div></div>
-        <div class="stat"><div id="statAging" class="val">-</div><div class="lbl">老化</div></div>
-        <div class="stat"><div id="statStale" class="val">-</div><div class="lbl">陈旧</div></div>
-        <div class="stat"><div id="statConflict" class="val">-</div><div class="lbl">冲突</div></div>
-      </div>
-      <div class="gov-actions" style="padding: 8px 12px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); align-items: center;">
-        <button class="btn btn-primary btn-sm" data-action="check-freshness">检查鲜活度</button>
-        <button class="btn btn-primary btn-sm" data-action="detect-conflicts">检测冲突</button>
-        <button class="btn btn-secondary btn-sm" data-action="archive-stale">归档陈旧</button>
-        <button class="btn btn-primary btn-sm" data-action="condense-node-knowledge">压缩模块知识</button>
-        <button class="btn btn-secondary btn-sm" data-action="condense-all-knowledge">全量知识压缩</button>
-        <button class="btn btn-secondary btn-sm" data-action="configure-condense-schedule">调度设置</button>
-        <div style="flex:1;"></div>
-        <div id="govSchedule" style="font-size:12px;color:var(--text-secondary);margin-right:12px;"></div>
-        <div id="govContent" style="font-size:12px;color:var(--text-secondary);"></div>
-      </div>
-      <div id="govCondenseResult" style="padding: 8px 12px; border-bottom: 1px solid var(--border); font-size:12px; color:var(--text-secondary);">
-        <div class="empty">尚未执行知识压缩。</div>
-      </div>
-      <!-- 记忆列表 + 编辑 -->
-      <div class="memory-layout">
-        <div class="memory-sidebar">
-          <div class="memory-filters">
-            <select id="memFilterLayer" data-change-action="load-memories">
-              <option value="">所有节点类型</option>
-              <option value="Project">Project（项目）</option>
-              <option value="Department">Department（部门）</option>
-              <option value="Technical">Technical（技术组）</option>
-              <option value="Team">Team（执行团队）</option>
-            </select>
-            <select id="memFilterType" data-change-action="load-memories">
-              <option value="">所有类型</option>
-              <option value="Structural">结构</option>
-              <option value="Semantic">语义</option>
-              <option value="Episodic">事件</option>
-              <option value="Procedural">过程</option>
-            </select>
-            <button class="btn btn-primary btn-sm memory-new-btn" data-action="create-memory">新增</button>
-          </div>
-          <div id="memoryList" class="memory-list"></div>
-        </div>
-        <div class="memory-content">
-          <div id="memoryEditorForm" class="memory-form" style="display:none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-              <h2 style="margin: 0; font-size: 18px; color: var(--text-primary);">记忆编辑 <span id="memId" style="font-size: 12px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;"></span></h2>
-              <button class="btn btn-secondary btn-sm" data-action="apply-memory-template">初始化模板</button>
-            </div>
-            <div class="memory-form-group">
-              <label>摘要</label>
-              <input type="text" id="memSummary" placeholder="一句话概括这条记忆" />
-            </div>
-            <div class="memory-form-row">
-              <div class="memory-form-group">
-                <label>节点类型</label>
-                <select id="memLayer" data-change-action="memory-layer-type-changed">
-                  <option value="Project">Project（项目）</option>
-                  <option value="Department">Department（部门）</option>
-                  <option value="Technical">Technical（技术组）</option>
-                  <option value="Team">Team（执行团队）</option>
-                </select>
-              </div>
-              <div class="memory-form-group">
-                <label>类型</label>
-                <select id="memType" data-change-action="memory-layer-type-changed">
-                  <option value="Structural">结构</option>
-                  <option value="Semantic">语义</option>
-                  <option value="Episodic">事件</option>
-                  <option value="Procedural">过程</option>
-                  <option value="Working">工作</option>
-                </select>
-              </div>
-              <div class="memory-form-group">
-                <label>重要度</label>
-                <input type="number" id="memImportance" step="0.1" min="0" max="1" value="0.5" />
-              </div>
-            </div>
-            <div class="memory-form-group">
-              <label>职能域</label>
-              <div id="memDisciplines" class="memory-check-grid">
-                <label><input type="checkbox" value="engineering" /> engineering</label>
-                <label><input type="checkbox" value="design" /> design</label>
-                <label><input type="checkbox" value="art" /> art</label>
-                <label><input type="checkbox" value="ta" /> ta</label>
-                <label><input type="checkbox" value="audio" /> audio</label>
-                <label><input type="checkbox" value="devops" /> devops</label>
-                <label><input type="checkbox" value="qa" /> qa</label>
-              </div>
-            </div>
-            <div class="memory-form-row">
-              <div class="memory-form-group">
-                <label>业务系统</label>
-                <div id="memFeaturesList" class="memory-list-editor"></div>
-                <button class="btn btn-secondary btn-sm" data-action="add-feature">+ 添加</button>
-              </div>
-              <div class="memory-form-group">
-                <label>模块 ID</label>
-                <div id="memNodeIdField" class="memory-list-editor"></div>
-                <button class="btn btn-secondary btn-sm" data-action="add-node-id">+ 添加</button>
-              </div>
-            </div>
-            <div class="memory-form-group">
-              <label>标签</label>
-              <div id="memTagsList" class="memory-list-editor"></div>
-              <button class="btn btn-secondary btn-sm" data-action="add-tag">+ 添加</button>
-            </div>
-            <div class="memory-form-group">
-              <label>结构化内容</label>
-              <div class="memory-form-row">
-                <div class="memory-form-group"><label>背景</label><input type="text" id="memFieldBackground" placeholder="适用场景" /></div>
-                <div class="memory-form-group"><label>目标</label><input type="text" id="memFieldGoal" placeholder="目标" /></div>
-              </div>
-              <div class="memory-form-row">
-                <div class="memory-form-group"><label>规则要点</label><textarea id="memFieldRules" placeholder="每行一条"></textarea></div>
-                <div class="memory-form-group"><label>执行步骤</label><textarea id="memFieldSteps" placeholder="每行一条"></textarea></div>
-              </div>
-              <div class="memory-form-group"><label>备注</label><textarea id="memFieldNotes" placeholder="补充说明"></textarea></div>
-            </div>
-            <div class="memory-form-group">
-              <label>正文预览</label>
-              <textarea id="memContent" readonly placeholder="自动生成..." style="height: 160px;"></textarea>
-            </div>
-            <div class="memory-actions">
-              <button class="btn btn-primary btn-sm" data-action="save-memory">保存</button>
-              <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color: #ef4444; border-color: #ef4444;">删除</button>
-            </div>
-          </div>
-        </div>
+    <div id="chatMessages" class="chat-messages">
+      <div class="chat-welcome">
+        <div class="chat-welcome-icon">🤖</div>
+        <p><strong>Project DNA AI 助手</strong></p>
+        <p>我可以帮你理解项目结构、阅读和编写代码。</p>
+        <p style="color:#64748b;font-size:12px;margin-top:8px;">Shift+Enter 换行 · Enter 发送</p>
       </div>
     </div>
-
-    <div id="panelReviewQueue" class="panel">
-      <div class="review-admin-page">
-        <div id="reviewAuthSection"></div>
-        <div id="reviewStats" class="review-stats"></div>
-
-        <div class="review-layout">
-          <div class="review-sidebar">
-            <div class="review-sidebar-toolbar">
-              <div class="review-filter-row">
-                <select id="reviewFilterStatus" data-change-action="load-review-queue">
-                  <option value="">全部状态</option>
-                  <option value="pending">待审核</option>
-                  <option value="approved">已通过</option>
-                  <option value="rejected">已驳回</option>
-                  <option value="published">已发布</option>
-                  <option value="withdrawn">已撤回</option>
-                  <option value="superseded">已过期</option>
-                </select>
-                <input
-                  id="reviewFilterSubmitter"
-                  type="text"
-                  placeholder="按提交人筛选"
-                  data-keydown-action="load-review-queue-on-enter"
-                />
-              </div>
-              <div class="review-filter-actions">
-                <button class="btn btn-secondary btn-sm" data-action="clear-review-filters">清空筛选</button>
-                <button class="btn btn-primary btn-sm" data-action="load-review-queue">刷新队列</button>
-              </div>
-            </div>
-            <div id="reviewSubmissionList" class="review-submission-list"></div>
-          </div>
-
-          <div class="review-content">
-            <div id="reviewDetailContent" class="review-detail-content"></div>
-          </div>
-        </div>
+    <div id="chatStatus" class="chat-status hidden"></div>
+    <div class="chat-input-area">
+      <textarea id="chatInput" placeholder="输入消息..." rows="1"
+                data-keydown-action="chat-keydown" data-input-action="chat-auto-resize"></textarea>
+      <button id="chatSendBtn" class="chat-send-btn" data-action="send-chat-message">➜</button>
+      <button id="chatStopBtn" class="chat-stop-btn hidden" data-action="stop-chat">■</button>
+    </div>
+    <div class="chat-bottom-bar">
+      <div class="chat-mode-switch chat-mode-switch-bottom" id="chatModeSwitch">
+        <button class="chat-mode-btn" data-mode="ask" data-action="switch-chat-mode">Ask</button>
+        <button class="chat-mode-btn" data-mode="plan" data-action="switch-chat-mode">Plan</button>
+        <button class="chat-mode-btn active" data-mode="agent" data-action="switch-chat-mode">Agent</button>
       </div>
+      <button class="chat-model-selector" id="chatModelSelector" data-action="open-model-dropdown">
+        <span class="model-name" id="chatModelTag">未配置</span>
+        <span class="model-arrow">▾</span>
+      </button>
+      <div class="chat-model-dropdown hidden" id="chatModelDropdown"></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════ 聊天面板（右侧） ═══════════════════ -->
-<div id="chatPanel" class="chat-panel">
-  <div class="chat-resize-handle" id="chatResizeHandle"></div>
-  <div class="chat-header">
-    <div class="chat-title">AI 助手</div>
-    <div class="chat-header-actions">
-      <button class="chat-header-btn" data-action="show-session-list" title="历史会话">🕒</button>
-      <button class="chat-header-btn" data-action="new-chat" title="新对话">＋</button>
-    </div>
-  </div>
-  <div id="chatMessages" class="chat-messages">
-    <div class="chat-welcome">
-      <div class="chat-welcome-icon">🤖</div>
-      <p><strong>Project DNA AI 助手</strong></p>
-      <p>我可以帮你理解项目结构、阅读和编写代码。</p>
-      <p style="color:#64748b;font-size:12px;margin-top:8px;">Shift+Enter 换行 · Enter 发送</p>
-    </div>
-  </div>
-  <div id="chatStatus" class="chat-status hidden"></div>
-  <div class="chat-input-area">
-    <textarea id="chatInput" placeholder="输入消息..." rows="1"
-              data-keydown-action="chat-keydown" data-input-action="chat-auto-resize"></textarea>
-    <button id="chatSendBtn" class="chat-send-btn" data-action="send-chat-message">➜</button>
-    <button id="chatStopBtn" class="chat-stop-btn hidden" data-action="stop-chat">■</button>
-  </div>
-  <div class="chat-bottom-bar">
-    <div class="chat-mode-switch chat-mode-switch-bottom" id="chatModeSwitch">
-      <button class="chat-mode-btn" data-mode="ask" data-action="switch-chat-mode">Ask</button>
-      <button class="chat-mode-btn" data-mode="plan" data-action="switch-chat-mode">Plan</button>
-      <button class="chat-mode-btn active" data-mode="agent" data-action="switch-chat-mode">Agent</button>
-    </div>
-    <button class="chat-model-selector" id="chatModelSelector" data-action="open-model-dropdown">
-      <span class="model-name" id="chatModelTag">未配置</span>
-      <span class="model-arrow">▾</span>
-    </button>
-    <div class="chat-model-dropdown hidden" id="chatModelDropdown"></div>
-  </div>
-</div>
-</div><!-- /app-wrapper -->
-
-<!-- ═══════════════════ 底部状态栏 ═══════════════════ -->
 <div class="status-bar">
   <span id="statusText">启动中…</span>
   <span id="refreshInfo"></span>
 </div>
 
-<!-- ═══════════════════ LLM 设置弹窗 ═══════════════════ -->
 <div id="llmSettingsOverlay" class="llm-settings-overlay">
   <div class="llm-settings-modal">
     <div class="llm-settings-header">
@@ -310,7 +307,6 @@
   </div>
 </div>
 
-<!-- ═══════════════════ JS 模块入口 ═══════════════════ -->
 <script src="js/lib/marked.min.js"></script>
 <script src="/dna-shared/js/lib/elk.bundled.js"></script>
 <script type="module" src="js/app.js?v=3"></script>

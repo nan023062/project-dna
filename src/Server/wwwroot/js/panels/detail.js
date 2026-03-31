@@ -23,21 +23,21 @@ export function initDetail(switchTab) {
 
 function getDetailErrorMessage(error) {
   if (error?.status === 401) {
-    return 'Sign in as admin in Review Queue before opening module details.';
+    return '请先在审核队列中以管理员身份登录，再查看模块详情。';
   }
 
   if (error?.status === 403) {
-    return 'The current account does not have permission to read module details.';
+    return '当前账号没有权限读取模块详情。';
   }
 
-  return error?.message || 'Request failed.';
+  return error?.message || '请求失败。';
 }
 
 export async function showModuleDetail(name, moduleType = null) {
   if (switchTabFn) switchTabFn('detail');
 
   const container = $('detailContent');
-  container.innerHTML = '<div class="empty">Loading...</div>';
+  container.innerHTML = '<div class="empty">加载中...</div>';
 
   try {
     const topoData = await api('/topology');
@@ -45,7 +45,7 @@ export async function showModuleDetail(name, moduleType = null) {
     const moduleId = moduleInfo?.name || null;
 
     if (!moduleId) {
-      container.innerHTML = '<div class="empty">Module metadata was not found.</div>';
+      container.innerHTML = '<div class="empty">未找到模块元数据。</div>';
       return;
     }
 
@@ -86,7 +86,7 @@ function renderDetailPanel(name) {
   let html = '<div class="detail-panel">';
   html += `<div class="detail-header">
     <h2>${escapeHtml(name)}</h2>
-    <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Role: <span id="detailModuleType" style="color: #38bdf8;">Loading...</span></div>
+    <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">角色：<span id="detailModuleType" style="color: #38bdf8;">加载中...</span></div>
   </div>`;
 
   html += '<div class="memory-tabs" id="memoryTabs">';
@@ -117,7 +117,7 @@ function selectTag(tagKey) {
   const area = $('memoryEditorArea');
   const items = memoriesByTag[tagKey] || [];
   if (items.length === 0) {
-    area.innerHTML = '<div class="empty">No matching memories.</div>';
+    area.innerHTML = '<div class="empty">没有匹配的知识。</div>';
     return;
   }
 
@@ -138,7 +138,7 @@ function selectTag(tagKey) {
 
 function formatGameRole(moduleType) {
   const role = String(moduleType || '').trim().toLowerCase();
-  if (role === 'designer') return 'Designer';
-  if (role === 'art') return 'Art';
-  return 'Coder';
+  if (role === 'designer') return '策划';
+  if (role === 'art') return '美术';
+  return '程序';
 }
