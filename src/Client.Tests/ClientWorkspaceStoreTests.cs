@@ -108,17 +108,9 @@ public sealed class ClientWorkspaceStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DnaServerApi_ShouldFollowCurrentWorkspaceServer()
+    public async Task DnaServerApi_ShouldUseLocalRuntimeBaseUrl()
     {
         var store = CreateStore("http://localhost:5051");
-        var remote = store.CreateWorkspace(new ClientWorkspaceUpsertRequest
-        {
-            Name = "Remote Team",
-            Mode = "team",
-            ServerBaseUrl = "https://dna.example.com",
-            WorkspaceRoot = _workspaceRoot,
-            SetCurrent = true
-        });
 
         Uri? requestedUri = null;
         using var httpClient = new HttpClient(new StubHttpMessageHandler(request =>
@@ -129,7 +121,7 @@ public sealed class ClientWorkspaceStoreTests : IDisposable
                 Content = new StringContent("""{"ok":true}""")
             });
         }));
-        var api = new DnaServerApi(httpClient, store, new ClientRuntimeOptions
+        var api = new DnaServerApi(httpClient, new ClientRuntimeOptions
         {
             ServerBaseUrl = "http://localhost:5051",
             WorkspaceRoot = _workspaceRoot,
@@ -139,7 +131,7 @@ public sealed class ClientWorkspaceStoreTests : IDisposable
         await api.GetAsync("/api/status");
 
         Assert.NotNull(requestedUri);
-        Assert.StartsWith(remote.ServerBaseUrl, requestedUri!.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("http://localhost:5051", requestedUri!.GetLeftPart(UriPartial.Authority), StringComparison.OrdinalIgnoreCase);
     }
 
     private ClientWorkspaceStore CreateStore(string serverBaseUrl)

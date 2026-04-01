@@ -6,48 +6,54 @@ public static class ClientDiscoveryEndpoints
 {
     public static void MapClientDiscoveryEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/client/workspaces/discover", async (ServerDiscoveryService discovery, ClientWorkspaceStore store) =>
+        app.MapGet("/api/client/workspaces/discover", (ClientRuntimeOptions options, ClientWorkspaceStore store) =>
         {
-            var discovered = await discovery.DiscoverAsync();
             var snapshot = store.GetSnapshot();
             return Results.Ok(new
             {
-                discovered,
+                discovered = new[]
+                {
+                    new
+                    {
+                        baseUrl = options.ApiBaseUrl,
+                        displayName = "local-runtime",
+                        allowed = true,
+                        role = "admin",
+                        accessReason = string.Empty,
+                        transport = "local-process"
+                    }
+                },
                 snapshot
             });
         });
 
-        app.MapPut("/api/client/workspaces/current-server", async (SetCurrentServerRequest request, ServerDiscoveryService discovery, ClientWorkspaceStore store) =>
-            await ExecuteAsync(async () =>
+        app.MapPut("/api/client/workspaces/current-server", (SetCurrentServerRequest request, ClientRuntimeOptions options, ClientWorkspaceStore store) =>
+            Execute(() =>
             {
-                if (string.IsNullOrWhiteSpace(request.ServerBaseUrl))
-                    throw new ArgumentException("serverBaseUrl is required.");
-
-                var target = await discovery.ProbeServerAsync(request.ServerBaseUrl);
-
-                if (!target.Allowed)
-                    return Results.Json(new
-                    {
-                        error = $"服务器可达，但当前客户端 IP 未进入白名单：{target.BaseUrl}",
-                        reason = target.AccessReason
-                    }, statusCode: 403);
-
-                var workspace = store.SetCurrentServer(target.BaseUrl, target.DisplayName);
+                var workspace = store.SetCurrentServer(options.ApiBaseUrl, "local-runtime");
                 var snapshot = store.GetSnapshot();
                 return Results.Ok(new
                 {
                     workspace,
                     snapshot,
-                    selected = target
+                    selected = new
+                    {
+                        baseUrl = options.ApiBaseUrl,
+                        displayName = "local-runtime",
+                        allowed = true,
+                        role = "admin",
+                        accessReason = string.Empty,
+                        transport = "local-process"
+                    }
                 });
             }));
     }
 
-    private static async Task<IResult> ExecuteAsync(Func<Task<IResult>> action)
+    private static IResult Execute(Func<IResult> action)
     {
         try
         {
-            return await action();
+            return action();
         }
         catch (ArgumentException ex)
         {

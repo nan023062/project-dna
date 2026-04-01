@@ -3,9 +3,9 @@ using System.Text.Json;
 
 namespace Dna.Client.Services;
 
-public sealed class DnaServerApi(HttpClient httpClient, ClientWorkspaceStore workspaceStore, ClientRuntimeOptions options)
+public sealed class DnaServerApi(HttpClient httpClient, ClientRuntimeOptions options)
 {
-    public string BaseUrl => workspaceStore.GetCurrentWorkspace().ServerBaseUrl;
+    public string BaseUrl => options.ApiBaseUrl;
 
     public async Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -65,9 +65,11 @@ public sealed class DnaServerApi(HttpClient httpClient, ClientWorkspaceStore wor
         if (Uri.TryCreate(path, UriKind.Absolute, out var absolute) &&
             (string.Equals(absolute.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(absolute.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
             return absolute;
+        }
 
-        var baseUrl = string.IsNullOrWhiteSpace(BaseUrl) ? options.ServerBaseUrl : BaseUrl;
+        var baseUrl = string.IsNullOrWhiteSpace(BaseUrl) ? options.ApiBaseUrl : BaseUrl;
         return new Uri(new Uri($"{baseUrl.TrimEnd('/')}/"), path.TrimStart('/'));
     }
 

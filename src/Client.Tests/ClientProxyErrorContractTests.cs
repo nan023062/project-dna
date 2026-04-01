@@ -25,7 +25,7 @@ public class ClientProxyErrorContractTests
             BaseAddress = new Uri("http://dna-server")
         };
 
-        var api = new DnaServerApi(httpClient, store, new ClientRuntimeOptions { ServerBaseUrl = "http://dna-server", WorkspaceRoot = workspaceRoot });
+        var api = new DnaServerApi(httpClient, new ClientRuntimeOptions { ServerBaseUrl = "http://dna-server", WorkspaceRoot = workspaceRoot });
 
         var exception = await Assert.ThrowsAsync<DnaServerApiException>(() => api.PostAsync("/api/review/memory/submissions"));
 

@@ -1,6 +1,8 @@
 using Dna.Client.Interfaces.Api;
 using Dna.Client.Services;
 using Dna.Client.Services.Tooling;
+using Dna.Core.Config;
+using Dna.Knowledge;
 using Dna.Web.Shared.AgentShell;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
@@ -12,7 +14,7 @@ internal static class ClientHostComposition
 {
     public static void ConfigureServices(
         IServiceCollection services,
-        string serverBaseUrl,
+        string projectName,
         string workspaceRoot,
         string metadataRootPath,
         string? workspaceConfigPath,
@@ -20,13 +22,17 @@ internal static class ClientHostComposition
     {
         services.AddSingleton(new ClientRuntimeOptions
         {
-            ServerBaseUrl = serverBaseUrl,
+            ApiBaseUrl = ClientRuntimeConstants.ApiBaseUrl,
+            ProjectName = projectName,
             WorkspaceRoot = workspaceRoot,
             MetadataRootPath = metadataRootPath,
             WorkspaceConfigPath = workspaceConfigPath,
             AgentShellRootPath = agentShellRootPath
         });
 
+        services.AddSingleton<ProjectConfig>();
+        services.AddKnowledgeGraph();
+        services.AddHostedService<ClientLocalRuntimeInitializer>();
         services.AddSingleton<ClientWorkspaceStore>();
         services.AddSingleton<ClientProjectLlmConfigService>();
         services.AddSingleton<IAgentShellContext, ClientAgentShellContext>();
@@ -42,10 +48,6 @@ internal static class ClientHostComposition
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
-        services.AddHttpClient<ServerDiscoveryService>((_, client) =>
-        {
-            client.Timeout = TimeSpan.FromMilliseconds(400);
-        });
 
         services.AddClientToolingServices();
         services.AddSingleton<ClientFolderPickerService>();
@@ -58,11 +60,11 @@ internal static class ClientHostComposition
 
     public static void ConfigureWebApp(WebApplication web)
     {
+        web.MapClientLocalKnowledgeEndpoints();
         web.MapClientStatusEndpoints();
         web.MapClientLlmConfigEndpoints();
         web.MapClientWorkspaceEndpoints();
         web.MapClientDiscoveryEndpoints();
-        web.MapClientProxyEndpoints();
         web.MapClientAgentProxyEndpoints();
         web.MapClientToolingEndpoints();
         web.MapMcp("/mcp");

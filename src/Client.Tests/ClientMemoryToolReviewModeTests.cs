@@ -98,7 +98,7 @@ public sealed class ClientMemoryToolDirectWriteTests
         });
 
         var httpClient = new HttpClient(recorder) { BaseAddress = new Uri("http://dna-server") };
-        var api = new DnaServerApi(httpClient, workspaceStore, new ClientRuntimeOptions
+        var api = new DnaServerApi(httpClient, new ClientRuntimeOptions
         {
             ServerBaseUrl = "http://dna-server",
             WorkspaceRoot = workspaceRoot,

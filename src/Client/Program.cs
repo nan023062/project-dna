@@ -1,16 +1,25 @@
 using Avalonia;
 using Dna.Client.Desktop;
+using Dna.Client.Interfaces.Cli;
 using Dna.Core.Runtime;
 
-return ProgramEntry.Run(args);
+return await ProgramEntry.RunAsync(args);
 
 internal static class ProgramEntry
 {
     [STAThread]
-    public static int Run(string[] args)
+    public static Task<int> RunAsync(string[] args)
     {
-        DesktopConsoleWindow.SuppressIfStandalone();
+        var launch = ClientLaunchModeParser.Parse(args);
+        if (launch.Kind == ClientLaunchModeKind.Cli)
+            return ClientCliHandler.RunAsync(launch.Args);
 
+        DesktopConsoleWindow.SuppressIfStandalone();
+        return Task.FromResult(RunDesktop(launch.Args));
+    }
+
+    private static int RunDesktop(string[] args)
+    {
         var desktopArgs = args
             .Where(a => !IsArg(a, "desktop", "--desktop"))
             .ToArray();
@@ -36,6 +45,35 @@ internal static class ProgramEntry
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+    private static bool IsArg(string? value, params string[] candidates)
+        => value != null &&
+           Array.Exists(candidates, candidate => string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase));
+}
+
+internal enum ClientLaunchModeKind
+{
+    Desktop,
+    Cli
+}
+
+internal sealed record ClientLaunchMode(ClientLaunchModeKind Kind, string[] Args);
+
+internal static class ClientLaunchModeParser
+{
+    public static ClientLaunchMode Parse(string[] args)
+    {
+        if (args.Length == 0)
+            return new ClientLaunchMode(ClientLaunchModeKind.Desktop, []);
+
+        if (IsArg(args[0], "cli", "--cli"))
+            return new ClientLaunchMode(ClientLaunchModeKind.Cli, args[1..]);
+
+        if (IsArg(args[0], "desktop", "--desktop"))
+            return new ClientLaunchMode(ClientLaunchModeKind.Desktop, args[1..]);
+
+        return new ClientLaunchMode(ClientLaunchModeKind.Desktop, args);
+    }
 
     private static bool IsArg(string? value, params string[] candidates)
         => value != null &&

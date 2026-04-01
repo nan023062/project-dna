@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Dna.Client.Services;
 
 namespace Dna.Client.Desktop;
 
@@ -61,7 +62,7 @@ public sealed class DesktopProjectConfig
         if (string.IsNullOrWhiteSpace(projectName))
             throw new InvalidOperationException($"{ProjectConfigFileName} 缺少 projectName。");
 
-        var serverBaseUrl = NormalizeAndValidateServerUrl(dto.ServerBaseUrl);
+        var serverBaseUrl = ClientRuntimeConstants.ApiBaseUrl;
 
         return new DesktopProjectConfig
         {
@@ -168,32 +169,10 @@ public sealed class DesktopProjectConfig
         };
     }
 
-    private static string NormalizeAndValidateServerUrl(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-            throw new InvalidOperationException($"{ProjectConfigFileName} 缺少 serverBaseUrl。");
-
-        var normalized = raw.Trim().TrimEnd('/');
-        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
-            throw new InvalidOperationException($"serverBaseUrl 不是合法绝对地址：{raw}");
-
-        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("serverBaseUrl 仅支持 http 或 https。");
-        }
-
-        return uri.GetLeftPart(UriPartial.Authority);
-    }
-
     private static string InferWorkspaceMode(string serverBaseUrl)
     {
-        if (!Uri.TryCreate(serverBaseUrl, UriKind.Absolute, out var uri))
-            return "team";
-
-        return uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-            ? "personal"
-            : "team";
+        _ = serverBaseUrl;
+        return "personal";
     }
 
     private static string ResolveWorkspaceSnapshotPath(string projectRoot)

@@ -1,4 +1,5 @@
 using Dna.Core.Logging;
+using Dna.Client.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,7 +44,7 @@ public sealed class EmbeddedClientHost
 
             ClientHostComposition.ConfigureServices(
                 builder.Services,
-                project.ServerBaseUrl,
+                project.ProjectName,
                 project.ProjectRoot,
                 project.MetadataRootPath,
                 project.WorkspaceConfigPath,
@@ -60,10 +61,10 @@ public sealed class EmbeddedClientHost
             await WaitUntilOnlineAsync();
             logger.LogInformation(
                 LogEvents.Workspace,
-                "Desktop Client host started: project={ProjectName}, root={ProjectRoot}, server={ServerBaseUrl}, logDir={LogDirectory}",
+                "Desktop Client host started: project={ProjectName}, root={ProjectRoot}, runtime={RuntimeBaseUrl}, logDir={LogDirectory}",
                 project.ProjectName,
                 project.ProjectRoot,
-                project.ServerBaseUrl,
+                ClientRuntimeConstants.ApiBaseUrl,
                 project.LogDirectoryPath);
         }
         catch

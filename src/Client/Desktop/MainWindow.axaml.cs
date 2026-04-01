@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Dna.Client.Services;
 using Dna.Core.Logging;
 
 namespace Dna.Client.Desktop;
@@ -13,6 +14,7 @@ namespace Dna.Client.Desktop;
 public partial class MainWindow : Window
 {
     private const string DepartmentNodePrefix = "__dept__:";
+    private const string LocalRuntimeModeLabel = "single-process-local-runtime";
     private static readonly HttpClient StatusHttp = new() { Timeout = TimeSpan.FromMilliseconds(900) };
     private static readonly HttpClient ApiHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -56,6 +58,15 @@ public partial class MainWindow : Window
         Opened += async (_, _) => await OnOpenedAsync();
         Closed += (_, _) => _statusTimer.Stop();
     }
+
+    private static string BuildLocalUrl(string relativePath)
+        => new Uri(new Uri($"{ClientRuntimeConstants.ApiBaseUrl.TrimEnd('/')}/"), relativePath.TrimStart('/')).ToString();
+
+    private static string BuildRuntimeEndpointSummary()
+        => $"Client API: {ClientRuntimeConstants.ApiBaseUrl}/api/*\n" +
+           $"Desktop API: {ClientRuntimeConstants.ApiBaseUrl}/api/client/*\n" +
+           $"MCP: {ClientRuntimeConstants.ApiBaseUrl}/mcp\n" +
+           $"CLI: dna_client cli";
 
     private async Task OnOpenedAsync()
     {
@@ -257,21 +268,21 @@ public partial class MainWindow : Window
     {
         SelectedProjectText.Text = "目标项目: 未选择";
         ClientStateText.Text = "Client: 检查中...";
-        ServerStateText.Text = "Server: 检查中...";
-        AccessStateText.Text = "权限: 检查中...";
+        ServerStateText.Text = "本地知识库: 检查中...";
+        AccessStateText.Text = "写入边界: 检查中...";
         LaunchModeText.Text = "启动方式: 桌面主宿主 + 嵌入式 Client API";
-        OverviewModeText.Text = "桌面主宿主负责项目切换、知识图谱预览、知识预览和本地 MCP 连接。";
-        OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后检查 Server 连接与角色。";
-        OverviewWorkflowText.Text = "推荐顺序：概览 -> 连接权限 -> 知识图谱/记忆 -> 连接Agent。";
+        OverviewModeText.Text = "桌面主宿主负责项目切换、知识图谱预览、记忆维护，以及本地 CLI / MCP 连接。";
+        OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后确认本地运行时与知识库状态。";
+        OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
         OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
-        StatusText.Text = "请先在项目加载页选择项目，进入工作区后将自动连接服务器。";
+        StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
 
         ConnectionStatusText.Text = "等待项目加载";
-        ConnectionRoleText.Text = "角色: -";
+        ConnectionRoleText.Text = "模式: -";
         ConnectionIpText.Text = "来源: -";
         ConnectionServerText.Text = "尚未选择项目。";
-        ConnectionNoteText.Text = "连接权限页会集中显示 Server 地址、白名单命中和角色边界。";
-        ConnectionRecommendationText.Text = "加载项目后自动读取 /api/connection/access。";
+        ConnectionNoteText.Text = "本地状态页会集中显示 5052 运行时、当前项目与写入边界。";
+        ConnectionRecommendationText.Text = "加载项目后自动读取本地 /api/status 与 /api/connection/access。";
 
         TopologySummaryText.Text = "尚未加载知识图谱。";
         TopologyScopeText.Text = "当前视图：全局根视图";
@@ -289,10 +300,10 @@ public partial class MainWindow : Window
         StatDisciplinesText.Text = "-";
         ResetTopologyEditor();
 
-        MemoryAccessText.Text = "当前默认浏览正式知识库。是否允许写入由连接角色决定。";
+        MemoryAccessText.Text = "当前记忆库位于项目 .project.dna；写入能力由本地运行时状态决定。";
         MemoryStatusText.Text = "记忆区就绪。";
         AddMemoryButton.IsEnabled = false;
-        ToolingHubText.Text = "Client 保留本地 5052 运行时，既服务桌面宿主内部调用，也向外暴露 /mcp。";
+        ToolingHubText.Text = "Client 保留本地 5052 运行时，既服务桌面宿主内部调用，也向外暴露 CLI 与 /mcp。";
         ToolingStatusText.Text = "工具区就绪。";
         McpSummaryText.Text = "MCP 清单未加载。";
 
@@ -415,10 +426,10 @@ public partial class MainWindow : Window
             ClientDesktopLog.ConfigureProject(project);
             ClientDesktopLog.CreateLogger<MainWindow>().LogInformation(
                 LogEvents.Workspace,
-                "Loading desktop workspace: project={ProjectName}, root={ProjectRoot}, server={ServerBaseUrl}, config={ConfigPath}, logDir={LogDirectory}",
+                "Loading desktop workspace: project={ProjectName}, root={ProjectRoot}, runtime={RuntimeBaseUrl}, config={ConfigPath}, logDir={LogDirectory}",
                 project.ProjectName,
                 project.ProjectRoot,
-                project.ServerBaseUrl,
+                ClientRuntimeConstants.ApiBaseUrl,
                 project.ConfigPath,
                 project.LogDirectoryPath);
 
@@ -532,7 +543,7 @@ public partial class MainWindow : Window
         RecentProjectHintText.Text =
             $"项目：{entry.ProjectName}\n" +
             $"目录：{entry.ProjectRoot}\n" +
-            $"服务：{entry.ServerBaseUrl}\n" +
+            $"运行时：{ClientRuntimeConstants.ApiBaseUrl}\n" +
             $"上次打开：{lastOpened}";
     }
 
@@ -659,13 +670,13 @@ public partial class MainWindow : Window
     {
         var clientOnline = await IsClientOnlineAsync();
         ClientStateText.Text = clientOnline
-            ? "Client: 在线（http://127.0.0.1:5052）"
+            ? $"Client: 在线（{ClientRuntimeConstants.ApiBaseUrl}）"
             : "Client: 离线";
 
         if (_project is null)
         {
             SelectedProjectText.Text = "目标项目: 未选择";
-            ServerStateText.Text = "Server: 未选择项目";
+            ServerStateText.Text = "本地知识库: 未选择项目";
             _connectionAccess = ConnectionAccessState.None;
             ApplyConnectionState(clientOnline);
             return;
@@ -673,37 +684,39 @@ public partial class MainWindow : Window
 
         SelectedProjectText.Text = $"目标项目: {_project.ProjectName}";
 
-        var serverOnline = await IsServerOnlineAsync(_project.ServerBaseUrl);
-        ServerStateText.Text = serverOnline
-            ? $"Server: 在线（{_project.ServerBaseUrl}）"
-            : $"Server: 离线（{_project.ServerBaseUrl}）";
-
         try
         {
-            if (!serverOnline)
+            if (!clientOnline)
             {
-                _connectionAccess = ConnectionAccessState.ServerOffline(_project.ServerBaseUrl);
+                ServerStateText.Text = "本地知识库: 运行时离线";
+                _connectionAccess = ConnectionAccessState.RuntimeOffline(ClientRuntimeConstants.ApiBaseUrl);
                 ApplyConnectionState(clientOnline);
                 return;
             }
 
-            var access = await GetJsonAsync($"{_project.ServerBaseUrl}/api/connection/access");
+            var runtime = await GetJsonAsync(BuildLocalUrl("/api/status"));
+            var moduleCount = ParseNullableInt(runtime, "moduleCount") ?? 0;
+            var memoryCount = ParseNullableInt(runtime, "memoryCount") ?? 0;
+            ServerStateText.Text = $"本地知识库: {moduleCount} 模块 / {memoryCount} 记忆";
+
+            var access = await GetJsonAsync(BuildLocalUrl("/api/connection/access"));
             var allowed = access.TryGetProperty("allowed", out var allowedElement) &&
                           allowedElement.ValueKind == JsonValueKind.True;
 
             _connectionAccess = new ConnectionAccessState(
                 HasProject: true,
-                ServerOnline: true,
+                RuntimeOnline: true,
                 Allowed: allowed,
                 Role: GetString(access, "role", "unknown") ?? "unknown",
                 EntryName: GetString(access, "entryName", "-") ?? "-",
                 RemoteIp: GetString(access, "remoteIp", "-") ?? "-",
                 Note: GetString(access, "note", null),
-                Reason: GetString(access, "reason", allowed ? string.Empty : "当前客户端未授权") ?? string.Empty);
+                Reason: GetString(access, "reason", allowed ? string.Empty : "当前本地运行时未授权") ?? string.Empty);
         }
         catch (Exception ex)
         {
-            _connectionAccess = ConnectionAccessState.Failed(_project.ServerBaseUrl, ex.Message);
+            ServerStateText.Text = "本地知识库: 状态读取失败";
+            _connectionAccess = ConnectionAccessState.Failed(ClientRuntimeConstants.ApiBaseUrl, ex.Message);
         }
 
         ApplyConnectionState(clientOnline);
@@ -720,7 +733,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var topology = await GetJsonAsync($"{_project.ServerBaseUrl}/api/topology");
+            var topology = await GetJsonAsync(BuildLocalUrl("/api/topology"));
             TopologySummaryText.Text = GetString(topology, "summary", "知识图谱已加载")!;
 
             var nodes = ParseTopologyNodes(topology);
@@ -767,7 +780,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var result = await GetJsonAsync($"{_project.ServerBaseUrl}/api/memory/query?limit=40&offset=0");
+            var result = await GetJsonAsync(BuildLocalUrl("/api/memory/query?limit=40&offset=0"));
             var entries = new List<(DateTime createdAt, string line)>();
 
             if (result.ValueKind == JsonValueKind.Array)
@@ -797,7 +810,7 @@ public partial class MainWindow : Window
 
         if (!_connectionAccess.IsAdmin)
         {
-            MemoryStatusText.Text = "当前角色不是 admin，正式知识写入已禁用。";
+            MemoryStatusText.Text = "当前运行态未开放写入，本地记忆写入已禁用。";
             return;
         }
 
@@ -824,11 +837,11 @@ public partial class MainWindow : Window
                 content
             };
 
-            var saved = await PostJsonAsync($"{_project.ServerBaseUrl}/api/memory/remember", payload);
+            var saved = await PostJsonAsync(BuildLocalUrl("/api/memory/remember"), payload);
             var id = GetString(saved, "id", "-");
 
             MemoryContentBox.Text = string.Empty;
-            MemoryStatusText.Text = $"记忆写入成功：{id}";
+            MemoryStatusText.Text = $"本地记忆写入成功：{id}";
             await RefreshMemoriesAsync();
         }
         catch (Exception ex)
@@ -859,7 +872,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var tooling = await GetJsonAsync("http://127.0.0.1:5052/api/client/tooling/list");
+            var tooling = await GetJsonAsync(BuildLocalUrl("/api/client/tooling/list"));
             var cursorInstalled = false;
             var codexInstalled = false;
 
@@ -881,7 +894,7 @@ public partial class MainWindow : Window
             var workspaceRoot = GetString(tooling, "workspaceRoot", "-");
             CursorStateText.Text = cursorInstalled ? "Cursor: 已安装" : "Cursor: 未安装";
             CodexStateText.Text = codexInstalled ? "Codex: 已安装" : "Codex: 未安装";
-            ToolingHubText.Text = $"本地 5052 运行时已就绪。当前工作区：{workspaceRoot}；MCP 入口：http://127.0.0.1:5052/mcp";
+            ToolingHubText.Text = $"本地 5052 运行时已就绪。当前工作区：{workspaceRoot}；CLI：dna_client cli；MCP 入口：{ClientRuntimeConstants.ApiBaseUrl}/mcp";
             ToolingStatusText.Text = $"工具状态已刷新。工作区：{workspaceRoot}";
         }
         catch (Exception ex)
@@ -905,7 +918,7 @@ public partial class MainWindow : Window
         try
         {
             ToolingStatusText.Text = $"正在选择 {FormatToolingTargetName(target)} 安装目录...";
-            var picked = await PostJsonAsync("http://127.0.0.1:5052/api/client/tooling/select-folder", new
+            var picked = await PostJsonAsync(BuildLocalUrl("/api/client/tooling/select-folder"), new
             {
                 defaultWorkspaceRoot = project.ProjectRoot,
                 prompt = $"选择要安装 {FormatToolingTargetName(target)} 工作流配置的项目目录"
@@ -923,7 +936,7 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(workspaceRoot))
                 throw new InvalidOperationException("未获取到有效工作区目录。");
 
-            var install = await PostJsonAsync("http://127.0.0.1:5052/api/client/tooling/install", new
+            var install = await PostJsonAsync(BuildLocalUrl("/api/client/tooling/install"), new
             {
                 target,
                 replaceExisting = true,
@@ -954,8 +967,8 @@ public partial class MainWindow : Window
 
         try
         {
-            var catalog = await GetJsonAsync("http://127.0.0.1:5052/api/client/mcp/tools");
-            var endpoint = GetString(catalog, "mcpEndpoint", GetString(catalog, "endpoint", "http://127.0.0.1:5052/mcp"));
+            var catalog = await GetJsonAsync(BuildLocalUrl("/api/client/mcp/tools"));
+            var endpoint = GetString(catalog, "mcpEndpoint", GetString(catalog, "endpoint", $"{ClientRuntimeConstants.ApiBaseUrl}/mcp"));
 
             var lines = new List<string>();
             if (catalog.TryGetProperty("tools", out var tools) && tools.ValueKind == JsonValueKind.Array)
@@ -1173,8 +1186,8 @@ public partial class MainWindow : Window
         TopologyEditHintText.Text = !isEditableModule
             ? "项目根和部门节点由系统生成，不作为业务模块编辑。"
             : canSave
-                ? "当前为 admin，可直接修改模块定义并保存到 Server。"
-                : "当前不是 admin，只展示模块定义，不允许保存。";
+                ? "当前本地运行时允许写入，可直接修改模块定义并保存到项目知识库。"
+                : "当前运行态只读，只展示模块定义，不允许保存。";
 
         var disciplineOptions = _topologyNodes.Values
             .Where(x => string.Equals(x.Type, "Department", StringComparison.OrdinalIgnoreCase))
@@ -1354,7 +1367,7 @@ public partial class MainWindow : Window
                 }
             };
 
-            await PostJsonAsync($"{_project.ServerBaseUrl}/api/modules", payload);
+            await PostJsonAsync(BuildLocalUrl("/api/modules"), payload);
             TopologyEditStatusText.Text = $"模块已保存：{payload.module.name}";
             await RefreshTopologyAsync();
             var refreshedNodeId = _topologyNodes.Values
@@ -1394,7 +1407,7 @@ public partial class MainWindow : Window
     {
         if (_project is null)
         {
-            TopologyEditStatusText.Text = "未选择项目，无法读取服务端最新定义。";
+            TopologyEditStatusText.Text = "未选择项目，无法读取运行时最新定义。";
             return;
         }
 
@@ -1418,14 +1431,14 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(refreshedNodeId))
         {
             ResetTopologyEditor();
-            TopologyEditStatusText.Text = $"服务端最新定义中未找到模块：{targetName}";
+            TopologyEditStatusText.Text = $"运行时最新定义中未找到模块：{targetName}";
             return;
         }
 
         SelectTopologyNode(refreshedNodeId, syncGraph: true, syncList: true);
         TopologyEditStatusText.Text = discardedChanges
-            ? $"已用服务端最新定义覆盖本地未保存修改：{ResolveNodeLabel(refreshedNodeId)}"
-            : $"已读取服务端最新定义：{ResolveNodeLabel(refreshedNodeId)}";
+            ? $"已用运行时最新定义覆盖本地未保存修改：{ResolveNodeLabel(refreshedNodeId)}"
+            : $"已读取运行时最新定义：{ResolveNodeLabel(refreshedNodeId)}";
     }
 
     private async void CopyTopologyMcpPreview_OnClick(object? sender, RoutedEventArgs e)
@@ -1825,13 +1838,10 @@ public partial class MainWindow : Window
         _project = project;
 
         SelectedProjectText.Text = $"目标项目: {project.ProjectName}";
-        LaunchModeText.Text = "启动方式: 桌面主宿主 + 嵌入式 Client API | MCP: http://127.0.0.1:5052/mcp";
+        LaunchModeText.Text = $"启动方式: 桌面主宿主 + 嵌入式 Client API | MCP: {ClientRuntimeConstants.ApiBaseUrl}/mcp | CLI: dna_client cli";
         OverviewModeText.Text = BuildWorkspaceModeText(project);
-        ToolingHubText.Text = $"当前项目 {project.ProjectName} 已连接本地 5052 运行时，可为 IDE Agent 暴露 API 与 /mcp。";
-        ConnectionServerText.Text =
-            $"Server: {project.ServerBaseUrl}\n" +
-            "Client API: http://127.0.0.1:5052/api/client/*\n" +
-            "MCP: http://127.0.0.1:5052/mcp";
+        ToolingHubText.Text = $"当前项目 {project.ProjectName} 已连接本地 5052 运行时，可为 IDE Agent 暴露 API、CLI 与 /mcp。";
+        ConnectionServerText.Text = BuildRuntimeEndpointSummary();
 
         UpdateWindowTitle();
     }
@@ -1845,20 +1855,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            using var response = await StatusHttp.GetAsync("http://127.0.0.1:5052/api/client/status");
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static async Task<bool> IsServerOnlineAsync(string serverBaseUrl)
-    {
-        try
-        {
-            using var response = await StatusHttp.GetAsync($"{serverBaseUrl.TrimEnd('/')}/api/status");
+            using var response = await StatusHttp.GetAsync(BuildLocalUrl("/api/client/status"));
             return response.IsSuccessStatusCode;
         }
         catch
@@ -2005,114 +2002,107 @@ public partial class MainWindow : Window
     {
         if (_project is null || !_connectionAccess.HasProject)
         {
-            AccessStateText.Text = "权限: 未选择项目";
+            AccessStateText.Text = "写入边界: 未选择项目";
             ConnectionStatusText.Text = "等待项目加载";
-            ConnectionRoleText.Text = "角色: -";
+            ConnectionRoleText.Text = "模式: -";
             ConnectionIpText.Text = "来源: -";
             ConnectionServerText.Text = "尚未选择项目。";
-            ConnectionNoteText.Text = "连接权限页会集中显示 Server 地址、白名单命中和角色边界。";
-            ConnectionRecommendationText.Text = "加载项目后自动读取 /api/connection/access。";
-            MemoryAccessText.Text = "当前默认浏览正式知识库。是否允许写入由连接角色决定。";
+            ConnectionNoteText.Text = "本地状态页会集中显示 5052 运行时、当前项目与写入边界。";
+            ConnectionRecommendationText.Text = "加载项目后自动读取本地 /api/status 与 /api/connection/access。";
+            MemoryAccessText.Text = "当前记忆库位于项目 .project.dna；写入能力由本地运行时状态决定。";
             AddMemoryButton.IsEnabled = false;
-            StatusText.Text = "请先在项目加载页选择项目，进入工作区后将自动连接服务器。";
-            OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后检查 Server 连接与角色。";
-            OverviewWorkflowText.Text = "推荐顺序：概览 -> 连接权限 -> 知识图谱/记忆 -> 连接Agent。";
+            StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
+            OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后确认本地运行时与知识库状态。";
+            OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
             OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
             return;
         }
 
-        ConnectionServerText.Text =
-            $"Server: {_project.ServerBaseUrl}\n" +
-            "Client API: http://127.0.0.1:5052/api/client/*\n" +
-            "MCP: http://127.0.0.1:5052/mcp";
+        ConnectionServerText.Text = BuildRuntimeEndpointSummary();
 
-        if (!_connectionAccess.ServerOnline)
+        if (!_connectionAccess.RuntimeOnline)
         {
-            AccessStateText.Text = "权限: Server 离线，无法读取。";
-            ConnectionStatusText.Text = "Server 离线";
-            ConnectionRoleText.Text = "角色: -";
+            AccessStateText.Text = "写入边界: 运行时离线";
+            ConnectionStatusText.Text = "本地运行时离线";
+            ConnectionRoleText.Text = "模式: -";
             ConnectionIpText.Text = "来源: -";
-            ConnectionNoteText.Text = "当前无法从 Server 读取白名单与角色信息。";
-            ConnectionRecommendationText.Text = "先恢复 Server，再检查本机是否在白名单中。";
-            MemoryAccessText.Text = "Server 离线时，记忆页仅保留浏览入口，正式写入已禁用。";
+            ConnectionNoteText.Text = "当前无法从本地 5052 运行时读取项目状态。";
+            ConnectionRecommendationText.Text = "请先恢复桌面宿主或释放 5052 端口，再重新进入项目。";
+            MemoryAccessText.Text = "运行时离线时，记忆页仅保留浏览入口，本地写入已禁用。";
             AddMemoryButton.IsEnabled = false;
-            StatusText.Text = "Server 尚未连接成功，建议先恢复服务端再继续。";
+            StatusText.Text = "本地运行时尚未连接成功，建议先恢复桌面宿主再继续。";
             OverviewPrimaryActionText.Text = clientOnline
-                ? "桌面宿主已启动，本地 5052 正常；下一步请恢复 Server 连接。"
-                : "请先确认桌面宿主和 Server 都已启动。";
-            OverviewWorkflowText.Text = "连接恢复后，重新打开“连接权限”确认角色。";
-            OverviewRecommendationText.Text = "若你是本地管理员场景，优先确认 Server 进程和白名单文件。";
+                ? "桌面宿主仍在运行，但本地知识库状态未同步；下一步请刷新当前项目。"
+                : "请先确认桌面宿主已经启动，并且 5052 没有被其他进程占用。";
+            OverviewWorkflowText.Text = "运行时恢复后，重新打开“本地状态”确认项目与写入边界。";
+            OverviewRecommendationText.Text = "单机 MVP 优先保证“项目加载 -> 本地 5052 -> 图谱/记忆/MCP”这条主路径稳定。";
             return;
         }
 
         if (!_connectionAccess.Allowed)
         {
-            var reason = string.IsNullOrWhiteSpace(_connectionAccess.Reason) ? "当前客户端未授权" : _connectionAccess.Reason;
-            AccessStateText.Text = $"权限: 未授权（{reason}）";
-            ConnectionStatusText.Text = "已连接 Server，但未通过授权";
-            ConnectionRoleText.Text = "角色: 未授权";
-            ConnectionIpText.Text = $"来源 IP: {_connectionAccess.RemoteIp}";
-            ConnectionNoteText.Text = $"未命中白名单。原因：{reason}";
-            ConnectionRecommendationText.Text = "到 Server 管理台的“连接权限”页为当前 IP 放行，或确认本机回环地址是否被覆盖。";
-            MemoryAccessText.Text = "当前连接未授权，记忆页仅用于查看，正式写入已禁用。";
+            var reason = string.IsNullOrWhiteSpace(_connectionAccess.Reason) ? "当前本地运行时未开放写入" : _connectionAccess.Reason;
+            AccessStateText.Text = $"写入边界: 只读（{reason}）";
+            ConnectionStatusText.Text = "本地运行时已连接，但当前模式只读";
+            ConnectionRoleText.Text = "模式: 只读";
+            ConnectionIpText.Text = $"来源: {_connectionAccess.RemoteIp}";
+            ConnectionNoteText.Text = $"运行时说明：{reason}";
+            ConnectionRecommendationText.Text = "请确认当前项目是否完整加载，并检查本地运行时的写入策略。";
+            MemoryAccessText.Text = "当前运行态为只读，记忆页仅用于查看，本地写入已禁用。";
             AddMemoryButton.IsEnabled = false;
-            StatusText.Text = "已连接到 Server，但当前来源尚未被授权。";
-            OverviewPrimaryActionText.Text = "下一步请先在 Server 侧放行当前 IP，拿到至少 viewer 权限。";
-            OverviewWorkflowText.Text = "授权后可继续浏览图谱和正式知识；admin 才能直接写正式库。";
-            OverviewRecommendationText.Text = "单人本地管理员场景下，通常应允许 127.0.0.1 / ::1 或本机网卡地址。";
+            StatusText.Text = "本地运行时已经连接，但当前模式不允许写入。";
+            OverviewPrimaryActionText.Text = "下一步建议先检查项目配置与写入边界，再继续修改知识。";
+            OverviewWorkflowText.Text = "只读模式下可继续浏览图谱、记忆与 MCP 工具。";
+            OverviewRecommendationText.Text = "单机 MVP 默认推荐以本地管理员模式运行，避免手动编辑与 MCP 写入出现分叉。";
             return;
         }
 
         var roleLabel = DescribeRole(_connectionAccess.Role);
-        AccessStateText.Text = $"权限: {roleLabel} | 白名单: {_connectionAccess.EntryName} | IP: {_connectionAccess.RemoteIp}";
-        ConnectionStatusText.Text = "已连接并通过授权";
-        ConnectionRoleText.Text = $"角色: {roleLabel}";
+        AccessStateText.Text = $"写入边界: {roleLabel}";
+        ConnectionStatusText.Text = "本地运行时已连接";
+        ConnectionRoleText.Text = $"模式: {roleLabel}";
         ConnectionIpText.Text = $"来源: {_connectionAccess.EntryName} | {_connectionAccess.RemoteIp}";
         ConnectionNoteText.Text = string.IsNullOrWhiteSpace(_connectionAccess.Note)
-            ? $"白名单条目：{_connectionAccess.EntryName}"
-            : $"白名单条目：{_connectionAccess.EntryName} | 备注：{_connectionAccess.Note}";
+            ? $"运行时来源：{_connectionAccess.EntryName}"
+            : $"运行时来源：{_connectionAccess.EntryName} | 备注：{_connectionAccess.Note}";
 
         if (_connectionAccess.IsAdmin)
         {
-            ConnectionRecommendationText.Text = "当前为 admin，可直接维护正式知识，并继续使用知识图谱、记忆和连接Agent能力。";
-            MemoryAccessText.Text = "当前角色为 admin，可以直接写入正式知识库。";
+            ConnectionRecommendationText.Text = "当前为本地管理员模式，可直接维护项目知识图谱、记忆，并继续使用连接Agent能力。";
+            MemoryAccessText.Text = "当前运行态允许直接写入本地记忆库。";
             AddMemoryButton.IsEnabled = true;
-            StatusText.Text = "主路径已打通，可以继续浏览知识图谱、查看记忆并写入正式知识。";
-            OverviewPrimaryActionText.Text = "当前已具备管理员能力，建议优先检查图谱、知识和 Agent 连接配置是否完整。";
-            OverviewWorkflowText.Text = "推荐顺序：连接权限确认 -> 知识图谱预览 -> 记忆维护 -> 连接Agent分发到 IDE。";
+            StatusText.Text = "主路径已打通，可以继续浏览知识图谱、查看记忆并写入本地知识。";
+            OverviewPrimaryActionText.Text = "当前已具备本地管理员能力，建议优先检查图谱、记忆和 Agent 连接配置是否完整。";
+            OverviewWorkflowText.Text = "推荐顺序：本地状态确认 -> 知识图谱预览 -> 记忆维护 -> 连接Agent分发到 IDE。";
             OverviewRecommendationText.Text = "如果只是单人本地 MVP，这已经是最完整的闭环路径。";
             return;
         }
 
-        ConnectionRecommendationText.Text = "当前不是 admin，可浏览正式知识并使用本地 MCP；正式知识写入将在后续走 review 流程。";
-        MemoryAccessText.Text = $"当前角色为 {roleLabel}，此版本只开放正式知识浏览，写入按钮已禁用。";
+        ConnectionRecommendationText.Text = "当前不是本地管理员模式，可浏览本地知识并使用 CLI / MCP；写入入口保持关闭。";
+        MemoryAccessText.Text = $"当前模式为 {roleLabel}，此版本只开放本地知识浏览，写入按钮已禁用。";
         AddMemoryButton.IsEnabled = false;
-        StatusText.Text = "当前可浏览正式知识并使用本地 MCP，正式知识写入仍需 admin。";
-        OverviewPrimaryActionText.Text = "当前连接已可用，下一步建议先浏览知识图谱和知识，再完成 IDE Agent 连接。";
-        OverviewWorkflowText.Text = "后续若连接 review 流程，editor 将改为提交预审知识而非直写正式库。";
-        OverviewRecommendationText.Text = "当前桌面 MVP 先把浏览和连接主路径打稳，避免误导为“默认可写正式库”。";
+        StatusText.Text = "当前可浏览本地知识并使用 CLI / MCP，本地写入仍需管理员模式。";
+        OverviewPrimaryActionText.Text = "当前连接已可用，下一步建议先浏览知识图谱与记忆，再完成 IDE Agent 连接。";
+        OverviewWorkflowText.Text = "后续若重新引入协作流，再把多人审核与权限模型叠加到这条本地主路径上。";
+        OverviewRecommendationText.Text = "当前桌面 MVP 先把浏览、编辑、MCP、CLI 这条单机主路径打稳。";
     }
 
     private static string DescribeRole(string? role)
     {
         return role?.Trim().ToLowerInvariant() switch
         {
-            "admin" => "admin（正式知识维护）",
-            "editor" => "editor（后续预审提交）",
-            "viewer" => "viewer（浏览）",
+            "admin" => "admin（本地可写）",
+            "editor" => "editor（本地预留）",
+            "viewer" => "viewer（只读浏览）",
+            LocalRuntimeModeLabel => "single-process-local-runtime",
             _ => role ?? "unknown"
         };
     }
 
     private static string BuildWorkspaceModeText(DesktopProjectConfig project)
     {
-        if (Uri.TryCreate(project.ServerBaseUrl, UriKind.Absolute, out var uri) &&
-            (uri.IsLoopback || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)))
-        {
-            return "当前是桌面主宿主 + 本地/近端 Server 模式，适合单人本地管理员 MVP 闭环。";
-        }
-
-        return "当前是桌面主宿主 + 远程 Server 模式，适合后续扩展到多人团队共享知识库。";
+        _ = project;
+        return "当前是单进程桌面主宿主 + 进程内本地运行时模式，知识图谱、记忆、LLM 配置与外置 Agent 接入都围绕当前项目收口。";
     }
 
     private static int ResolveNodeLayer(TopologyNodeViewModel node)
@@ -2189,7 +2179,7 @@ public partial class MainWindow : Window
 
     private sealed record ConnectionAccessState(
         bool HasProject,
-        bool ServerOnline,
+        bool RuntimeOnline,
         bool Allowed,
         string Role,
         string EntryName,
@@ -2199,7 +2189,7 @@ public partial class MainWindow : Window
     {
         public static ConnectionAccessState None { get; } = new(
             HasProject: false,
-            ServerOnline: false,
+            RuntimeOnline: false,
             Allowed: false,
             Role: "unknown",
             EntryName: "-",
@@ -2209,24 +2199,24 @@ public partial class MainWindow : Window
 
         public bool IsAdmin => string.Equals(Role, "admin", StringComparison.OrdinalIgnoreCase);
 
-        public static ConnectionAccessState ServerOffline(string serverBaseUrl) => new(
+        public static ConnectionAccessState RuntimeOffline(string baseUrl) => new(
             HasProject: true,
-            ServerOnline: false,
+            RuntimeOnline: false,
             Allowed: false,
             Role: "unknown",
             EntryName: "-",
             RemoteIp: "-",
             Note: null,
-            Reason: $"Server 离线：{serverBaseUrl}");
+            Reason: $"runtime offline: {baseUrl}");
 
-        public static ConnectionAccessState Failed(string serverBaseUrl, string message) => new(
+        public static ConnectionAccessState Failed(string baseUrl, string message) => new(
             HasProject: true,
-            ServerOnline: true,
+            RuntimeOnline: true,
             Allowed: false,
             Role: "unknown",
             EntryName: "-",
             RemoteIp: "-",
             Note: null,
-            Reason: $"读取 {serverBaseUrl}/api/connection/access 失败：{message}");
+            Reason: $"读取 {baseUrl}/api/connection/access 失败：{message}");
     }
 }

@@ -1,6 +1,8 @@
 using Dna.Client.Interfaces.Api;
 using Dna.Client.Services;
 using Dna.Client.Services.Tooling;
+using Dna.Core.Config;
+using Dna.Knowledge;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
@@ -22,8 +24,9 @@ public class ClientEndpointRouteSmokeTests
             WorkspaceRoot = Directory.GetCurrentDirectory(),
             WorkspaceConfigPath = workspaceConfigPath
         });
-        builder.Services.AddSingleton(new HttpClient());
-        builder.Services.AddSingleton<ServerDiscoveryService>();
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<ProjectConfig>();
+        builder.Services.AddKnowledgeGraph();
         builder.Services.AddSingleton<ClientWorkspaceStore>();
         builder.Services.AddSingleton<ClientProjectLlmConfigService>();
         builder.Services.AddSingleton<DnaServerApi>();
@@ -31,11 +34,11 @@ public class ClientEndpointRouteSmokeTests
         builder.Services.AddClientToolingServices();
         var app = builder.Build();
 
+        app.MapClientLocalKnowledgeEndpoints();
         app.MapClientStatusEndpoints();
         app.MapClientLlmConfigEndpoints();
         app.MapClientWorkspaceEndpoints();
         app.MapClientDiscoveryEndpoints();
-        app.MapClientProxyEndpoints();
         app.MapClientAgentProxyEndpoints();
         app.MapClientToolingEndpoints();
 

@@ -18,7 +18,7 @@ public sealed class ClientWorkspaceStore
 
     public ClientWorkspaceStore(ClientRuntimeOptions options)
     {
-        _defaultServerBaseUrl = ClientBootstrap.NormalizeUrl(options.ServerBaseUrl);
+        _defaultServerBaseUrl = ClientBootstrap.NormalizeUrl(options.ApiBaseUrl);
         _defaultWorkspaceRoot = Path.GetFullPath(options.WorkspaceRoot);
         _configPath = string.IsNullOrWhiteSpace(options.WorkspaceConfigPath)
             ? ResolveDefaultConfigPath(options)

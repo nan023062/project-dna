@@ -1,4 +1,6 @@
 using Dna.Client.Services;
+using Dna.Knowledge;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Dna.Client.Interfaces.Api;
 
@@ -6,35 +8,37 @@ public static class ClientStatusEndpoints
 {
     public static void MapClientStatusEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/client/status", async (DnaServerApi api, ClientWorkspaceStore workspaces, ClientProjectLlmConfigService llm) =>
+        app.MapGet("/api/client/status", (
+            [FromServices] ClientRuntimeOptions options,
+            [FromServices] ClientWorkspaceStore workspaces,
+            [FromServices] ClientProjectLlmConfigService llm,
+            [FromServices] IGraphEngine graph,
+            [FromServices] IMemoryEngine memory) =>
         {
             var currentWorkspace = workspaces.GetCurrentWorkspace();
+            var topology = graph.GetTopology();
+            var stats = memory.GetMemoryStats();
 
-            try
+            return Results.Ok(new
             {
-                var serverStatus = await api.GetAsync("/api/status");
-                var access = await api.GetAsync("/api/connection/access");
-                return Results.Ok(new
+                client = "ok",
+                apiBaseUrl = options.ApiBaseUrl,
+                currentWorkspace,
+                projectLlm = llm.GetSummary(),
+                topology = new
                 {
-                    client = "ok",
-                    targetServer = api.BaseUrl,
-                    currentWorkspace,
-                    projectLlm = llm.GetSummary(),
-                    serverStatus,
-                    access
-                });
-            }
-            catch (Exception ex)
-            {
-                return Results.Ok(new
+                    moduleCount = topology.Nodes.Count,
+                    edgeCount = topology.Edges.Count,
+                    crossWorkCount = topology.CrossWorks.Count
+                },
+                memory = new
                 {
-                    client = "degraded",
-                    targetServer = api.BaseUrl,
-                    currentWorkspace,
-                    projectLlm = llm.GetSummary(),
-                    error = ex.Message
-                });
-            }
+                    total = stats.Total,
+                    conflicts = stats.ConflictCount
+                },
+                startedAt = options.StartedAtUtc,
+                uptime = (DateTime.UtcNow - options.StartedAtUtc).ToString(@"d\.hh\:mm\:ss")
+            });
         });
     }
 }

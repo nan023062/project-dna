@@ -51,7 +51,7 @@ public sealed class DesktopProjectConfigTests
         Assert.True(Directory.Exists(config.MetadataRootPath));
         Assert.True(File.Exists(config.ConfigPath));
         Assert.Equal("legacy-project", config.ProjectName);
-        Assert.Equal("http://localhost:5051", config.ServerBaseUrl);
+        Assert.Equal("http://127.0.0.1:5052", config.ServerBaseUrl);
     }
 
     [Fact]
