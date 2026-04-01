@@ -1,7 +1,7 @@
-using Dna.Core.Framework;
-using Dna.Core.Runtime;
+using Dna.Core.Logging;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Dna.Client.Desktop;
 
@@ -30,20 +30,24 @@ public sealed class EmbeddedClientHost
                 throw new InvalidOperationException("Client 正在运行其他项目，请先停止后再启动新项目。");
             }
 
-            project.EnsureWorkspaceConfig();
+            project.EnsureProjectScopedClientState();
+            ClientDesktopLog.ConfigureProject(project);
+            var logger = ClientDesktopLog.CreateLogger<EmbeddedClientHost>();
 
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
                 ContentRootPath = AppContext.BaseDirectory
             });
             builder.WebHost.UseUrls("http://0.0.0.0:5052");
+            ClientDesktopLog.ConfigureAspNetLogging(builder.Logging);
 
             ClientHostComposition.ConfigureServices(
                 builder.Services,
-                AppRunMode.Web,
                 project.ServerBaseUrl,
                 project.ProjectRoot,
-                project.WorkspaceConfigPath);
+                project.MetadataRootPath,
+                project.WorkspaceConfigPath,
+                project.AgentShellRootPath);
 
             var app = builder.Build();
             ClientHostComposition.ConfigureWebApp(app);
@@ -54,6 +58,13 @@ public sealed class EmbeddedClientHost
             _currentProject = project;
 
             await WaitUntilOnlineAsync();
+            logger.LogInformation(
+                LogEvents.Workspace,
+                "Desktop Client host started: project={ProjectName}, root={ProjectRoot}, server={ServerBaseUrl}, logDir={LogDirectory}",
+                project.ProjectName,
+                project.ProjectRoot,
+                project.ServerBaseUrl,
+                project.LogDirectoryPath);
         }
         catch
         {
@@ -81,6 +92,8 @@ public sealed class EmbeddedClientHost
 
     private async Task StopInternalAsync()
     {
+        var logger = ClientDesktopLog.CreateLogger<EmbeddedClientHost>();
+        var previousProject = _currentProject;
         _currentProject = null;
 
         var app = _webApp;
@@ -125,6 +138,15 @@ public sealed class EmbeddedClientHost
         }
 
         cts?.Dispose();
+
+        if (previousProject is not null)
+        {
+            logger.LogInformation(
+                LogEvents.Workspace,
+                "Desktop Client host stopped: project={ProjectName}, root={ProjectRoot}",
+                previousProject.ProjectName,
+                previousProject.ProjectRoot);
+        }
     }
 
     private static async Task WaitUntilOnlineAsync()

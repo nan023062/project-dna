@@ -21,10 +21,7 @@ public sealed class ClientWorkspaceStore
         _defaultServerBaseUrl = ClientBootstrap.NormalizeUrl(options.ServerBaseUrl);
         _defaultWorkspaceRoot = Path.GetFullPath(options.WorkspaceRoot);
         _configPath = string.IsNullOrWhiteSpace(options.WorkspaceConfigPath)
-            ? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".dna",
-                "client-workspaces.json")
+            ? ResolveDefaultConfigPath(options)
             : Path.GetFullPath(options.WorkspaceConfigPath);
 
         _state = LoadState();
@@ -376,6 +373,17 @@ public sealed class ClientWorkspaceStore
             return uri.Host;
 
         return normalizedUrl;
+    }
+
+    private static string ResolveDefaultConfigPath(ClientRuntimeOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.MetadataRootPath))
+            return Path.Combine(Path.GetFullPath(options.MetadataRootPath), "client-workspaces.json");
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".dna",
+            "client-workspaces.json");
     }
 
     private sealed class WorkspaceConfigState

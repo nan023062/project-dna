@@ -3,18 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Project DNA — 工作区引擎</title>
+  <title>Project DNA 管理台</title>
   <link rel="stylesheet" href="/dna-shared/css/base.css" />
   <link rel="stylesheet" href="css/toolbar.css" />
   <link rel="stylesheet" href="css/modal.css" />
+  <link rel="stylesheet" href="css/dashboard.css" />
   <link rel="stylesheet" href="/dna-shared/css/topology.css" />
   <link rel="stylesheet" href="css/detail.css" />
   <link rel="stylesheet" href="css/chat.css" />
   <link rel="stylesheet" href="css/governance.css" />
+  <link rel="stylesheet" href="css/review-admin.css" />
+  <link rel="stylesheet" href="css/file-tree.css" />
+  <link rel="stylesheet" href="css/module-management.css" />
   <link rel="stylesheet" href="/dna-shared/css/memory.css" />
   <link rel="stylesheet" href="/dna-shared/css/ui-framework.css" />
   <link rel="stylesheet" href="/dna-shared/css/graph.css" />
+  <link rel="stylesheet" href="/dna-shared/css/user-admin.css" />
   <link rel="stylesheet" href="css/github-markdown-dark.css" />
+  <link rel="stylesheet" href="css/figma-overrides.css" />
 </head>
 <body>
 
@@ -25,7 +31,7 @@
   <span id="projectPath" class="path">（加载中…）</span>
   <div class="right">
     <div class="ai-actions">
-      <button class="ai-btn ai-settings-btn" data-action="open-llm-settings" title="大模型配置">⚙ 模型配置</button>
+      <button class="ai-btn ai-settings-btn" data-action="open-llm-settings" title="大模型配置">模型配置</button>
     </div>
     <button class="btn btn-secondary btn-sm" data-action="refresh">刷新</button>
   </div>
@@ -34,13 +40,89 @@
 <div class="app-wrapper" id="appWrapper">
   <div id="mainApp" class="app">
     <div class="tabs">
-      <div class="tab active" data-tab="topology" data-action="switch-tab">架构总览</div>
+      <div class="tab active" data-tab="overview" data-action="switch-tab">服务概览</div>
+      <div class="tab" data-tab="topology" data-action="switch-tab">架构总览</div>
       <div class="tab" data-tab="memoryMgmt" data-action="switch-tab">知识治理</div>
-      <div class="tab" data-tab="users" data-action="switch-tab">用户管理</div>
+      <div class="tab" data-tab="users" data-action="switch-tab">连接权限</div>
     </div>
 
     <div class="panels">
-      <div id="panelTopology" class="panel active">
+      <div id="panelOverview" class="panel active">
+        <div class="overview-shell">
+          <div class="overview-grid">
+            <div class="overview-card">
+              <div class="label">服务状态</div>
+              <div class="value" id="overviewServiceState">-</div>
+              <div class="subtle" id="overviewTransport">-</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">启用白名单</div>
+              <div class="value" id="overviewWhitelistCount">-</div>
+              <div class="subtle" id="overviewWhitelistSummary">-</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">用户账号</div>
+              <div class="value" id="overviewUserCount">-</div>
+              <div class="subtle" id="overviewUserSummary">-</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">记忆总量</div>
+              <div class="value" id="overviewMemoryCount">-</div>
+              <div class="subtle" id="overviewFreshness">-</div>
+            </div>
+          </div>
+
+          <div class="overview-main">
+            <div class="overview-card">
+              <h3>服务详情</h3>
+              <div class="overview-kv">
+                <div class="k">产品模式</div>
+                <div class="v" id="overviewMode">-</div>
+
+                <div class="k">项目根目录</div>
+                <div class="v" id="overviewProjectRoot">-</div>
+
+                <div class="k">知识库存储</div>
+                <div class="v" id="overviewStorePath">-</div>
+
+                <div class="k">运行数据目录</div>
+                <div class="v" id="overviewDataPath">-</div>
+
+                <div class="k">模块数量</div>
+                <div class="v" id="overviewModuleCount">-</div>
+
+                <div class="k">启动时间</div>
+                <div class="v" id="overviewStartedAt">-</div>
+
+                <div class="k">运行时长</div>
+                <div class="v" id="overviewUptime">-</div>
+
+                <div class="k">白名单更新时间</div>
+                <div class="v" id="overviewAllowlistUpdatedAt">-</div>
+              </div>
+            </div>
+
+            <div class="overview-card">
+              <h3>当前关注项</h3>
+              <div id="overviewHealthList" class="overview-health-list">
+                <div class="overview-health-item">
+                  <div class="title">加载中</div>
+                  <div class="desc">正在汇总服务状态与知识治理信息。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="overview-card">
+            <h3>下一步建议</h3>
+            <ul id="overviewNextActions" class="overview-actions">
+              <li>正在生成下一步建议…</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="panelTopology" class="panel">
         <div class="summary-bar">
           <div class="stat"><div id="statModules" class="val">-</div><div class="lbl">节点</div></div>
           <div class="stat"><div id="statEdges" class="val">-</div><div class="lbl">依赖边</div></div>
@@ -60,18 +142,18 @@
           <div class="stat"><div id="statStale" class="val">-</div><div class="lbl">陈旧</div></div>
           <div class="stat"><div id="statConflict" class="val">-</div><div class="lbl">冲突</div></div>
         </div>
-        <div class="gov-actions" style="padding: 8px 12px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); align-items: center;">
+        <div class="gov-actions">
           <button class="btn btn-primary btn-sm" data-action="check-freshness">检查鲜活度</button>
           <button class="btn btn-primary btn-sm" data-action="detect-conflicts">检测冲突</button>
           <button class="btn btn-secondary btn-sm" data-action="archive-stale">归档陈旧</button>
           <button class="btn btn-primary btn-sm" data-action="condense-node-knowledge">压缩模块知识</button>
           <button class="btn btn-secondary btn-sm" data-action="condense-all-knowledge">全量知识压缩</button>
           <button class="btn btn-secondary btn-sm" data-action="configure-condense-schedule">调度设置</button>
-          <div style="flex:1;"></div>
-          <div id="govSchedule" style="font-size:12px;color:var(--text-secondary);margin-right:12px;"></div>
-          <div id="govContent" style="font-size:12px;color:var(--text-secondary);"></div>
+          <div class="gov-grow"></div>
+          <div id="govSchedule" class="gov-meta"></div>
+          <div id="govContent" class="gov-meta"></div>
         </div>
-        <div id="govCondenseResult" style="padding: 8px 12px; border-bottom: 1px solid var(--border); font-size:12px; color:var(--text-secondary);">
+        <div id="govCondenseResult" class="gov-result">
           <div class="empty">尚未执行知识压缩。</div>
         </div>
 
@@ -99,8 +181,8 @@
 
           <div class="memory-content">
             <div id="memoryEditorForm" class="memory-form" style="display:none;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h2 style="margin: 0; font-size: 18px; color: var(--text-primary);">知识编辑 <span id="memId" style="font-size: 12px; color: var(--text-secondary); font-weight: normal; margin-left: 8px;"></span></h2>
+              <div class="form-title-row">
+                <h2 class="form-title">知识编辑 <span id="memId" class="form-title-meta"></span></h2>
                 <button class="btn btn-secondary btn-sm" data-action="apply-memory-template">初始化模板</button>
               </div>
               <div class="memory-form-group">
@@ -175,11 +257,11 @@
               </div>
               <div class="memory-form-group">
                 <label>正文预览</label>
-                <textarea id="memContent" readonly placeholder="自动生成..." style="height: 160px;"></textarea>
+                <textarea id="memContent" readonly class="memory-preview" placeholder="自动生成..."></textarea>
               </div>
               <div class="memory-actions">
                 <button class="btn btn-primary btn-sm" data-action="save-memory">保存</button>
-                <button class="btn btn-secondary btn-sm" id="btnDeleteMemory" data-action="delete-memory" style="color: #ef4444; border-color: #ef4444;">删除</button>
+                <button class="btn btn-secondary btn-sm danger-outline" id="btnDeleteMemory" data-action="delete-memory">删除</button>
               </div>
             </div>
           </div>
@@ -197,8 +279,8 @@
           </div>
           <div class="memory-content">
             <div id="whitelistEditorForm" class="memory-form">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                <h2 style="margin:0;font-size:18px;color:var(--text-primary);">白名单用户管理 <span id="whitelistEntryId" style="font-size:12px;color:var(--text-secondary);font-weight:normal;margin-left:8px;"></span></h2>
+              <div class="form-title-row">
+                <h2 class="form-title">连接权限条目 <span id="whitelistEntryId" class="form-title-meta"></span></h2>
               </div>
               <div class="memory-form-row">
                 <div class="memory-form-group">
@@ -233,7 +315,7 @@
               </div>
               <div class="memory-actions">
                 <button class="btn btn-primary btn-sm" data-action="save-whitelist-entry">保存</button>
-                <button class="btn btn-secondary btn-sm" data-action="delete-whitelist-entry" style="color:#ef4444;border-color:#ef4444;">删除</button>
+                <button class="btn btn-secondary btn-sm danger-outline" data-action="delete-whitelist-entry">删除</button>
               </div>
             </div>
           </div>
@@ -247,24 +329,24 @@
     <div class="chat-header">
       <div class="chat-title">AI 助手</div>
       <div class="chat-header-actions">
-        <button class="chat-header-btn" data-action="show-session-list" title="历史会话">🕒</button>
-        <button class="chat-header-btn" data-action="new-chat" title="新对话">＋</button>
+        <button class="chat-header-btn" data-action="show-session-list" title="历史会话">会话</button>
+        <button class="chat-header-btn" data-action="new-chat" title="新对话">新建</button>
       </div>
     </div>
     <div id="chatMessages" class="chat-messages">
       <div class="chat-welcome">
-        <div class="chat-welcome-icon">🤖</div>
+        <div class="chat-welcome-icon">AI</div>
         <p><strong>Project DNA AI 助手</strong></p>
-        <p>我可以帮你理解项目结构、阅读和编写代码。</p>
-        <p style="color:#64748b;font-size:12px;margin-top:8px;">Shift+Enter 换行 · Enter 发送</p>
+        <p>这里保留统一的 Agent 编排侧边栏，但当前管理主路径仍以服务治理和连接权限为主。</p>
+        <p class="chat-welcome-note">Shift+Enter 换行 · Enter 发送</p>
       </div>
     </div>
     <div id="chatStatus" class="chat-status hidden"></div>
     <div class="chat-input-area">
       <textarea id="chatInput" placeholder="输入消息..." rows="1"
                 data-keydown-action="chat-keydown" data-input-action="chat-auto-resize"></textarea>
-      <button id="chatSendBtn" class="chat-send-btn" data-action="send-chat-message">➜</button>
-      <button id="chatStopBtn" class="chat-stop-btn hidden" data-action="stop-chat">■</button>
+      <button id="chatSendBtn" class="chat-send-btn" data-action="send-chat-message">发送</button>
+      <button id="chatStopBtn" class="chat-stop-btn hidden" data-action="stop-chat">停止</button>
     </div>
     <div class="chat-bottom-bar">
       <div class="chat-mode-switch chat-mode-switch-bottom" id="chatModeSwitch">
@@ -274,7 +356,7 @@
       </div>
       <button class="chat-model-selector" id="chatModelSelector" data-action="open-model-dropdown">
         <span class="model-name" id="chatModelTag">未配置</span>
-        <span class="model-arrow">▾</span>
+        <span class="model-arrow">▼</span>
       </button>
       <div class="chat-model-dropdown hidden" id="chatModelDropdown"></div>
     </div>
@@ -289,8 +371,8 @@
 <div id="llmSettingsOverlay" class="llm-settings-overlay">
   <div class="llm-settings-modal">
     <div class="llm-settings-header">
-      <h3>🤖 大模型配置</h3>
-      <button class="close-btn" data-action="close-llm-settings" style="background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:4px 8px;">✕</button>
+      <h3>大模型配置</h3>
+      <button class="close-btn llm-close-btn" data-action="close-llm-settings">关闭</button>
     </div>
     <div class="llm-settings-body" id="llmSettingsBody">
       <div class="llm-empty">加载中…</div>
@@ -300,7 +382,7 @@
 
 <script src="js/lib/marked.min.js"></script>
 <script src="/dna-shared/js/lib/elk.bundled.js"></script>
-<script type="module" src="js/app.js?v=3"></script>
+<script type="module" src="js/app.js?v=4"></script>
 
 </body>
 </html>

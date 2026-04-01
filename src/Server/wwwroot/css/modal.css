@@ -1,18 +1,134 @@
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; align-items: center; justify-content: center; }
-.modal-overlay.open { display: flex; }
-.modal { background: #12122a; border: 1px solid #1e1e3a; border-radius: 12px; width: 520px; max-height: 70vh; display: flex; flex-direction: column; }
-.modal-header { padding: 14px 16px; border-bottom: 1px solid #1e1e3a; display: flex; align-items: center; gap: 8px; }
-.modal-header h3 { font-size: 15px; flex: 1; }
-.modal-header .close-btn { background: none; border: none; color: #64748b; font-size: 18px; cursor: pointer; padding: 4px 8px; }
-.modal-header .close-btn:hover { color: #e2e8f0; }
-.modal-breadcrumb { padding: 8px 16px; background: #0a0a14; font-size: 12px; color: #64748b; word-break: break-all; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #1e1e3a; }
-.modal-breadcrumb .crumb { color: #94a3b8; cursor: pointer; }
-.modal-breadcrumb .crumb:hover { color: #4ade80; }
-.modal-body { flex: 1; overflow-y: auto; padding: 8px 0; }
-.dir-item { padding: 8px 16px; display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; transition: background .1s; }
-.dir-item:hover { background: #1a1a35; }
-.dir-item .icon { color: #fbbf24; font-size: 14px; flex-shrink: 0; }
-.dir-item.up .icon { color: #64748b; }
-.modal-footer { padding: 12px 16px; border-top: 1px solid #1e1e3a; display: flex; align-items: center; gap: 8px; }
-.modal-footer input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #2a2a4e; background: #0a0a14; color: #e2e8f0; font-size: 13px; outline: none; }
-.modal-footer input:focus { border-color: #4ade80; }
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.24);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.modal-overlay.open {
+  display: flex;
+}
+
+.modal {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(219, 226, 234, 0.92);
+  border-radius: 22px;
+  width: min(520px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.94));
+}
+
+.modal-header h3 {
+  font-size: 15px;
+  flex: 1;
+}
+
+.modal-header .close-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 10px;
+}
+
+.modal-header .close-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.modal-breadcrumb {
+  padding: 10px 18px;
+  background: rgba(248, 250, 252, 0.95);
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-breadcrumb .crumb {
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.modal-breadcrumb .crumb:hover {
+  color: var(--text-accent);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 0;
+  background: var(--bg-panel-subtle);
+}
+
+.dir-item {
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.12s ease;
+}
+
+.dir-item:hover {
+  background: rgba(238, 244, 255, 0.72);
+}
+
+.dir-item .icon {
+  color: var(--warning);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.dir-item.up .icon {
+  color: var(--text-secondary);
+}
+
+.modal-footer {
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.modal-footer input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-solid);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.modal-footer input:focus {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.08);
+}

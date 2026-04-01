@@ -6,7 +6,7 @@ public static class ClientStatusEndpoints
 {
     public static void MapClientStatusEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/client/status", async (DnaServerApi api, ClientWorkspaceStore workspaces) =>
+        app.MapGet("/api/client/status", async (DnaServerApi api, ClientWorkspaceStore workspaces, ClientProjectLlmConfigService llm) =>
         {
             var currentWorkspace = workspaces.GetCurrentWorkspace();
 
@@ -19,6 +19,7 @@ public static class ClientStatusEndpoints
                     client = "ok",
                     targetServer = api.BaseUrl,
                     currentWorkspace,
+                    projectLlm = llm.GetSummary(),
                     serverStatus,
                     access
                 });
@@ -30,6 +31,7 @@ public static class ClientStatusEndpoints
                     client = "degraded",
                     targetServer = api.BaseUrl,
                     currentWorkspace,
+                    projectLlm = llm.GetSummary(),
                     error = ex.Message
                 });
             }

@@ -340,22 +340,15 @@ export async function deleteMemory() {
 function _showConfirmModal(title, message) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
-    overlay.className = 'ui-dialog-overlay';
-    overlay.style.display = 'flex';
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.zIndex = '9999';
-    overlay.style.background = 'rgba(0,0,0,0.5)';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
+    overlay.className = 'ui-inline-modal';
 
     overlay.innerHTML = `
-      <div style="background:var(--card-bg,#1e1e2e);border:1px solid var(--border-color,#333);border-radius:8px;padding:24px;max-width:400px;width:90%;">
-        <h3 style="margin:0 0 12px;color:var(--text-primary,#e0e0e0)">${escapeHtml(title)}</h3>
-        <p style="margin:0 0 20px;color:var(--text-secondary,#aaa)">${escapeHtml(message)}</p>
-        <div style="display:flex;gap:8px;justify-content:flex-end">
-          <button class="btn-cancel" style="padding:6px 16px;border:1px solid var(--border-color,#555);border-radius:4px;background:transparent;color:var(--text-secondary,#aaa);cursor:pointer">取消</button>
-          <button class="btn-confirm" style="padding:6px 16px;border:none;border-radius:4px;background:#e74c3c;color:#fff;cursor:pointer">确认删除</button>
+      <div class="ui-inline-modal-card">
+        <h3 class="ui-inline-modal-title">${escapeHtml(title)}</h3>
+        <p class="ui-inline-modal-copy">${escapeHtml(message)}</p>
+        <div class="ui-inline-modal-actions">
+          <button class="btn btn-secondary btn-sm ui-inline-cancel btn-cancel">取消</button>
+          <button class="btn btn-danger btn-sm ui-inline-confirm btn-confirm">确认删除</button>
         </div>
       </div>`;
 
@@ -374,20 +367,8 @@ function _showConfirmModal(title, message) {
 
 function _showToast(message, isError = false) {
   const element = document.createElement('div');
+  element.className = `ui-toast ${isError ? 'error' : 'success'}`;
   element.textContent = message;
-  Object.assign(element.style, {
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    zIndex: '10000',
-    padding: '10px 20px',
-    borderRadius: '6px',
-    fontSize: '14px',
-    color: '#fff',
-    background: isError ? '#e74c3c' : '#27ae60',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-    transition: 'opacity 0.3s'
-  });
   document.body.appendChild(element);
   setTimeout(() => {
     element.style.opacity = '0';

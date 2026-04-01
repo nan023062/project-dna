@@ -6,29 +6,18 @@ namespace Client.Tests;
 public sealed class ClientBootstrapTests
 {
     [Fact]
-    public void ResolveWorkspaceRoot_ShouldPreferCliArgument()
+    public void NormalizeUrl_ShouldTrimWhitespaceAndTrailingSlash()
     {
-        var workspaceRoot = CreateTempDirectory();
+        var resolved = ClientBootstrap.NormalizeUrl("  http://localhost:5051/  ");
 
-        var resolved = ClientBootstrap.ResolveWorkspaceRoot(["--workspace-root", workspaceRoot]);
-
-        Assert.Equal(Path.GetFullPath(workspaceRoot), resolved);
+        Assert.Equal("http://localhost:5051", resolved);
     }
 
     [Fact]
-    public void ResolveWorkspaceConfigPath_ShouldPreferCliArgument()
+    public void NormalizeUrl_ShouldPreservePathWithoutTrailingSlash()
     {
-        var configPath = Path.Combine(CreateTempDirectory(), "client-workspaces.json");
+        var resolved = ClientBootstrap.NormalizeUrl("https://dna.example.com/api");
 
-        var resolved = ClientBootstrap.ResolveWorkspaceConfigPath(["--workspace-config", configPath]);
-
-        Assert.Equal(Path.GetFullPath(configPath), resolved);
-    }
-
-    private static string CreateTempDirectory()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "dna-client-bootstrap-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(path);
-        return path;
+        Assert.Equal("https://dna.example.com/api", resolved);
     }
 }

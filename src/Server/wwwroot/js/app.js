@@ -1,6 +1,6 @@
 /**
  * App entry for the Server admin UI.
- * Keeps the shell lifecycle, fullscreen tabs, and refresh flow in one place.
+ * Keeps the shell lifecycle, tab routing, and refresh flow in one place.
  */
 
 import { $, api } from './utils.js';
@@ -16,6 +16,7 @@ import { bindDelegatedDocumentEvents } from '/dna-shared/js/core/dom-actions.js'
 import { ui } from '/dna-shared/js/ui/ui-manager.js';
 import { initSetup } from './setup.js';
 import { renderTopology } from '/dna-shared/js/panels/topology.js';
+import { loadServiceOverview } from './panels/service-overview.js';
 import {
   loadGovernanceStats,
   checkFreshness,
@@ -27,7 +28,6 @@ import {
 } from './panels/governance.js';
 import {
   loadMemories,
-  selectMemory,
   createNew,
   saveMemory,
   deleteMemory,
@@ -54,13 +54,11 @@ import {
   switchChatMode,
   showSessionList,
   stopChat,
-  openModelDropdown,
+  openModelDropdown
 } from './chat/chat-panel.js';
 import { openLlmSettings, closeLlmSettings } from './chat/llm-settings.js';
 
 let refreshTimer = null;
-let topoData = null;
-let stackData = null;
 let isRefreshing = false;
 let visibilityHandlerBound = false;
 
@@ -71,8 +69,9 @@ function initUI() {
   ui.init(mainApp);
 
   registerFullscreenTabs(ui, [
+    { id: 'overview', tabButtonSelector: '.tab[data-tab="overview"]', onActivate: () => loadServiceOverview() },
     { id: 'topology', tabButtonSelector: '.tab[data-tab="topology"]', onActivate: () => refreshTopologyOnly() },
-    { id: 'memoryMgmt', tabButtonSelector: '.tab[data-tab="memoryMgmt"]', onActivate: () => { loadGovernanceStats(); loadMemories(); } },
+    { id: 'memoryMgmt', tabButtonSelector: '.tab[data-tab="memoryMgmt"]', onActivate: () => Promise.allSettled([loadGovernanceStats(), loadMemories()]) },
     { id: 'users', tabButtonSelector: '.tab[data-tab="users"]', onActivate: () => loadWhitelist() }
   ], $);
 }
@@ -97,7 +96,7 @@ function getProtectedPanelMessage(error) {
   return error?.message || '无法加载请求的面板。';
 }
 
-async function handleStaticAction(action, element, event) {
+async function handleStaticAction(action, element) {
   switch (action) {
     case 'refresh':
       await refresh(true);
@@ -217,7 +216,7 @@ function bindStaticUiEvents() {
       eventName: 'click',
       selector: '[data-action]',
       preventDefault: true,
-      handler: ({ event, element }) => void handleStaticAction(element.dataset.action, element, event)
+      handler: ({ element }) => void handleStaticAction(element.dataset.action, element)
     },
     {
       eventName: 'change',
@@ -247,16 +246,16 @@ function bindStaticUiEvents() {
 
 initDetail(switchTab);
 
-export function enterApp(projectRoot) {
+export function enterApp(projectTitle) {
   $('mainApp').classList.add('active');
   $('appWrapper').classList.add('active');
-  $('projectPath').textContent = projectRoot;
-  $('projectPath').title = `当前项目：${projectRoot}`;
+  $('projectPath').textContent = projectTitle;
+  $('projectPath').title = `当前入口：${projectTitle}`;
 
   initUI();
-  ui.switchTab('topology');
+  ui.switchTab('overview');
 
-  refresh();
+  refresh(true);
   startAutoRefresh();
 }
 
@@ -307,9 +306,7 @@ async function refreshTopologyOnly() {
   $('statusText').textContent = '正在加载拓扑...';
 
   try {
-    topoData = await api('/topology');
-    stackData = {};
-
+    const topoData = await api('/topology');
     renderTopology(topoData);
 
     const modulesCount = topoData.modules ? topoData.modules.length : 0;
@@ -353,7 +350,14 @@ async function refresh(activeForce = true) {
 
   isRefreshing = true;
   try {
-    const activeTab = ui.activeTabId || 'topology';
+    const activeTab = ui.activeTabId || 'overview';
+
+    if (activeTab === 'overview') {
+      await loadServiceOverview();
+      $('statusText').textContent = `服务概览已刷新：${new Date().toLocaleTimeString()}`;
+      $('refreshInfo').textContent = '自动刷新已开启';
+      return;
+    }
 
     if (activeTab === 'memoryMgmt') {
       await Promise.allSettled([loadGovernanceStats(), loadMemories()]);
@@ -364,14 +368,14 @@ async function refresh(activeForce = true) {
 
     if (activeTab === 'users') {
       await loadWhitelist();
-      $('statusText').textContent = `用户列表已刷新：${new Date().toLocaleTimeString()}`;
+      $('statusText').textContent = `连接权限已刷新：${new Date().toLocaleTimeString()}`;
       $('refreshInfo').textContent = '自动刷新已开启';
       return;
     }
 
     const ok = await refreshTopologyOnly();
     if (ok) {
-      $('statusText').textContent = `已刷新：${new Date().toLocaleTimeString()}`;
+      $('statusText').textContent = `架构视图已刷新：${new Date().toLocaleTimeString()}`;
     }
     $('refreshInfo').textContent = '自动刷新已开启';
   } finally {

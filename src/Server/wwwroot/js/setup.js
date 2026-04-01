@@ -1,6 +1,6 @@
 /**
  * Server admin shell bootstrap.
- * The server UI no longer has a project-selection setup flow.
+ * The management console opens directly into the service overview.
  */
 
 import { $, api } from './utils.js';
@@ -9,8 +9,11 @@ import { enterApp } from './app.js';
 export async function initSetup() {
   try {
     const status = await api('/status');
-    enterApp(`知识库 · ${status.moduleCount} 个模块`);
-  } catch (e) {
-    $('statusText').textContent = '连接失败: ' + e.message;
+    const title = status?.configured
+      ? `管理台 · ${status.projectName || '已配置项目'}`
+      : '管理台 · 未配置项目';
+    enterApp(title);
+  } catch (error) {
+    $('statusText').textContent = '连接失败: ' + error.message;
   }
 }

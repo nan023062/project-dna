@@ -25,12 +25,14 @@ public class ClientEndpointRouteSmokeTests
         builder.Services.AddSingleton(new HttpClient());
         builder.Services.AddSingleton<ServerDiscoveryService>();
         builder.Services.AddSingleton<ClientWorkspaceStore>();
+        builder.Services.AddSingleton<ClientProjectLlmConfigService>();
         builder.Services.AddSingleton<DnaServerApi>();
         builder.Services.AddSingleton<ClientFolderPickerService>();
         builder.Services.AddClientToolingServices();
         var app = builder.Build();
 
         app.MapClientStatusEndpoints();
+        app.MapClientLlmConfigEndpoints();
         app.MapClientWorkspaceEndpoints();
         app.MapClientDiscoveryEndpoints();
         app.MapClientProxyEndpoints();
@@ -46,6 +48,8 @@ public class ClientEndpointRouteSmokeTests
             .ToList();
 
         AssertRoute(routes, "/api/client/status", "GET");
+        AssertRoute(routes, "/api/client/llm", "GET");
+        AssertRoute(routes, "/api/client/llm", "PUT");
         AssertRoute(routes, "/api/client/workspaces", "GET");
         AssertRoute(routes, "/api/client/workspaces", "POST");
         AssertRoute(routes, "/api/client/workspaces/{id}", "PUT");

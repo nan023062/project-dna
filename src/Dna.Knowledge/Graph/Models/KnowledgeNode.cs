@@ -31,6 +31,8 @@ public class KnowledgeNode
     public List<string>? Constraints { get; set; }
 
     public string? RelativePath { get; set; }
+    public int Layer { get; set; }
+    public List<string> ManagedPathScopes { get; set; } = [];
     public string? Maintainer { get; set; }
     public string? Summary { get; set; }
     public List<string> Keywords { get; set; } = [];

@@ -18,7 +18,11 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow(_host);
-            desktop.Exit += async (_, _) => await _host.StopAsync();
+            desktop.Exit += async (_, _) =>
+            {
+                await _host.StopAsync();
+                ClientDesktopLog.Shutdown();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -1,7 +1,7 @@
 import { $, api, escapeHtml } from '../utils.js';
 
-let _entries = [];
-let _selectedId = null;
+let entries = [];
+let selectedId = null;
 
 function asBool(value) {
   return String(value).toLowerCase() === 'true';
@@ -30,13 +30,13 @@ function renderList() {
   const root = $('whitelistList');
   if (!root) return;
 
-  if (_entries.length === 0) {
-    root.innerHTML = '<div class="empty">暂无白名单用户。</div>';
+  if (entries.length === 0) {
+    root.innerHTML = '<div class="empty">暂无连接权限条目。</div>';
     return;
   }
 
-  root.innerHTML = _entries.map(entry => {
-    const active = entry.id === _selectedId ? 'active' : '';
+  root.innerHTML = entries.map(entry => {
+    const active = entry.id === selectedId ? 'active' : '';
     const state = entry.enabled ? '启用' : '禁用';
     return `
       <div class="memory-item ${active}" data-action="select-whitelist-entry" data-entry-id="${entry.id}">
@@ -52,31 +52,29 @@ function renderList() {
 
 export async function loadWhitelist() {
   const result = await api('/connection/whitelist');
-  _entries = Array.isArray(result?.entries) ? result.entries.slice() : [];
-  _entries.sort((a, b) => String(a.name || a.ip).localeCompare(String(b.name || b.ip), 'zh-CN'));
+  entries = Array.isArray(result?.entries) ? result.entries.slice() : [];
+  entries.sort((a, b) => String(a.name || a.ip).localeCompare(String(b.name || b.ip), 'zh-CN'));
 
-  if (_selectedId && !_entries.some(entry => entry.id === _selectedId)) {
-    _selectedId = null;
+  if (selectedId && !entries.some(entry => entry.id === selectedId)) {
+    selectedId = null;
   }
 
-  if (!_selectedId && _entries.length > 0) {
-    _selectedId = _entries[0].id;
+  if (!selectedId && entries.length > 0) {
+    selectedId = entries[0].id;
   }
 
   renderList();
-  const selected = _entries.find(entry => entry.id === _selectedId) || null;
-  fillDraft(selected);
+  fillDraft(entries.find(entry => entry.id === selectedId) || null);
 }
 
 export function selectWhitelistEntry(entryId) {
-  _selectedId = entryId;
+  selectedId = entryId;
   renderList();
-  const selected = _entries.find(entry => entry.id === entryId) || null;
-  fillDraft(selected);
+  fillDraft(entries.find(entry => entry.id === entryId) || null);
 }
 
 export function newWhitelistEntry() {
-  _selectedId = null;
+  selectedId = null;
   renderList();
   fillDraft(null);
 }
@@ -87,8 +85,8 @@ export async function saveWhitelistEntry() {
     throw new Error('IP 和名称不能为空。');
   }
 
-  if (_selectedId) {
-    await api(`/connection/whitelist/${encodeURIComponent(_selectedId)}`, {
+  if (selectedId) {
+    await api(`/connection/whitelist/${encodeURIComponent(selectedId)}`, {
       method: 'PUT',
       body: payload
     });
@@ -97,22 +95,22 @@ export async function saveWhitelistEntry() {
       method: 'POST',
       body: payload
     });
-    _selectedId = result?.entry?.id || null;
+    selectedId = result?.entry?.id || null;
   }
 
   await loadWhitelist();
 }
 
 export async function deleteWhitelistEntry() {
-  if (!_selectedId) return;
+  if (!selectedId) return;
 
-  const confirmed = window.confirm('确定删除当前白名单用户吗？');
+  const confirmed = window.confirm('确定删除当前连接权限条目吗？');
   if (!confirmed) return;
 
-  await api(`/connection/whitelist/${encodeURIComponent(_selectedId)}`, {
+  await api(`/connection/whitelist/${encodeURIComponent(selectedId)}`, {
     method: 'DELETE'
   });
 
-  _selectedId = null;
+  selectedId = null;
   await loadWhitelist();
 }

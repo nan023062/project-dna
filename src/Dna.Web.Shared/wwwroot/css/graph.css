@@ -1,8 +1,3 @@
-/* ═══════════════════════════════════════
-   图形拓扑视图样式
-   ═══════════════════════════════════════ */
-
-/* 拓扑面板：图形铺满，统计悬浮在左上角 */
 #panelTopology.active {
   display: flex !important;
   flex-direction: column;
@@ -10,32 +5,40 @@
   overflow: hidden;
   position: relative;
 }
+
 #panelTopology .summary-bar {
   position: absolute;
-  top: 8px; left: 12px;
+  top: 12px;
+  left: 14px;
   z-index: 10;
   padding: 0;
   margin: 0;
   pointer-events: none;
-  gap: 8px;
-  max-width: calc(100% - 24px);
+  gap: 10px;
+  max-width: calc(100% - 28px);
   flex-wrap: wrap;
 }
+
 #panelTopology .summary-bar .stat {
   pointer-events: auto;
-  background: #12122acc;
-  backdrop-filter: blur(6px);
-  padding: 6px 12px;
-  min-width: 80px;
-  border: 1px solid #1e1e3a;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(10px);
+  padding: 8px 12px;
+  min-width: 92px;
+  border: 1px solid rgba(219, 226, 234, 0.92);
 }
+
 #panelTopology .summary-bar .stat .val {
   font-size: 18px;
   line-height: 1.1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-#panelTopology .summary-bar .stat .lbl { font-size: 11px; }
+
+#panelTopology .summary-bar .stat .lbl {
+  font-size: 11px;
+}
+
 #panelTopology .arch-layout {
   flex: 1;
   display: flex;
@@ -47,123 +50,138 @@
 .graph-container {
   flex: 1;
   min-height: 0;
-  position: relative; overflow: hidden;
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 50% 50%, #0e0e1f 0%, #08081a 100%);
+    radial-gradient(circle at top left, rgba(47, 111, 237, 0.08), transparent 28%),
+    linear-gradient(180deg, #fbfcfe 0%, #f6f8fb 100%);
 }
 
 .graph-container::before {
-  content: '';
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(to right,  #ffffff06 1px, transparent 1px),
-    linear-gradient(to bottom, #ffffff06 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-}
-.graph-container::after {
-  content: '';
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(to right,  #ffffff0a 1px, transparent 1px),
-    linear-gradient(to bottom, #ffffff0a 1px, transparent 1px);
-  background-size: 200px 200px;
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(152, 162, 179, 0.3) 1px, transparent 1.2px);
+  background-size: 22px 22px;
   pointer-events: none;
 }
 
 .graph-svg {
-  display: block; width: 100%; height: 100%;
+  display: block;
+  width: 100%;
+  height: 100%;
   cursor: grab;
   user-select: none;
 }
-.graph-svg:active { cursor: grabbing; }
 
-.graph-loading, .graph-empty {
-  display: flex; align-items: center; justify-content: center;
-  height: 100%; color: #64748b; font-size: 14px;
+.graph-svg:active {
+  cursor: grabbing;
 }
 
-/* ── 部门子图 ── */
+.graph-loading,
+.graph-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .graph-group-bg {
-  fill: #12122a80;
-  stroke: #1e1e3a;
-  stroke-width: 1.5;
+  fill: rgba(255, 255, 255, 0.5);
+  stroke: #d0d7e2;
+  stroke-width: 1.2;
 }
 
 .graph-group-label {
-  fill: #64748b;
+  fill: var(--text-secondary);
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
-/* ── 模块节点 ── */
-.graph-node { cursor: pointer; }
-.graph-node[data-drillable="1"] { cursor: zoom-in; }
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node[data-drillable="1"] {
+  cursor: zoom-in;
+}
+
 .graph-node-context .graph-node-rect {
-  stroke: #a78bfa;
+  stroke: var(--accent);
   stroke-width: 2;
 }
+
 .graph-node-department .graph-node-rect {
-  fill: #1b223b;
-  stroke: #7aa2ff;
-  stroke-width: 1.8;
+  fill: #f8fbff;
+  stroke: #93b5ff;
+  stroke-width: 1.5;
 }
+
 .graph-node-department .graph-node-text {
-  fill: #dbeafe;
+  fill: var(--text-primary);
   font-weight: 700;
 }
+
 .graph-node-gateway .graph-node-rect {
-  fill: #2a2f3f;
-  stroke: #94a3b8;
-  stroke-dasharray: 4,3;
+  fill: #f8fafc;
+  stroke: #98a2b3;
+  stroke-dasharray: 5, 4;
 }
+
 .graph-node-gateway .graph-node-text {
-  fill: #e2e8f0;
+  fill: var(--text-secondary);
   font-size: 11px;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
 }
 
 .graph-node-rect {
-  fill: #1a1a38;
-  stroke: #2a2a4e;
-  stroke-width: 1.5;
-  transition: fill .15s, stroke .15s, filter .15s;
+  fill: rgba(255, 255, 255, 0.95);
+  stroke: #d0d7e2;
+  stroke-width: 1.3;
+  transition: fill 0.15s ease, stroke 0.15s ease, filter 0.15s ease;
 }
 
 .graph-node:hover .graph-node-rect {
-  fill: #222248;
-  stroke: #4ade80;
-  filter: drop-shadow(0 0 8px #4ade8040);
+  fill: #ffffff;
+  stroke: #9bb9ff;
+  filter: drop-shadow(0 10px 18px rgba(47, 111, 237, 0.14));
 }
+
 .graph-node.selected .graph-node-rect {
-  stroke: #4ade80;
+  stroke: var(--accent);
   stroke-width: 2;
-  filter: drop-shadow(0 0 12px #4ade8060);
+  filter: drop-shadow(0 10px 24px rgba(47, 111, 237, 0.2));
 }
+
 .graph-node.connected .graph-node-rect {
-  stroke: #60a5fa;
-  filter: drop-shadow(0 0 6px #60a5fa40);
+  stroke: #6d8fe8;
+  filter: drop-shadow(0 8px 18px rgba(47, 111, 237, 0.12));
 }
+
 .graph-node.dimmed .graph-node-rect {
-  fill: #0e0e1f;
-  stroke: #1a1a30;
-  opacity: 0.4;
+  fill: rgba(255, 255, 255, 0.68);
+  stroke: #e2e8f0;
+  opacity: 0.46;
 }
+
 .graph-node.dimmed .graph-node-text,
 .graph-node.dimmed .graph-layer-badge {
-  opacity: 0.3;
+  opacity: 0.35;
 }
 
-/* 层级色编码 */
-.graph-node-rect.layer-0 { stroke-color: #4ade80; fill: #1a2a22; }
-.graph-node-rect.layer-1 { fill: #1a2035; }
-.graph-node-rect.layer-2 { fill: #1f1a30; }
-.graph-node-rect.layer-3 { fill: #25192a; }
-.graph-node-rect.layer-4 { fill: #2a1925; }
+.graph-node-rect.layer-0,
+.graph-node-rect.layer-1,
+.graph-node-rect.layer-2,
+.graph-node-rect.layer-3,
+.graph-node-rect.layer-4 {
+  fill: rgba(255, 255, 255, 0.95);
+}
 
 .graph-node-text {
-  fill: #e2e8f0;
+  fill: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   text-anchor: middle;
@@ -172,7 +190,7 @@
 }
 
 .graph-node-composite {
-  fill: #fbbf24;
+  fill: #2f6fed;
   font-size: 12px;
   font-weight: 800;
   text-anchor: end;
@@ -180,21 +198,21 @@
 }
 
 .graph-layer-badge {
-  fill: #4a4a6a;
+  fill: var(--text-tertiary);
   font-size: 9px;
   font-weight: 700;
   text-anchor: end;
   pointer-events: none;
 }
 
-/* ── 依赖边 ── */
 .graph-edge {
   fill: none;
-  stroke-width: 1.6;
-  transition: opacity .15s;
+  stroke-width: 1.5;
+  transition: opacity 0.15s ease;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
+
 .graph-edge-hit {
   fill: none;
   stroke: transparent;
@@ -202,119 +220,167 @@
   cursor: pointer;
   vector-effect: non-scaling-stroke;
 }
-.graph-edge-dependency { stroke: #4ade80; }
-.graph-edge-composition { stroke: #f59e0b; opacity: .95; }
-.graph-edge-aggregation { stroke: #fbbf24; opacity: .9; }
-.graph-edge-collaboration {
-  stroke: #60a5fa;
-  opacity: .95;
+
+.graph-edge-dependency {
+  stroke: #2f6fed;
 }
-.graph-edge.dimmed-edge { opacity: 0.12; }
-.graph-edge.highlight-edge { opacity: 1; stroke-width: 2.5; }
+
+.graph-edge-composition {
+  stroke: #12b76a;
+  opacity: 0.95;
+}
+
+.graph-edge-aggregation {
+  stroke: #f79009;
+  opacity: 0.92;
+}
+
+.graph-edge-collaboration {
+  stroke: #7a43d1;
+  opacity: 0.95;
+}
+
+.graph-edge.dimmed-edge {
+  opacity: 0.14;
+}
+
+.graph-edge.highlight-edge {
+  opacity: 1;
+  stroke-width: 2.3;
+}
+
 .graph-edge.selected-edge {
   opacity: 1;
-  stroke-width: 3;
-  filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.75));
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 4px rgba(47, 111, 237, 0.25));
 }
 
-/* ── 视图切换工具栏 ── */
 .topo-view-toggle {
-  display: inline-flex; gap: 2px;
-  background: #12122a;
-  border: 1px solid #1e1e3a;
-  border-radius: 6px;
-  padding: 2px;
+  display: inline-flex;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px;
   margin-left: 12px;
-}
-.topo-view-btn {
-  padding: 4px 12px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all .15s;
-}
-.topo-view-btn:hover { color: #e2e8f0; background: #1e1e3a; }
-.topo-view-btn.active {
-  background: #2a2a4e;
-  color: #4ade80;
+  box-shadow: var(--shadow-sm);
 }
 
-/* ── 层级钻取导航 ── */
+.topo-view-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topo-view-btn:hover {
+  color: var(--text-primary);
+  background: #f5f8ff;
+}
+
+.topo-view-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
 .graph-nav {
   position: absolute;
-  top: 54px;
-  left: 12px;
+  top: 58px;
+  left: 14px;
   z-index: 11;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid #29324a;
-  background: #0e1629d9;
-  backdrop-filter: blur(6px);
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(219, 226, 234, 0.92);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm);
 }
+
 .graph-nav-btn {
-  border: 1px solid #31435f;
-  border-radius: 6px;
-  background: #14203a;
-  color: #dbeafe;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel-solid);
+  color: var(--text-primary);
   font-size: 11px;
-  font-weight: 600;
-  padding: 4px 8px;
+  font-weight: 700;
+  padding: 5px 9px;
   cursor: pointer;
 }
+
 .graph-nav-btn:hover:not(:disabled) {
-  border-color: #4f6fa3;
-  background: #1b2e53;
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
 }
+
 .graph-nav-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
 .graph-nav-path {
-  color: #cbd5e1;
+  color: var(--text-primary);
   font-size: 11px;
   white-space: nowrap;
   max-width: min(560px, 60vw);
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 .graph-nav-hint {
-  color: #93c5fd;
+  color: var(--text-secondary);
   font-size: 11px;
   white-space: nowrap;
-  border-left: 1px solid #36507e;
+  border-left: 1px solid var(--border);
   padding-left: 8px;
   max-width: min(520px, 50vw);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* ── 图例 ── */
 .graph-legend {
   position: absolute;
-  bottom: 12px; left: 12px;
-  display: flex; gap: 12px;
-  padding: 6px 12px;
-  background: #0e0e1fcc;
-  border: 1px solid #1e1e3a;
-  border-radius: 6px;
+  bottom: 12px;
+  left: 14px;
+  display: flex;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(219, 226, 234, 0.92);
+  border-radius: 16px;
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-secondary);
   pointer-events: none;
+  box-shadow: var(--shadow-sm);
 }
+
 .graph-legend-item {
-  display: flex; align-items: center; gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+
 .graph-legend-line {
-  width: 20px; height: 2px;
-  border-radius: 1px;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
 }
-.graph-legend-line.dependency { background: #4ade80; }
-.graph-legend-line.containment { background: #f59e0b; }
-.graph-legend-line.collaboration { background: #60a5fa; }
+
+.graph-legend-line.dependency {
+  background: #2f6fed;
+}
+
+.graph-legend-line.containment {
+  background: #12b76a;
+}
+
+.graph-legend-line.collaboration {
+  background: #7a43d1;
+}

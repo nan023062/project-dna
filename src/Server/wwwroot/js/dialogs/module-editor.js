@@ -371,11 +371,14 @@ function hideDepSuggestions() {
 export async function saveFromSidebar() {
   const isCW = !!$('editModIsCrossWorkModule')?.checked;
   const discipline = isCW ? computeCwDisciplineValue() : $('editModDiscipline')?.value;
+  const existing = findExistingModule(($('editModId')?.value || '').trim(), ($('editModName')?.value || '').trim());
   const module = {
     id: $('editModId')?.value?.trim() || null,
     name: $('editModName')?.value?.trim(),
     path: $('editModPath')?.value?.trim(),
     layer: isCW ? 0 : parseInt($('editModLayer')?.value || '0', 10),
+    parentModuleId: existing?.parentModuleId || null,
+    managedPaths: existing?.managedPaths || null,
     isCrossWorkModule: isCW,
     participants: isCW ? getParticipants() : [],
     dependencies: isCW ? [] : getSelectedDeps(),
@@ -428,5 +431,18 @@ function guessDiscipline(path) {
   if (lower.startsWith('devops/') || lower.startsWith('ci/')) return 'devops';
   if (lower.startsWith('qa/') || lower.startsWith('test/')) return 'qa';
   if (lower.startsWith('tools/')) return 'tech-support';
+  return null;
+}
+
+function findExistingModule(id, name) {
+  if (!_manifest?.disciplines) return null;
+  for (const discData of Object.values(_manifest.disciplines)) {
+    for (const module of (discData.modules || discData || [])) {
+      if ((id && module.id && String(module.id).toLowerCase() === id.toLowerCase()) ||
+          (name && module.name && String(module.name).toLowerCase() === name.toLowerCase())) {
+        return module;
+      }
+    }
+  }
   return null;
 }

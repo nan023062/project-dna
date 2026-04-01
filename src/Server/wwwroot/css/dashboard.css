@@ -1,0 +1,137 @@
+.overview-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 6px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.overview-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.overview-card h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.overview-card .label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.overview-card .value {
+  margin-top: 8px;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.overview-card .subtle {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.overview-main {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+}
+
+.overview-kv {
+  display: grid;
+  grid-template-columns: 144px 1fr;
+  gap: 10px 14px;
+  font-size: 13px;
+}
+
+.overview-kv .k {
+  color: var(--text-secondary);
+}
+
+.overview-kv .v {
+  color: var(--text-primary);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.overview-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-health-item {
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-subtle);
+}
+
+.overview-health-item.ok {
+  border-color: rgba(18, 183, 106, 0.18);
+  background: var(--bg-success-soft);
+}
+
+.overview-health-item.warn {
+  border-color: rgba(247, 144, 9, 0.18);
+  background: var(--bg-warning-soft);
+}
+
+.overview-health-item .title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.overview-health-item .desc {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.overview-actions {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1100px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-kv {
+    grid-template-columns: 1fr;
+  }
+}

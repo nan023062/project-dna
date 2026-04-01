@@ -38,6 +38,8 @@ public sealed class ModuleRegistration
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public int Layer { get; set; }
+    public string? ParentModuleId { get; set; }
+    public List<string>? ManagedPaths { get; set; }
 
     /// <summary>是否为 CrossWork 工作组模块（特殊模块：跨模块协议/方案的承载体）。</summary>
     public bool IsCrossWorkModule { get; set; }

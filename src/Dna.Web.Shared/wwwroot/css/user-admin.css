@@ -1,7 +1,7 @@
 .user-admin-page {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   height: 100%;
   min-height: 0;
 }
@@ -10,9 +10,10 @@
 .user-admin-card,
 .user-admin-stat-card,
 .user-admin-sidebar {
-  background: #12122a;
-  border: 1px solid #232345;
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-admin-toolbar {
@@ -20,11 +21,11 @@
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 16px 18px;
+  padding: 18px 20px;
 }
 
 .user-admin-title {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 18px;
   font-weight: 700;
 }
@@ -36,15 +37,22 @@
 .user-admin-stat-label,
 .user-admin-sidebar-title,
 .user-admin-current {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .user-admin-toolbar-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.user-admin-current {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-solid);
 }
 
 .user-admin-stats {
@@ -54,13 +62,14 @@
 }
 
 .user-admin-stat-card {
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
 .user-admin-stat-value {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 24px;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .user-admin-message {
@@ -78,7 +87,7 @@
 .user-admin-sidebar {
   width: 360px;
   min-width: 300px;
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -86,7 +95,7 @@
 
 .user-admin-sidebar-title,
 .user-admin-card-title {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 15px;
   font-weight: 700;
   margin-bottom: 10px;
@@ -102,22 +111,23 @@
 .user-admin-list-item {
   width: 100%;
   text-align: left;
-  background: #0f1022;
-  border: 1px solid #1e1e3a;
-  border-radius: 8px;
+  background: var(--bg-panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 16px;
   padding: 12px;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
 .user-admin-list-item:hover {
-  border-color: #3a3a62;
-  background: #171832;
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
 }
 
 .user-admin-list-item.active {
-  border-color: #4ade80;
-  background: #161d2b;
+  border-color: rgba(47, 111, 237, 0.22);
+  background: var(--bg-selected);
 }
 
 .user-admin-list-top {
@@ -128,7 +138,7 @@
 }
 
 .user-admin-list-name {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
 }
@@ -146,18 +156,18 @@
 }
 
 .user-admin-role.role-admin {
-  background: rgba(74, 222, 128, 0.16);
-  color: #86efac;
+  background: var(--bg-success-soft);
+  color: var(--text-success);
 }
 
 .user-admin-role.role-editor {
-  background: rgba(59, 130, 246, 0.16);
-  color: #93c5fd;
+  background: var(--bg-accent-soft);
+  color: var(--text-accent);
 }
 
 .user-admin-role.role-viewer {
-  background: rgba(148, 163, 184, 0.16);
-  color: #cbd5e1;
+  background: var(--bg-panel-muted);
+  color: var(--text-secondary);
 }
 
 .user-admin-content {
@@ -169,7 +179,7 @@
 }
 
 .user-admin-card {
-  padding: 16px 18px;
+  padding: 18px 20px;
 }
 
 .user-admin-form-grid {
@@ -186,20 +196,27 @@
 
 .user-admin-form-group label,
 .user-admin-detail-line span {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .user-admin-form-group input,
 .user-admin-form-group select {
-  background: #0a0a14;
-  color: #e2e8f0;
-  border: 1px solid #2a2a4e;
-  border-radius: 6px;
-  min-height: 36px;
-  padding: 0 10px;
+  background: var(--bg-panel-solid);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-height: 38px;
+  padding: 0 12px;
   outline: none;
   font-family: inherit;
+}
+
+.user-admin-form-group input:focus,
+.user-admin-form-group select:focus {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.08);
 }
 
 .user-admin-inline-actions {
@@ -207,6 +224,7 @@
   gap: 8px;
   align-items: center;
   margin-top: 14px;
+  flex-wrap: wrap;
 }
 
 .user-admin-detail-grid {
@@ -222,19 +240,20 @@
 }
 
 .user-admin-detail-line strong {
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
 .user-admin-divider {
   height: 1px;
-  background: #1e1e3a;
+  background: var(--border);
   margin: 16px 0;
 }
 
 .user-admin-danger {
-  color: #fca5a5;
-  border-color: #7f1d1d;
+  color: var(--text-danger);
+  border-color: rgba(240, 68, 56, 0.22);
+  background: var(--bg-danger-soft);
 }
 
 .user-admin-danger:disabled {
@@ -243,7 +262,7 @@
 }
 
 .user-admin-empty {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
   padding: 12px 2px;

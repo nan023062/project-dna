@@ -29,6 +29,25 @@ public sealed class ClientWorkspaceStoreTests : IDisposable
     }
 
     [Fact]
+    public void Store_ShouldUseProjectMetadataConfigPath_WhenMetadataRootIsProvided()
+    {
+        var metadataRoot = Path.Combine(_workspaceRoot, ".project.dna");
+        Directory.CreateDirectory(metadataRoot);
+
+        var store = new ClientWorkspaceStore(new ClientRuntimeOptions
+        {
+            ServerBaseUrl = "http://localhost:5051",
+            WorkspaceRoot = _workspaceRoot,
+            MetadataRootPath = metadataRoot
+        });
+
+        var snapshot = store.GetSnapshot();
+
+        Assert.Single(snapshot.Workspaces);
+        Assert.True(File.Exists(Path.Combine(metadataRoot, "client-workspaces.json")));
+    }
+
+    [Fact]
     public void Store_ShouldPersistCreatedWorkspace_AndSwitchCurrent()
     {
         var store = CreateStore("http://localhost:5051");

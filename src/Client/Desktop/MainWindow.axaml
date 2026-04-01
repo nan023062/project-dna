@@ -3,227 +3,305 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:desktop="clr-namespace:Dna.Client.Desktop"
-        mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="820"
+        mc:Ignorable="d"
+        d:DesignWidth="1320"
+        d:DesignHeight="860"
         x:Class="Dna.Client.Desktop.MainWindow"
         Title="Project DNA Client"
-        MinWidth="1080"
-        MinHeight="760"
-        Background="#0A0A14">
-    <Grid RowDefinitions="Auto,*" Margin="18" RowSpacing="12">
-        <Menu>
-            <MenuItem Header="_项目">
-                <MenuItem Header="切换工作区..." Click="MenuSwitchWorkspace_OnClick" />
-                <MenuItem Header="刷新最近项目" Click="ReloadRecentProjects_OnClick" />
-                <Separator />
-                <MenuItem Header="退出" Click="MenuExit_OnClick" />
-            </MenuItem>
-        </Menu>
-
-        <Grid Grid.Row="1">
-            <Border x:Name="ProjectLoadPanel" Background="#12122A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="14" Padding="18" IsVisible="True">
-                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
-                    <StackPanel>
-                        <TextBlock FontSize="28" FontWeight="Bold" Foreground="#E2E8F0" Text="加载项目工作区" />
-                        <TextBlock Margin="0,6,0,0" Foreground="#94A3B8" Text="选择包含 .project.dna 的项目目录，进入和 VSCode 类似的工作区视图。" />
-                    </StackPanel>
-
-                    <WrapPanel Grid.Row="1" Orientation="Horizontal">
-                        <Button Content="打开项目目录..." Click="OpenProjectFolder_OnClick" Margin="0,0,8,0" />
-                        <Button Content="加载所选项目" Click="LoadSelectedRecent_OnClick" Margin="0,0,8,0" />
-                        <Button Content="移除列表项" Click="RemoveSelectedRecent_OnClick" />
-                    </WrapPanel>
-
-                    <Grid Grid.Row="2" ColumnDefinitions="2.1*,1.4*" ColumnSpacing="12">
-                        <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
-                            <StackPanel Spacing="8">
-                                <TextBlock x:Name="RecentCountText" FontWeight="SemiBold" Foreground="#E2E8F0" Text="最近项目（0）" />
-                                <ListBox x:Name="RecentProjectsListBox" SelectionChanged="RecentProjectsListBox_OnSelectionChanged" />
-                            </StackPanel>
-                        </Border>
-
-                        <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
-                            <StackPanel Spacing="8">
-                                <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="项目信息" />
-                                <TextBlock x:Name="RecentProjectHintText" Foreground="#94A3B8" TextWrapping="Wrap" Text="尚未选择最近项目。你也可以点击“打开项目目录...”加载新项目。" />
-                                <TextBlock x:Name="LoaderStatusText" Foreground="#CBD5E1" TextWrapping="Wrap" Text="请选择项目。" />
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-
-                    <TextBlock Grid.Row="3" Foreground="#64748B" Text="提示：进入工作区后，如需切换项目，仅通过顶部菜单“项目 -> 切换工作区...”操作。" />
+        MinWidth="1180"
+        MinHeight="780"
+        Background="#F3F5F9">
+    <Grid Margin="24">
+        <Border x:Name="ProjectLoadPanel" Classes="workspaceShell" Background="#F8FAFC" BorderBrush="#E4E7EC" BorderThickness="1" CornerRadius="24" Padding="28" IsVisible="True">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="heroTitle" Text="加载桌面工作区" />
+                    <TextBlock Classes="mutedText" TextWrapping="Wrap"
+                               Text="选择包含 .project.dna/project.json 的项目目录，进入单进程桌面主宿主。项目日志、LLM 配置、工作区状态和本地 agent shell 都会收口到当前项目的 .project.dna 目录中。" />
+                </StackPanel>
+                <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                    <Button Classes="primaryAction" Content="打开项目目录..." Click="OpenProjectFolder_OnClick" Margin="0,0,8,0" />
+                </WrapPanel>
+                <Grid Grid.Row="2" ColumnDefinitions="2.1*,1.35*" ColumnSpacing="16">
+                    <Border Classes="card" Padding="16">
+                        <StackPanel Spacing="10">
+                            <TextBlock x:Name="RecentCountText" Classes="cardTitle" Text="最近项目（0）" />
+                            <ListBox x:Name="RecentProjectsListBox"
+                                     SelectionChanged="RecentProjectsListBox_OnSelectionChanged"
+                                     DoubleTapped="RecentProjectsListBox_OnDoubleTapped">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:CompileBindings="False">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Classes="cardTitle"
+                                                           Text="{Binding Title}" />
+                                                <TextBlock Classes="secondaryText"
+                                                           Text="{Binding ProjectRoot}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Classes="quietIcon"
+                                                    Width="28"
+                                                    Height="28"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Padding="0"
+                                                    Tag="{Binding ProjectRoot}"
+                                                    Content="-"
+                                                    Click="RecentProjectRemoveButton_OnClick" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card" Padding="16">
+                        <StackPanel Spacing="10">
+                            <TextBlock Classes="cardTitle" Text="项目信息" />
+                            <TextBlock x:Name="RecentProjectHintText" Classes="mutedText" TextWrapping="Wrap" Text="尚未选择最近项目。你也可以点击“打开项目目录...”加载新项目。" />
+                            <TextBlock x:Name="LoaderStatusText" Classes="secondaryText" TextWrapping="Wrap" Text="请选择项目。" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
-            </Border>
-
-            <Grid x:Name="WorkspacePanel" IsVisible="False" RowDefinitions="*">
-                <TabControl>
-                    <TabItem Header="概览">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="10" Spacing="12">
-                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
-                                    <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
-                                        <StackPanel>
-                                            <TextBlock Foreground="#94A3B8" Text="目标项目" />
-                                            <TextBlock x:Name="SelectedProjectText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="目标项目: 未选择" />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
-                                        <StackPanel>
-                                            <TextBlock Foreground="#94A3B8" Text="Client 状态" />
-                                            <TextBlock x:Name="ClientStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="Client: 检查中..." />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Grid.Column="2" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
-                                        <StackPanel>
-                                            <TextBlock Foreground="#94A3B8" Text="Server 状态" />
-                                            <TextBlock x:Name="ServerStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="Server: 检查中..." />
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Grid.Column="3" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
-                                        <StackPanel>
-                                            <TextBlock Foreground="#94A3B8" Text="权限" />
-                                            <TextBlock x:Name="AccessStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="权限: 检查中..." TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </Border>
-                                </Grid>
-
-                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="14">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock x:Name="LaunchModeText" Foreground="#94A3B8" Text="启动方式: 嵌入单进程" />
-                                        <TextBlock x:Name="StatusText" Foreground="#E2E8F0" TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-
-                    <TabItem Header="拓扑">
-                        <Grid Margin="10" RowDefinitions="Auto,Auto,*" RowSpacing="10">
-                            <WrapPanel Grid.Row="0" Orientation="Horizontal">
-                                <Button Content="刷新拓扑" Click="RefreshTopology_OnClick" Margin="0,0,8,0" />
-                                <CheckBox x:Name="TopologyDependencyFilter" IsChecked="True" Content="依赖" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
-                                <CheckBox x:Name="TopologyCompositionFilter" IsChecked="True" Content="组合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
-                                <CheckBox x:Name="TopologyAggregationFilter" IsChecked="True" Content="聚合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
-                                <CheckBox x:Name="TopologyParentChildFilter" IsChecked="True" Content="父子" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
-                                <CheckBox x:Name="TopologyCollaborationFilter" IsChecked="True" Content="协作" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
-                                <TextBlock VerticalAlignment="Center" Foreground="#94A3B8" Text="拖拽节点/画布，滚轮缩放，点击节点看详情" />
-                            </WrapPanel>
-
-                            <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
-                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
-                                    <StackPanel>
-                                        <TextBlock Foreground="#94A3B8" Text="节点" />
-                                        <TextBlock x:Name="StatModulesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#4ADE80" Text="-" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
-                                    <StackPanel>
-                                        <TextBlock Foreground="#94A3B8" Text="依赖" />
-                                        <TextBlock x:Name="StatDependenciesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#60A5FA" Text="-" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Column="2" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
-                                    <StackPanel>
-                                        <TextBlock Foreground="#94A3B8" Text="协作" />
-                                        <TextBlock x:Name="StatCollaborationText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#C084FC" Text="-" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Column="3" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
-                                    <StackPanel>
-                                        <TextBlock Foreground="#94A3B8" Text="部门" />
-                                        <TextBlock x:Name="StatDisciplinesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#FBBF24" Text="-" />
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-
-                            <Grid Grid.Row="2" ColumnDefinitions="2.4*,1.2*" ColumnSpacing="10">
-                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="8">
-                                    <desktop:TopologyGraphControl x:Name="TopologyGraph" />
-                                </Border>
-
-                                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <StackPanel Spacing="10">
-                                            <TextBlock x:Name="TopologySummaryText" Foreground="#94A3B8" TextWrapping="Wrap" Text="尚未加载拓扑。" />
-
-                                            <Border Background="#111B30" BorderBrush="#23324E" BorderThickness="1" CornerRadius="10" Padding="10">
-                                                <StackPanel Spacing="6">
-                                                    <TextBlock x:Name="TopologyDetailTitle" FontWeight="Bold" Foreground="#E2E8F0" Text="未选择节点" />
-                                                    <TextBlock x:Name="TopologyDetailMeta" Foreground="#94A3B8" TextWrapping="Wrap" Text="-" />
-                                                    <TextBlock x:Name="TopologyDetailSummary" Foreground="#CBD5E1" TextWrapping="Wrap" Text="点击左侧节点查看模块详情。" />
-                                                </StackPanel>
-                                            </Border>
-
-                                            <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="关联关系" />
-                                            <ListBox x:Name="TopologyRelationListBox" MaxHeight="220" />
-
-                                            <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="模块清单" />
-                                            <ListBox x:Name="TopologyListBox" MaxHeight="320" SelectionChanged="TopologyListBox_OnSelectionChanged" />
-                                        </StackPanel>
-                                    </ScrollViewer>
-                                </Border>
-                            </Grid>
-                        </Grid>
-                    </TabItem>
-
-                    <TabItem Header="记忆">
-                        <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
-                            <WrapPanel Grid.Row="0" Orientation="Horizontal" ItemHeight="34" ItemWidth="140">
-                                <Button Content="刷新记忆" Click="RefreshMemories_OnClick" />
-                            </WrapPanel>
-
-                            <Grid Grid.Row="1" ColumnDefinitions="Auto,200,Auto,*,Auto,140" ColumnSpacing="8">
-                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Foreground="#94A3B8" Text="类型" />
-                                <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="2">
-                                    <ComboBoxItem Content="Structural" />
-                                    <ComboBoxItem Content="Semantic" />
-                                    <ComboBoxItem Content="Episodic" />
-                                    <ComboBoxItem Content="Working" />
-                                    <ComboBoxItem Content="Procedural" />
-                                </ComboBox>
-
-                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#94A3B8" Text="标签" />
-                                <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Watermark="#desktop-note,#decision" />
-
-                                <TextBlock Grid.Column="4" VerticalAlignment="Center" Foreground="#94A3B8" Text="discipline" />
-                                <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="engineering" />
-                            </Grid>
-
-                            <StackPanel Grid.Row="2" Spacing="8">
-                                <TextBox x:Name="MemoryContentBox" AcceptsReturn="True" Height="100" TextWrapping="Wrap" Watermark="输入要写入的知识内容" />
-                                <WrapPanel Orientation="Horizontal" ItemHeight="34" ItemWidth="160">
-                                    <Button Content="写入记忆" Click="AddMemory_OnClick" />
-                                </WrapPanel>
-                                <TextBlock x:Name="MemoryStatusText" Foreground="#94A3B8" Text="记忆区就绪。" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <ListBox Grid.Row="3" x:Name="MemoryListBox" Margin="0,4,0,0" />
-                        </Grid>
-                    </TabItem>
-
-                    <TabItem Header="工具与MCP">
-                        <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
-                            <TextBlock Grid.Row="0" FontSize="16" FontWeight="SemiBold" Foreground="#E2E8F0" Text="工具安装" />
-                            <WrapPanel Grid.Row="1" Orientation="Horizontal">
-                                <Button Content="安装 Cursor" Click="InstallCursor_OnClick" Margin="0,0,8,0" />
-                                <Button Content="安装 Codex" Click="InstallCodex_OnClick" Margin="0,0,8,0" />
-                                <Button Content="刷新工具状态" Click="RefreshTooling_OnClick" />
-                            </WrapPanel>
-
-                            <StackPanel Grid.Row="2" Spacing="4">
-                                <TextBlock x:Name="CursorStateText" Foreground="#E2E8F0" Text="Cursor: 检查中..." />
-                                <TextBlock x:Name="CodexStateText" Foreground="#E2E8F0" Text="Codex: 检查中..." />
-                                <TextBlock x:Name="ToolingStatusText" Foreground="#94A3B8" TextWrapping="Wrap" Text="工具区就绪。" />
-                                <WrapPanel Orientation="Horizontal">
-                                    <Button Content="刷新 MCP 清单" Click="RefreshMcpTools_OnClick" />
-                                </WrapPanel>
-                                <TextBlock x:Name="McpSummaryText" Margin="0,4,0,0" Foreground="#94A3B8" Text="MCP 清单未加载。" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <ListBox Grid.Row="3" x:Name="McpToolListBox" />
-                        </Grid>
-                    </TabItem>
-                </TabControl>
+                <TextBlock Grid.Row="3" Classes="tertiaryText" TextWrapping="Wrap" Text="双击最近项目可直接进入工作区；如需移除，点击条目末尾的 -。进入工作区后，顶部页签将成为主导航入口；如需更换项目，请在“概览 -> 目标项目”卡片中切换。" />
             </Grid>
+        </Border>
+
+        <Grid x:Name="WorkspacePanel" IsVisible="False">
+            <Border Classes="workspaceShell" Padding="18">
+            <TabControl>
+                <TabItem Header="概览">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10" Spacing="14">
+                            <Grid ColumnDefinitions="1.25*,1*,1*,1.2*" ColumnSpacing="12">
+                                <Border Classes="card" Padding="16">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock Classes="eyebrow" Text="目标项目" />
+                                        <TextBlock x:Name="SelectedProjectText" Classes="cardTitle" FontSize="20" FontWeight="Bold" Text="目标项目：未选择" />
+                                        <WrapPanel Orientation="Horizontal">
+                                            <Button Classes="primaryAction" Content="切换项目" Click="MenuSwitchWorkspace_OnClick" Margin="0,0,8,0" />
+                                            <Button Content="刷新最近项目" Click="ReloadRecentProjects_OnClick" />
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Classes="card" Padding="16">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="eyebrow" Text="Client 运行态" />
+                                        <TextBlock x:Name="ClientStateText" Classes="cardTitle" TextWrapping="Wrap" Text="Client: 检查中..." />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Classes="card" Padding="16">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="eyebrow" Text="Server 连接" />
+                                        <TextBlock x:Name="ServerStateText" Classes="cardTitle" TextWrapping="Wrap" Text="Server: 检查中..." />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="3" Classes="card" Padding="16">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="eyebrow" Text="权限状态" />
+                                        <TextBlock x:Name="AccessStateText" Classes="cardTitle" TextWrapping="Wrap" Text="权限: 检查中..." />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Grid ColumnDefinitions="1.3*,1*" ColumnSpacing="12">
+                                <Border Classes="card" Padding="18">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="桌面主宿主模式" />
+                                        <TextBlock x:Name="LaunchModeText" Classes="mutedText" TextWrapping="Wrap" Text="启动方式: 桌面主宿主 + 嵌入式 Client API" />
+                                        <TextBlock x:Name="OverviewModeText" Classes="secondaryText" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="StatusText" Classes="primaryText" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Classes="card" Padding="18">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Classes="sectionTitle" Text="下一步建议" />
+                                        <TextBlock x:Name="OverviewPrimaryActionText" Classes="primaryText" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="OverviewWorkflowText" Classes="mutedText" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="OverviewRecommendationText" Classes="secondaryText" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Border Classes="card" Padding="18">
+                                <Grid ColumnDefinitions="1.1*,1.15*,1.15*" ColumnSpacing="16">
+                                    <StackPanel>
+                                        <TextBlock Classes="cardTitle" Text="当前主路径" />
+                                        <TextBlock Margin="0,6,0,0" Classes="secondaryText" TextWrapping="Wrap" Text="当前 MVP 下，Client 负责桌面主宿主、知识图谱预览、知识预览与 Agent 连接。" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Classes="cardTitle" Text="知识访问边界" />
+                                        <TextBlock Margin="0,6,0,0" Classes="mutedText" TextWrapping="Wrap" Text="默认浏览正式知识库。正式知识写入当前仍仅允许 admin；非 admin 先以浏览与连接为主。" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Classes="cardTitle" Text="连接 Agent" />
+                                        <TextBlock Margin="0,6,0,0" Classes="mutedText" TextWrapping="Wrap" Text="本地 5052 提供 Client API 与 /mcp，供 Cursor、Codex 等 Agent 连接。" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="连接权限">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="10" Spacing="12">
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                                <Border Classes="card" Padding="14"><StackPanel Spacing="6"><TextBlock Classes="eyebrow" Text="连接状态" /><TextBlock x:Name="ConnectionStatusText" Classes="cardTitle" Text="等待项目加载" /></StackPanel></Border>
+                                <Border Grid.Column="1" Classes="card" Padding="14"><StackPanel Spacing="6"><TextBlock Classes="eyebrow" Text="当前角色" /><TextBlock x:Name="ConnectionRoleText" Classes="cardTitle" Text="角色: -" /></StackPanel></Border>
+                                <Border Grid.Column="2" Classes="card" Padding="14"><StackPanel Spacing="6"><TextBlock Classes="eyebrow" Text="来源信息" /><TextBlock x:Name="ConnectionIpText" Classes="cardTitle" Text="IP: -" /></StackPanel></Border>
+                            </Grid>
+                            <Grid ColumnDefinitions="1.4*,1*" ColumnSpacing="12">
+                                <Border Classes="card" Padding="18"><StackPanel Spacing="8"><TextBlock Classes="sectionTitle" Text="当前连接摘要" /><TextBlock x:Name="ConnectionServerText" Classes="secondaryText" TextWrapping="Wrap" /><TextBlock x:Name="ConnectionNoteText" Classes="mutedText" TextWrapping="Wrap" /><TextBlock x:Name="ConnectionRecommendationText" Classes="primaryText" TextWrapping="Wrap" /></StackPanel></Border>
+                                <Border Grid.Column="1" Classes="card" Padding="18"><StackPanel Spacing="10"><TextBlock Classes="sectionTitle" Text="角色边界" /><TextBlock Classes="secondaryText" TextWrapping="Wrap" Text="viewer：浏览正式知识、查看知识图谱、使用 Agent 连接能力。" /><TextBlock Classes="secondaryText" TextWrapping="Wrap" Text="editor：后续用于预审提交；当前桌面 MVP 不直接写正式知识。" /><TextBlock Classes="secondaryText" TextWrapping="Wrap" Text="admin：可直接维护正式知识，并继续使用全部桌面能力。" /></StackPanel></Border>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="知识图谱">
+                    <Grid Margin="10" RowDefinitions="Auto,Auto,*" RowSpacing="10">
+                        <StackPanel Grid.Row="0" Spacing="8">
+                            <WrapPanel Orientation="Horizontal">
+                                <Button Classes="primaryAction" Content="刷新图谱" Click="RefreshTopology_OnClick" Margin="0,0,8,0" />
+                                <Button Content="回到全局" Click="TopologyNavigateRoot_OnClick" Margin="0,0,12,0" />
+                                <CheckBox Classes="filterChip" x:Name="TopologyDependencyFilter" IsChecked="True" Content="依赖" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox Classes="filterChip" x:Name="TopologyCompositionFilter" IsChecked="True" Content="组合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox Classes="filterChip" x:Name="TopologyAggregationFilter" IsChecked="True" Content="聚合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox Classes="filterChip" x:Name="TopologyParentChildFilter" IsChecked="True" Content="父子" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox Classes="filterChip" x:Name="TopologyCollaborationFilter" IsChecked="True" Content="协作" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                            </WrapPanel>
+                            <TextBlock x:Name="TopologySummaryText" Classes="mutedText" TextWrapping="Wrap" Text="尚未加载知识图谱。" />
+                            <TextBlock x:Name="TopologyScopeText" Classes="secondaryText" TextWrapping="Wrap" Text="当前视图：全局根视图" />
+                        </StackPanel>
+                        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                            <Border Classes="card" Padding="12"><StackPanel><TextBlock Classes="mutedText" Text="节点" /><TextBlock x:Name="StatModulesText" Classes="metricValue" Margin="0,4,0,0" Foreground="#2F6FED" Text="-" /></StackPanel></Border>
+                            <Border Grid.Column="1" Classes="card" Padding="12"><StackPanel><TextBlock Classes="mutedText" Text="依赖" /><TextBlock x:Name="StatDependenciesText" Classes="metricValue" Margin="0,4,0,0" Foreground="#2E90FA" Text="-" /></StackPanel></Border>
+                            <Border Grid.Column="2" Classes="card" Padding="12"><StackPanel><TextBlock Classes="mutedText" Text="协作" /><TextBlock x:Name="StatCollaborationText" Classes="metricValue" Margin="0,4,0,0" Foreground="#7A5AF8" Text="-" /></StackPanel></Border>
+                            <Border Grid.Column="3" Classes="card" Padding="12"><StackPanel><TextBlock Classes="mutedText" Text="部门" /><TextBlock x:Name="StatDisciplinesText" Classes="metricValue" Margin="0,4,0,0" Foreground="#F79009" Text="-" /></StackPanel></Border>
+                        </Grid>
+                        <Grid Grid.Row="2" ColumnDefinitions="2.45*,1.2*" ColumnSpacing="10">
+                            <Border Classes="cardSoft" Padding="8">
+                                <desktop:TopologyGraphControl x:Name="TopologyGraph" />
+                            </Border>
+                            <Border Grid.Column="1" Classes="card" Padding="14">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel Spacing="10">
+                                        <Border Classes="cardSoft" Padding="14">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock x:Name="TopologyDetailTitle" Classes="cardTitle" FontSize="18" FontWeight="Bold" Text="未选择节点" />
+                                                <TextBlock x:Name="TopologyDetailMeta" Classes="mutedText" TextWrapping="Wrap" Text="-" />
+                                                <TextBlock x:Name="TopologyDetailSummary" Classes="secondaryText" TextWrapping="Wrap" Text="点击图谱节点查看详情。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border Classes="cardSoft" Padding="14">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock Classes="sectionTitle" Text="模块编辑" />
+                                                <TextBlock x:Name="TopologyEditHintText" Classes="mutedText" TextWrapping="Wrap" Text="选择真实模块节点后可查看或编辑定义。" />
+                                                <TextBlock x:Name="TopologyEditParallelHintText" Classes="tertiaryText" TextWrapping="Wrap" Text="手动保存与 MCP upsert_module 共用同一条模块写入链路。" />
+                                                <TextBlock Classes="formLabel" Text="部门" />
+                                                <ComboBox x:Name="TopologyEditDisciplineBox" />
+                                                <TextBlock Classes="formLabel" Text="层级" />
+                                                <TextBox x:Name="TopologyEditLayerBox" />
+                                                <TextBlock Classes="formLabel" Text="模块名" />
+                                                <TextBox x:Name="TopologyEditNameBox" />
+                                                <TextBlock Classes="formLabel" Text="主路径" />
+                                                <TextBox x:Name="TopologyEditPathBox" />
+                                                <TextBlock Classes="formLabel" Text="父模块" />
+                                                <ComboBox x:Name="TopologyEditParentBox" />
+                                                <TextBlock Classes="formLabel" Text="受管路径" />
+                                                <TextBox x:Name="TopologyEditManagedPathsBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="维护者" />
+                                                <TextBox x:Name="TopologyEditMaintainerBox" />
+                                                <TextBlock Classes="formLabel" Text="摘要" />
+                                                <TextBox x:Name="TopologyEditSummaryBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="边界" />
+                                                <ComboBox x:Name="TopologyEditBoundaryBox" SelectedIndex="0">
+                                                    <ComboBoxItem Content="" />
+                                                    <ComboBoxItem Content="open" />
+                                                    <ComboBoxItem Content="semi-open" />
+                                                    <ComboBoxItem Content="closed" />
+                                                </ComboBox>
+                                                <TextBlock Classes="formLabel" Text="依赖模块" />
+                                                <TextBox x:Name="TopologyEditDependenciesBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Public API" />
+                                                <TextBox x:Name="TopologyEditPublicApiBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Constraints" />
+                                                <TextBox x:Name="TopologyEditConstraintsBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Workflow" />
+                                                <TextBox x:Name="TopologyEditWorkflowBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Rules" />
+                                                <TextBox x:Name="TopologyEditRulesBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Prohibitions" />
+                                                <TextBox x:Name="TopologyEditProhibitionsBox" AcceptsReturn="True" Height="56" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Metadata JSON" />
+                                                <TextBox x:Name="TopologyEditMetadataBox" AcceptsReturn="True" Height="88" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="MCP 调用预览" />
+                                                <TextBox x:Name="TopologyMcpPreviewBox" AcceptsReturn="True" IsReadOnly="True" Height="152" TextWrapping="Wrap" />
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Classes="primaryAction" x:Name="TopologySaveModuleButton" Content="保存模块" Click="SaveTopologyModule_OnClick" Margin="0,0,8,0" />
+                                                    <Button x:Name="TopologyReloadLatestModuleButton" Content="读取服务端最新" Click="RefreshTopologyModuleEditorFromServer_OnClick" Margin="0,0,8,0" />
+                                                    <Button Content="重载表单" Click="ReloadTopologyModuleEditor_OnClick" Margin="0,0,8,0" />
+                                                    <Button x:Name="CopyTopologyMcpPreviewButton" Content="复制 MCP 调用" Click="CopyTopologyMcpPreview_OnClick" />
+                                                </WrapPanel>
+                                                <TextBlock x:Name="TopologyEditStatusText" Classes="mutedText" TextWrapping="Wrap" Text="模块编辑区就绪。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <TextBlock Classes="cardTitle" Text="当前视图节点" />
+                                        <ListBox x:Name="TopologyListBox" MaxHeight="260" SelectionChanged="TopologyListBox_OnSelectionChanged" />
+                                        <TextBlock Classes="cardTitle" Text="关联关系" />
+                                        <ListBox x:Name="TopologyRelationListBox" MaxHeight="260" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="记忆">
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
+                        <Border Grid.Row="0" Classes="card" Padding="14"><TextBlock x:Name="MemoryAccessText" Classes="secondaryText" TextWrapping="Wrap" Text="正在检查当前角色是否允许写入正式知识库..." /></Border>
+                        <WrapPanel Grid.Row="1" Orientation="Horizontal"><Button Classes="primaryAction" Content="刷新记忆" Click="RefreshMemories_OnClick" /></WrapPanel>
+                        <Grid Grid.Row="2" ColumnDefinitions="Auto,200,Auto,*,Auto,140" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Classes="formLabel" VerticalAlignment="Center" Text="类型" />
+                            <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="2"><ComboBoxItem Content="Structural" /><ComboBoxItem Content="Semantic" /><ComboBoxItem Content="Episodic" /><ComboBoxItem Content="Working" /><ComboBoxItem Content="Procedural" /></ComboBox>
+                            <TextBlock Grid.Column="2" Classes="formLabel" VerticalAlignment="Center" Text="标签" />
+                            <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Watermark="#desktop-note,#decision" />
+                            <TextBlock Grid.Column="4" Classes="formLabel" VerticalAlignment="Center" Text="discipline" />
+                            <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="engineering" />
+                        </Grid>
+                        <StackPanel Grid.Row="3" Spacing="8">
+                            <TextBox x:Name="MemoryContentBox" AcceptsReturn="True" Height="100" TextWrapping="Wrap" Watermark="输入要写入的知识内容" />
+                            <WrapPanel Orientation="Horizontal"><Button Classes="primaryAction" x:Name="AddMemoryButton" Content="写入正式记忆" Click="AddMemory_OnClick" /></WrapPanel>
+                            <TextBlock x:Name="MemoryStatusText" Classes="mutedText" Text="记忆区就绪。" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ListBox Grid.Row="4" x:Name="MemoryListBox" Margin="0,4,0,0" />
+                    </Grid>
+                </TabItem>
+
+                <TabItem Header="连接Agent">
+                    <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
+                        <Border Grid.Row="0" Classes="card" Padding="14">
+                            <StackPanel Spacing="6">
+                                <TextBlock Classes="sectionTitle" Text="连接 Agent / IDE" />
+                                <TextBlock x:Name="ToolingHubText" Classes="mutedText" TextWrapping="Wrap" Text="Client 保留本地 5052 运行时，既服务桌面宿主内部调用，也向外暴露 /mcp。" />
+                            </StackPanel>
+                        </Border>
+                        <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                            <Button Classes="primaryAction" Content="安装 Cursor" Click="InstallCursor_OnClick" Margin="0,0,8,0" />
+                            <Button Content="安装 Codex" Click="InstallCodex_OnClick" Margin="0,0,8,0" />
+                            <Button Content="刷新连接状态" Click="RefreshTooling_OnClick" />
+                        </WrapPanel>
+                        <StackPanel Grid.Row="2" Spacing="4">
+                            <TextBlock x:Name="CursorStateText" Classes="primaryText" Text="Cursor: 检查中..." />
+                            <TextBlock x:Name="CodexStateText" Classes="primaryText" Text="Codex: 检查中..." />
+                            <TextBlock x:Name="ToolingStatusText" Classes="mutedText" TextWrapping="Wrap" Text="工具区就绪。" />
+                            <WrapPanel Orientation="Horizontal"><Button Classes="primaryAction" Content="刷新 MCP 清单" Click="RefreshMcpTools_OnClick" /></WrapPanel>
+                            <TextBlock x:Name="McpSummaryText" Margin="0,4,0,0" Classes="mutedText" Text="MCP 清单未加载。" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ListBox Grid.Row="3" x:Name="McpToolListBox" />
+                    </Grid>
+                </TabItem>
+            </TabControl>
+            </Border>
         </Grid>
     </Grid>
 </Window>

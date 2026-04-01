@@ -93,6 +93,14 @@ internal static class TopologyBuilder
         var nodes = new List<KnowledgeNode>();
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var nodeKnowledgeMap = store.LoadNodeKnowledgeMap();
+        var moduleById = manifest.Disciplines
+            .SelectMany(x => x.Value)
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+        var moduleByName = manifest.Disciplines
+            .SelectMany(x => x.Value)
+            .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+            .ToDictionary(x => x.Name, StringComparer.OrdinalIgnoreCase);
 
         foreach (var (discipline, modules) in manifest.Disciplines)
         {
@@ -106,7 +114,10 @@ internal static class TopologyBuilder
                     Id = reg.Id,
                     Name = reg.Name,
                     Type = reg.IsCrossWorkModule ? NodeType.Team : NodeType.Technical,
+                    ParentId = ResolveParentModuleId(reg.ParentModuleId, moduleById, moduleByName),
                     RelativePath = reg.Path,
+                    Layer = reg.Layer,
+                    ManagedPathScopes = NormalizeManagedPaths(reg),
                     Maintainer = reg.Maintainer,
                     Summary = reg.Summary,
                     Boundary = reg.Boundary,
@@ -142,6 +153,29 @@ internal static class TopologyBuilder
 
                 nodes.Add(node);
             }
+        }
+
+        var nodeById = nodes
+            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+            .ToDictionary(x => x.Id, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var node in nodes)
+        {
+            node.ChildIds.Clear();
+        }
+
+        foreach (var node in nodes)
+        {
+            if (string.IsNullOrWhiteSpace(node.ParentId))
+                continue;
+
+            if (!nodeById.ContainsKey(node.ParentId))
+            {
+                node.ParentId = null;
+                continue;
+            }
+
+            nodeById[node.ParentId].ChildIds.Add(node.Id);
         }
 
         return nodes;
@@ -289,5 +323,56 @@ internal static class TopologyBuilder
         {
             // identity content is expected to be JSON; ignore malformed payload
         }
+    }
+
+    private static string? ResolveParentModuleId(
+        string? rawParentModuleId,
+        Dictionary<string, ModuleRegistration> moduleById,
+        Dictionary<string, ModuleRegistration> moduleByName)
+    {
+        if (string.IsNullOrWhiteSpace(rawParentModuleId))
+            return null;
+
+        var normalized = rawParentModuleId.Trim();
+        if (moduleById.TryGetValue(normalized, out var byId))
+            return byId.Id;
+        if (moduleByName.TryGetValue(normalized, out var byName))
+            return byName.Id;
+
+        return normalized;
+    }
+
+    private static List<string> NormalizeManagedPaths(ModuleRegistration registration)
+    {
+        var values = new List<string>();
+
+        void AddPath(string? raw)
+        {
+            var normalized = NormalizePath(raw);
+            if (string.IsNullOrWhiteSpace(normalized))
+                return;
+
+            if (!values.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                values.Add(normalized);
+        }
+
+        AddPath(registration.Path);
+        if (registration.ManagedPaths is { Count: > 0 })
+        {
+            foreach (var path in registration.ManagedPaths)
+                AddPath(path);
+        }
+
+        return values;
+    }
+
+    private static string? NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var normalized = path.Replace('\\', '/').Trim();
+        normalized = normalized.Trim('/');
+        return normalized.Length == 0 ? null : normalized;
     }
 }

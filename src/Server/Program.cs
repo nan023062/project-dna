@@ -39,7 +39,15 @@ app.ConfigureServices(services =>
     services.AddSingleton(runtimeOptions);
     services.AddSingleton<ServerStartupWorkflow>();
     services.AddSingleton<ProjectConfig>();
+    services.AddSingleton<ServerRuntimeLlmConfigService>();
     services.AddKnowledgeGraph();
+    services.AddSingleton<JwtService>();
+    services.AddSingleton<UserStore>(sp =>
+    {
+        var store = new UserStore();
+        store.Initialize(sp.GetRequiredService<ServerRuntimeOptions>().DataPath);
+        return store;
+    });
     services.AddSingleton<IAgentShellContext, ServerAgentShellContext>();
     services.AddSingleton(sp => new AgentShellStorageOptions
     {

@@ -1,8 +1,6 @@
 using Dna.Client.Interfaces.Api;
-using Dna.Client.Interfaces.Cli;
 using Dna.Client.Services;
 using Dna.Client.Services.Tooling;
-using Dna.Core.Framework;
 using Dna.Web.Shared.AgentShell;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
@@ -12,41 +10,31 @@ namespace Dna.Client.Desktop;
 
 internal static class ClientHostComposition
 {
-    public static void ConfigureDnaApp(
-        DnaApp app,
-        string serverBaseUrl,
-        string workspaceRoot,
-        string? workspaceConfigPath)
-    {
-        app.AddCliCommand(new DefaultCliCommand());
-        app.ConfigureServices(services => ConfigureServices(services, app.Mode, serverBaseUrl, workspaceRoot, workspaceConfigPath));
-
-        if (app.Mode != AppRunMode.Stdio)
-            app.ConfigureWebApp(ConfigureWebApp);
-    }
-
     public static void ConfigureServices(
         IServiceCollection services,
-        AppRunMode mode,
         string serverBaseUrl,
         string workspaceRoot,
-        string? workspaceConfigPath)
+        string metadataRootPath,
+        string? workspaceConfigPath,
+        string? agentShellRootPath)
     {
         services.AddSingleton(new ClientRuntimeOptions
         {
             ServerBaseUrl = serverBaseUrl,
             WorkspaceRoot = workspaceRoot,
-            WorkspaceConfigPath = workspaceConfigPath
+            MetadataRootPath = metadataRootPath,
+            WorkspaceConfigPath = workspaceConfigPath,
+            AgentShellRootPath = agentShellRootPath
         });
 
         services.AddSingleton<ClientWorkspaceStore>();
+        services.AddSingleton<ClientProjectLlmConfigService>();
         services.AddSingleton<IAgentShellContext, ClientAgentShellContext>();
         services.AddSingleton(sp => new AgentShellStorageOptions
         {
-            RootDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".dna",
-                "client-agent-shell")
+            RootDirectory = string.IsNullOrWhiteSpace(agentShellRootPath)
+                ? Path.Combine(metadataRootPath, "agent-shell")
+                : Path.GetFullPath(agentShellRootPath)
         });
         services.AddSingleton<AgentShellService>();
 
@@ -62,15 +50,6 @@ internal static class ClientHostComposition
         services.AddClientToolingServices();
         services.AddSingleton<ClientFolderPickerService>();
 
-        if (mode == AppRunMode.Stdio)
-        {
-            services.AddMcpServer(opts =>
-            {
-                opts.ServerInfo = new() { Name = "project-dna-client", Version = "1.0.0" };
-            }).WithStdioServerTransport().WithToolsFromAssembly();
-            return;
-        }
-
         services.AddMcpServer(opts =>
         {
             opts.ServerInfo = new() { Name = "project-dna-client", Version = "1.0.0" };
@@ -80,6 +59,7 @@ internal static class ClientHostComposition
     public static void ConfigureWebApp(WebApplication web)
     {
         web.MapClientStatusEndpoints();
+        web.MapClientLlmConfigEndpoints();
         web.MapClientWorkspaceEndpoints();
         web.MapClientDiscoveryEndpoints();
         web.MapClientProxyEndpoints();

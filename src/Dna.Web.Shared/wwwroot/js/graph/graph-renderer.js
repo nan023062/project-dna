@@ -220,6 +220,98 @@ function buildSyntheticDepartmentNodes(topo, modules) {
   return deptNodes;
 }
 
+function buildDepartmentNodes(topo, modules) {
+  const byDiscipline = new Map();
+  for (const m of modules) {
+    const disciplineId = String(m.discipline || '').trim();
+    if (!disciplineId || disciplineId.toLowerCase() === 'root') continue;
+    if (!byDiscipline.has(disciplineId)) byDiscipline.set(disciplineId, []);
+    byDiscipline.get(disciplineId).push(m);
+  }
+
+  const nodes = new Map();
+  for (const d of topo.disciplines || []) {
+    const disciplineId = String(d.id || '').trim();
+    if (!disciplineId || disciplineId.toLowerCase() === 'root') continue;
+    const displayName = String(d.displayName || disciplineId).trim() || disciplineId;
+    nodes.set(disciplineId, {
+      name: toDepartmentNodeId(disciplineId),
+      displayName,
+      nodeId: toDepartmentNodeId(disciplineId),
+      discipline: disciplineId,
+      disciplineDisplayName: 'Department',
+      type: 'Department',
+      typeName: 'Department',
+      typeLabel: 'Department',
+      summary: `${displayName}: project department node`,
+      isDepartmentNode: true,
+      isSyntheticDepartment: true
+    });
+  }
+
+  for (const [disciplineId, members] of byDiscipline) {
+    if (nodes.has(disciplineId)) continue;
+    const displayName = members[0]?.disciplineDisplayName || disciplineId;
+    nodes.set(disciplineId, {
+      name: toDepartmentNodeId(disciplineId),
+      displayName,
+      nodeId: toDepartmentNodeId(disciplineId),
+      discipline: disciplineId,
+      disciplineDisplayName: 'Department',
+      type: 'Department',
+      typeName: 'Department',
+      typeLabel: 'Department',
+      summary: `${displayName}: project department node`,
+      isDepartmentNode: true,
+      isSyntheticDepartment: true
+    });
+  }
+
+  const departmentNodes = [...nodes.values()];
+  departmentNodes.sort((a, b) => String(a.displayName || a.name).localeCompare(String(b.displayName || b.name), 'zh-CN'));
+  return departmentNodes;
+}
+
+function buildProjectNode(topo) {
+  const project = topo?.project;
+  if (!project || typeof project !== 'object') return null;
+
+  const nodeId = String(project.id || 'project').trim() || 'project';
+  return {
+    name: nodeId,
+    displayName: String(project.name || 'Project').trim() || 'Project',
+    nodeId,
+    discipline: 'root',
+    disciplineDisplayName: '项目',
+    type: 'Project',
+    typeName: 'Project',
+    typeLabel: '项目',
+    summary: String(project.summary || '项目根节点：进入后查看部门层级。').trim() || '项目根节点：进入后查看部门层级。',
+    isProjectNode: true,
+    isSyntheticProject: true
+  };
+}
+
+function isProjectNodeId(nodeId) {
+  const node = _allNodeMap.get(nodeId);
+  return String(node?.type || '').trim().toLowerCase() === 'project';
+}
+
+function getScopedChildIds(parentId, nodeIdSet) {
+  const children = [...(_hierarchy.childrenByParent.get(parentId) || [])]
+    .filter(id => nodeIdSet.has(id));
+
+  if (!isProjectNodeId(parentId)) return children;
+
+  const departmentChildren = children.filter(id => {
+    if (isDepartmentNodeId(id)) return true;
+    const child = _allNodeMap.get(id);
+    return String(child?.type || '').trim().toLowerCase() === 'department';
+  });
+
+  return departmentChildren.length > 0 ? departmentChildren : children;
+}
+
 function buildHierarchy(nodeIds, containmentEdges) {
   const parentByChild = new Map();
   const childrenByParent = new Map();
@@ -274,12 +366,12 @@ function getVisibleNodeIds(allIds) {
   }
 
   if (!_viewRoot) {
-    const departmentRoots = _hierarchy.roots.filter(id => isDepartmentNodeId(id));
-    if (departmentRoots.length > 0) return departmentRoots;
+    const projectRoots = _hierarchy.roots.filter(id => isProjectNodeId(id));
+    if (projectRoots.length > 0) return projectRoots;
     return _hierarchy.roots.filter(id => idSet.has(id));
   }
 
-  const children = [...(_hierarchy.childrenByParent.get(_viewRoot) || [])].filter(id => idSet.has(id));
+  const children = getScopedChildIds(_viewRoot, idSet);
 
   // Unity 子状态机视角：进入后仅显示内部层级，不再显示父节点本体。
   if (children.length === 0) return [_viewRoot];
@@ -302,17 +394,26 @@ function collapseToVisible(nodeId, visibleSet) {
 
 function buildRenderModel(topo) {
   const modules = topo.modules || [];
-  const departmentNodes = buildSyntheticDepartmentNodes(topo, modules);
-  const allNodes = [...departmentNodes, ...modules];
+  const projectNode = buildProjectNode(topo);
+  const departmentNodes = buildDepartmentNodes(topo, modules);
+  const allNodes = [...(projectNode ? [projectNode] : []), ...departmentNodes, ...modules];
   _allNodeMap = new Map(allNodes.map(m => [m.name, m]));
 
   const allEdges = getAllRelationEdges(topo);
+  const explicitContainmentKeys = new Set(
+    allEdges
+      .filter(e => e.relation === 'containment')
+      .map(e => `${e.from}|${e.to}`)
+  );
   const departmentContainmentEdges = [];
   for (const module of modules) {
     const disciplineId = String(module.discipline || '').trim();
     if (!disciplineId || disciplineId.toLowerCase() === 'root') continue;
+    if (module.parentModuleId || module.parentId) continue;
     const deptId = toDepartmentNodeId(disciplineId);
     if (!_allNodeMap.has(deptId)) continue;
+    const edgeKey = `${deptId}|${module.name}`;
+    if (explicitContainmentKeys.has(edgeKey)) continue;
     departmentContainmentEdges.push({
       from: deptId,
       to: module.name,
@@ -559,7 +660,7 @@ function toElkGraph(modules, edges, containerAspectRatio = 1.6) {
     const disciplineDisplayName = mods.find(m => m.disciplineDisplayName)?.disciplineDisplayName || disc;
     const groupChildren = mods.map(m => {
       nodeIdSet.add(m.name);
-      const isDepartment = !!m.isSyntheticDepartment;
+      const isDepartment = !!m.isDepartmentNode || !!m.isSyntheticDepartment;
       const isGateway = !!m.isScopeGateway;
       return {
         id: m.name,
@@ -741,7 +842,7 @@ function drawNodes(viewport, groups, ns, renderModel) {
       const group = document.createElementNS(ns, 'g');
       group.classList.add('graph-node');
       group.dataset.module = node.id;
-      if (m?.isSyntheticDepartment) group.classList.add('graph-node-department');
+      if (m?.isDepartmentNode || m?.isSyntheticDepartment) group.classList.add('graph-node-department');
       if (m?.isScopeGateway) group.classList.add('graph-node-gateway');
 
       const hasChildren = (_hierarchy.childrenByParent.get(node.id)?.size || 0) > 0;

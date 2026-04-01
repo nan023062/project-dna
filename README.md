@@ -2,99 +2,49 @@
 
 **The knowledge engine for AI agents.**
 
-Mem0 remembers conversations. GitNexus reads code syntax. CLAUDE.md stores personal notes.
-**Project DNA understands your entire project** — structure, knowledge, dependencies, constraints, and cross-team collaboration — so AI agents can modify files with full context.
+Project DNA gives agents project-level cognition: structure, dependencies, constraints, decisions, and lessons learned.
 
 [中文文档](README.zh-CN.md)
 
----
+## What It Is
 
-## The Problem
+Project DNA currently uses a **Server + Client desktop host** split:
 
-AI agents are getting better at writing code. But they still lack **project-level cognition**:
+- `Server` is the shared knowledge service. It stores graph, memory, governance data, and serves the management dashboard.
+- `Client` is a **single-process, single-window desktop host**. It loads one project, previews topology and knowledge, and exposes the local MCP endpoint for IDE agents.
+- The local `5052` surface is **embedded inside the desktop Client process**. It is not a second product, not a second host, and not a separate browser workbench.
 
-- They don't know which module they're working in, or what constraints apply
-- They can't see cross-file dependencies at an architectural level
-- They don't remember past lessons or team conventions
-- They have no concept of cross-team collaboration (code + art + design)
-
-**Result**: Agents make changes that compile but violate project architecture, break implicit contracts, or ignore hard-won lessons.
-
-## The Solution
-
-Project DNA now uses a **server + client split**:
-- Server stores structure, memory, and relationships as a queryable knowledge graph.
-- Client hosts MCP and decision/execution entry points, and proxies requests to the server.
-
-```
-AI Agents / IDEs
-        ↓ MCP
-Project DNA Client (MCP + agent entry)
-        ↓ HTTP API
-Project DNA Server (knowledge graph + memory)
-        ↓
-Context-aware modifications
-```
-
-## Key Concepts
-
-### One Node Type, All Organizational Forms
-
-Every entity — module, team, department, cross-functional task force — is the same `KnowledgeNode` with a `NodeType`:
-
-| NodeType | Software Analogy | Organization Analogy |
-|----------|-----------------|---------------------|
-| `Root` | System | Studio / Project |
-| `Department` | Package | Department / Division |
-| `Module` | Class / Service | Team / Specialist |
-| `CrossWork` | Composite | Task Force / Working Group |
-
-### Three Orthogonal Relationships
-
-| Relationship | What it models | Rule |
-|-------------|---------------|------|
-| **Containment** (tree) | Organizational hierarchy | Each node has one parent |
-| **Dependency** (DAG) | "I consume your output" | No cycles; freely crosses org boundaries |
-| **Collaboration** (CrossWork) | "We deliver together" | Multi-party, not a substitute for dependency |
-
-### Every Node Carries Knowledge
-
-Each node has a materialized `Knowledge` view — identity, constraints, lessons learned, active tasks. One MCP call returns the full context.
-
-### Cycles = Merge Signal
-
-Circular dependencies are not violations — they're **restructuring suggestions**. If A depends on B and B depends on A, they should be one node or a working group.
-
-## Architecture
-
-The server is a pure knowledge service — it does **not** access project source code.  
-MCP now lives in the client app, which forwards requests to server APIs.
-
-```
-┌──────────────────────────────────────────────────┐
-│                DNA Server                          │
-│                                                    │
-│  HTTP API    CLI          Dashboard               │
-│  /api/*      dna cli      browser                 │
-│                                                    │
-│  GraphEngine    MemoryEngine    GovernanceEngine   │
-│                                                    │
-│  Storage: SQLite (single source of truth)          │
-│  Auth: JWT + roles (admin/editor/viewer)           │
-└──────────────────────────────────────────────────┘
+```text
+Cursor / Codex / Other IDE Agents
+                |
+                | MCP
+                v
+Project DNA Client Desktop (single window)
+                |
+                | local embedded API / MCP on :5052
+                |
+                +------> Desktop UX
+                |
+                +------> REST to Server
+                           |
+                           v
+Project DNA Server (:5051)
+  - Knowledge graph
+  - Memory store
+  - Governance engine
+  - Server dashboard (wwwroot)
 ```
 
-- **GraphEngine** — Node CRUD, topology, dependency ordering, module context
-- **MemoryEngine** — Knowledge storage & retrieval (vector + FTS + tag + coordinate search)
-- **GovernanceEngine** — Architecture advisor: cycle detection, key node warnings, freshness checks
+## Current MVP Focus
 
-### 2026-03 Sync Notes
+The current MVP is intentionally narrowed to the **single-user local admin loop**:
 
-- DB-first storage is now the default and only path: graph and memory are stored in SQLite.
-- The graph no longer relies on `architecture.json` or `modules.json`.
-- Memory no longer writes `memory/entries/*.json`; all entries are persisted in DB.
-- Knowledge condensation is available: short-term memories are distilled into long-term `NodeKnowledge`.
-- Scheduled full condensation can be configured via API and Dashboard.
+- Server dashboard is the main management entry.
+- Client desktop is the main local workspace host.
+- Access control currently centers on **server allowlist + role display**.
+- Client defaults to **formal knowledge preview + local MCP access**.
+- Direct formal knowledge writes are currently reserved for `admin`.
+- Review flow and team-scale auth remain in the repo, but are not the main runtime path of this MVP.
 
 ## Quick Start
 
@@ -105,24 +55,57 @@ cd src
 dotnet build
 ```
 
-### 2. Run
+### 2. Start the Server
+
+`--db` is required. The server stores SQLite data in that directory.
 
 ```bash
-# 1) Start knowledge server
-cd /path/to/knowledge-store && dna --db       # current dir as store
-dna --db /path/to/knowledge-store             # specify store path
+# use current directory as the knowledge store
+cd /path/to/knowledge-store
+dna --db
 
-# 2) Start client (MCP + agent entry)
-Client --server http://localhost:5051
-Client --stdio --server http://localhost:5051    # stdio mode for IDE
+# or specify a store path explicitly
+dna --db /path/to/knowledge-store
 ```
 
-`--db` is required. The server stores all data (SQLite) in this directory.
-Current MVP uses fixed ports and single-instance runtime: `Server=5051`, `Client=5052`.
+Default server port: `5051`
 
-### 3. Connect from Cursor / Codex
+### 3. Start the Client Desktop Host
 
-`.cursor/mcp.json` or `.codex/mcp.json`:
+```bash
+dotnet run --no-launch-profile --project src/Client
+```
+
+Client behavior:
+
+- Opens one desktop window
+- Lets you choose a project folder that contains `.project.dna/project.json`
+- Starts the embedded local Client surface on `http://127.0.0.1:5052` **after the project is loaded**
+- Keeps the window lifecycle and the local MCP/API lifecycle in the same process
+
+`.project.dna/project.json` example:
+
+```json
+{
+  "projectName": "agentic-os",
+  "serverBaseUrl": "http://127.0.0.1:5051"
+}
+```
+
+Client-side LLM runtime reservation is stored separately in `.project.dna/llm.json`.
+Client-side project logs are written to `.project.dna/logs/`.
+Client-side workspace state is stored in `.project.dna/client-workspaces.json`.
+Client-side local agent shell state is stored in `.project.dna/agent-shell/agent-shell-state.json`.
+
+### 4. Connect from Cursor / Codex
+
+First:
+
+1. Start `Server`
+2. Start the desktop `Client`
+3. Load a project in the desktop window
+
+Then point your IDE MCP config to:
 
 ```json
 {
@@ -134,66 +117,63 @@ Current MVP uses fixed ports and single-instance runtime: `Server=5051`, `Client
 }
 ```
 
-Use the Client MCP endpoint for IDE connections.  
-Recommended topology: `Server(5051)` + `Client(5052)`.
+Notes:
 
-### 4. Dashboard
+- `5052` is only available after the desktop Client has loaded a project.
+- IDEs connect to the **desktop Client**, not directly to the Server.
 
-Open `http://localhost:5051` in your browser:
-- Topology visualization (read-only)
-- Memory CRUD (create, search, edit, delete)
-- LLM configuration and AI chat
+## Runtime Entrances
 
-Open `http://localhost:5052` for the headless client workbench (optional web mode).
+### Server Dashboard
 
-### 4.1 Desktop Client (Integrated)
+Open `http://localhost:5051` in your browser.
 
-Desktop window mode is now integrated into `src/Client` (single project + single process):
+Current server-side UI focus:
 
-```bash
-dotnet run --no-launch-profile --project src/Client
-```
+- Service overview
+- Connection / allowlist management
+- Review queue foundation
+- Topology and memory management
+
+Server-side runtime LLM reservation is stored in `<knowledge-store>/llm/server-llm.json`.
+
+### Client Desktop
+
+The desktop host is the only user-facing Client runtime.
 
 Current desktop capabilities:
-- Select target project at startup (project root must contain `.project.dna`)
-- Read `projectName` and `serverBaseUrl` from `.project.dna` to build workspace config
-- Start/stop embedded local `Client` host (`5052`) in the same process
-- Overview / Topology / Memory / Tooling+MCP tabs in window
-- MCP endpoint copy and one-click Cursor/Codex workflow installation
 
-`.project.dna` example:
+- Project picker and recent projects
+- Service / connection status overview
+- Topology preview
+- Formal knowledge preview
+- Local MCP tooling entry
+- One-click Cursor / Codex integration helpers
 
-```json
-{
-  "projectName": "agentic-os",
-  "serverBaseUrl": "http://127.0.0.1:5051"
-}
-```
+There is **no separate Client browser workbench** in the current implementation.
 
-Headless mode is still available for automation and IDE MCP transport:
+## CLI
+
+Server CLI remains available for inspection and maintenance:
 
 ```bash
-dotnet run --no-launch-profile --project src/Client -- web --server http://127.0.0.1:5051
+dna cli status
+dna cli validate
+dna cli search combat
+dna cli recall "what constraints apply"
+dna cli stats
 ```
 
-### 5. CLI
+## Client Runtime Surface
 
-```bash
-dna cli status                          # Server status
-dna cli validate                        # Architecture health check
-dna cli search combat                   # Search modules
-dna cli recall "what constraints apply" # Semantic memory search
-dna cli stats                           # Knowledge base statistics
-```
+The embedded local Client surface currently exposes:
 
-### 6. Client Execution Pipeline (Architect -> Developer)
+- MCP endpoint: `/mcp`
+- Local desktop-support APIs: `/api/client/status`, `/api/client/workspaces/*`, `/api/client/tooling/*`
+- Upstream proxy / query surface: `/api/status`, `/api/topology`, `/api/connection/access`, `/api/memory/*`
+- Local lightweight agent shell: `/agent/*`
 
-Client now provides a configurable execution pipeline with default order "retrospect first, then develop":
-
-- Read config: `GET /api/client/pipeline/config`
-- Update config: `PUT /api/client/pipeline/config`
-- Run pipeline: `POST /api/client/pipeline/run`
-- Latest run: `GET /api/client/pipeline/runs/latest`
+This surface exists to support the desktop host and IDE integrations. It is not a separate browser product.
 
 ## MCP Tools
 
@@ -202,7 +182,7 @@ Client now provides a configurable execution pipeline with default order "retros
 | Tool | Description |
 |------|-------------|
 | `get_topology` | Full knowledge graph overview |
-| `get_context` | Get module context (constraints, dependencies, CrossWork, lessons) |
+| `get_context` | Get module context with constraints, dependencies, and lessons |
 | `search_modules` | Search nodes by keyword |
 | `get_dependency_order` | Topological sort for multi-module changes |
 | `register_module` | Add a knowledge node |
@@ -213,72 +193,35 @@ Client now provides a configurable execution pipeline with default order "retros
 
 | Tool | Description |
 |------|-------------|
-| `remember` | Store knowledge (assigned to a node) |
-| `recall` | Semantic search across knowledge base |
+| `remember` | Store knowledge |
+| `recall` | Semantic search across the knowledge base |
 | `batch_remember` | Bulk knowledge ingestion |
-| `query_memories` | Structured query with filters |
-| `get_memory` | Get full memory entry by ID |
+| `query_memories` | Structured memory query |
+| `get_memory` | Get a memory entry by ID |
 | `get_memory_stats` | Knowledge base statistics |
 | `verify_memory` | Confirm a memory is still valid |
-| `update_memory` | Update existing memory |
+| `update_memory` | Update a memory |
 | `delete_memory` | Delete a memory |
-| `condense_module_knowledge` | Condense one module's knowledge into `NodeKnowledge` |
+| `condense_module_knowledge` | Condense one module into `NodeKnowledge` |
 | `condense_all_module_knowledge` | Run full condensation for all modules |
-| `get_execution_pipeline_config` | Get client execution pipeline config |
-| `update_execution_pipeline_config` | Update client execution pipeline config |
-| `run_execution_pipeline` | Run architect->developer pipeline |
-| `get_latest_pipeline_run` | Get latest pipeline run result |
 
-Client also exposes `GET /api/client/mcp/tools` to return the full MCP tool catalog (including parameter descriptions) for UI and automation.
+The Client also exposes `GET /api/client/mcp/tools` for UI and automation usage.
 
-## 2026-03 Client/Server Split Notes
+## Architecture Notes
 
-- `Server` is now a standalone knowledge service (`REST API + Dashboard + SQLite`).
-- `Client` is now a standalone MCP gateway and execution entry.
-- Why split: multi-end knowledge writes need online conflict-safe coordination; Git/P4 are great for source control, but not ideal as the runtime knowledge write arbiter.
-- Transport, auth, and real-time delivery decision: [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
+- `Server` is the source of truth for graph and memory storage.
+- `Server` does not read project source files directly.
+- `Client` is the local desktop host and MCP gateway.
+- Team-scale auth and review architecture are still being converged, but the current MVP runtime path is local-admin first.
 
-## 2026-04 Connection & Tooling Convergence Notes
+See:
 
-- Login flow is removed from current MVP path; access is controlled by server IP allowlist with per-IP role assignment.
-- Client no longer performs automatic LAN server scanning; users connect by manually entering server IP/URL.
-- Client only displays current permission profile and cannot modify roles.
-- IDE tooling install flow is upgraded: choose target project folder via system picker, then install Cursor/Codex workflow files into that folder.
-
-## Ecosystem (Planned)
-
-| Extension Type | What community contributes |
-|---------------|---------------------------|
-| **Templates** | Pre-built DNA for project types (Unity, React, Spring Boot...) |
-| **Scanners** | Auto-detect project structure from file system |
-| **Governance Rules** | Architecture best practices per tech stack |
-| **Knowledge Extractors** | Import from Confluence, Jira, Swagger... |
-
-## Design Philosophy
-
-> **Simplicity is the ultimate sophistication.**
->
-> One node type. Three relationships. No layers to declare.
-> Dependencies flow freely — cycles are merge signals, not violations.
-> All organizational forms — modules, teams, departments, task forces —
-> are the same pattern at different scales.
-
-Read the full design document: [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
-
-## Comparison
-
-| Capability | Mem0 | Zep | GitNexus | Pensieve | **DNA** |
-|-----------|------|-----|----------|----------|---------|
-| Project structure modeling | - | - | Code-level | - | **Org-level** |
-| Multi-discipline (code+art+design) | - | - | - | - | **Yes** |
-| Knowledge storage & retrieval | Yes | Yes | - | Basic | **4-channel** |
-| Architecture governance | - | - | - | - | **Yes** |
-| Team collaboration | Org memory | Yes | - | - | **CrossWork** |
-| Multi-role perspectives | - | - | - | - | **Interpreters** |
+- [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
+- [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

@@ -1,84 +1,16 @@
 using Avalonia;
 using Dna.Client.Desktop;
-using Dna.Client.Services;
-using Dna.Core.Framework;
 using Dna.Core.Runtime;
 
-return await ProgramEntry.MainAsync(args);
+return ProgramEntry.Run(args);
 
 internal static class ProgramEntry
 {
     [STAThread]
-    public static async Task<int> MainAsync(string[] args)
+    public static int Run(string[] args)
     {
-        if (ShouldRunHeadless(args))
-            return await RunHeadlessAsync(args);
+        DesktopConsoleWindow.SuppressIfStandalone();
 
-        return RunDesktop(args);
-    }
-
-    private static bool ShouldRunHeadless(string[] args)
-    {
-        if (args.Length == 0)
-            return false;
-
-        var first = args[0];
-        if (IsArg(first, "desktop", "--desktop"))
-            return false;
-
-        if (IsArg(first, "cli", "stdio", "--stdio", "web", "serve"))
-            return true;
-
-        return args.Any(a =>
-        {
-            return IsArg(a,
-                "--server",
-                "--workspace-root",
-                "--workspace-config",
-                "--port",
-                "-p",
-                "--no-browser");
-        });
-    }
-
-    private static async Task<int> RunHeadlessAsync(string[] args)
-    {
-        var serverBaseUrl = ClientBootstrap.ResolveServerBaseUrl(args);
-        var workspaceRoot = ClientBootstrap.ResolveWorkspaceRoot(args);
-        var workspaceConfigPath = ClientBootstrap.ResolveWorkspaceConfigPath(args);
-        var defaultClientPort = ClientBootstrap.ResolveClientDefaultPort(args);
-        var appArgs = ClientBootstrap.SanitizeArgsForFixedPort(args);
-
-        var app = DnaApp.Create(appArgs, new AppOptions
-        {
-            AppName = "Project DNA Client",
-            AppDescription = "Project DNA Client（本地 MCP + 独立 Agent 宿主）",
-            DefaultPort = defaultClientPort,
-            AllowPortAutoFallback = false,
-            LockScopeProvider = _ => "project-dna-client",
-            BannerExtras = (_, port) =>
-            {
-                var host = ClientBootstrap.GetLocalIp();
-                return
-                [
-                    ("Client API:  ", $"http://{host}:{port}/api/client/status"),
-                    ("MCP Server:  ", $"http://{host}:{port}/mcp"),
-                    ("DNA Server:  ", serverBaseUrl)
-                ];
-            }
-        });
-
-        ClientHostComposition.ConfigureDnaApp(
-            app,
-            serverBaseUrl,
-            workspaceRoot,
-            workspaceConfigPath);
-
-        return await app.RunAsync();
-    }
-
-    private static int RunDesktop(string[] args)
-    {
         var desktopArgs = args
             .Where(a => !IsArg(a, "desktop", "--desktop"))
             .ToArray();
@@ -108,4 +40,39 @@ internal static class ProgramEntry
     private static bool IsArg(string? value, params string[] candidates)
         => value != null &&
            Array.Exists(candidates, candidate => string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase));
+}
+
+internal static partial class DesktopConsoleWindow
+{
+    public static void SuppressIfStandalone()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        try
+        {
+            if (GetConsoleWindow() == IntPtr.Zero)
+                return;
+
+            var attachedProcessIds = new uint[2];
+            var attachedCount = GetConsoleProcessList(attachedProcessIds, (uint)attachedProcessIds.Length);
+
+            if (attachedCount <= 1)
+                FreeConsole();
+        }
+        catch
+        {
+            // Best effort: 无论是否成功，都不阻断桌面主窗口启动。
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool FreeConsole();
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint GetConsoleProcessList(uint[] processList, uint processCount);
 }

@@ -246,13 +246,16 @@ internal partial class MemoryStore
         }
     }
 
-    public void RegisterModule(string discipline, ModuleRegistration module)
+public void RegisterModule(string discipline, ModuleRegistration module)
     {
         if (string.IsNullOrWhiteSpace(module.Id))
             module.Id = UlidGenerator.New();
 
         lock (_manifestLock)
         {
+            discipline = NormalizeDisciplineId(discipline);
+            NormalizeModuleRegistration(module);
+
             if (!_architecture.Disciplines.ContainsKey(discipline))
             {
                 _architecture.Disciplines[discipline] = new DisciplineDefinition
@@ -269,12 +272,9 @@ internal partial class MemoryStore
                 _manifest.Disciplines[discipline] = modules;
             }
 
-            var existing = modules.FindIndex(m =>
-                string.Equals(m.Name, module.Name, StringComparison.OrdinalIgnoreCase));
-            if (existing >= 0)
-                modules[existing] = module;
-            else
-                modules.Add(module);
+            ValidateModuleHierarchyLocked(discipline, module);
+            RemoveExistingModuleRegistrationLocked(module.Id, module.Name);
+            modules.Add(module);
 
             SaveModulesManifestLocked();
             _logger.LogInformation("模块已注册: {Module} → {Discipline}", module.Name, discipline);
@@ -285,12 +285,21 @@ internal partial class MemoryStore
     {
         lock (_manifestLock)
         {
+            ModuleRegistration? removedModule = null;
             foreach (var (discipline, modules) in _manifest.Disciplines)
             {
                 var removed = modules.RemoveAll(m =>
-                    string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+                {
+                    var match = string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase);
+                    if (match)
+                        removedModule = m;
+                    return match;
+                });
                 if (removed > 0)
                 {
+                    if (!string.IsNullOrWhiteSpace(removedModule?.Id))
+                        ClearParentReferencesLocked(removedModule.Id);
+
                     SaveModulesManifestLocked();
                     _logger.LogInformation("模块已注销: {Module} (from {Discipline})", name, discipline);
                     return true;
@@ -298,6 +307,179 @@ internal partial class MemoryStore
             }
             return false;
         }
+    }
+
+    private static string NormalizeDisciplineId(string discipline)
+    {
+        if (string.IsNullOrWhiteSpace(discipline))
+            throw new InvalidOperationException("discipline 不能为空");
+
+        return discipline.Trim().ToLowerInvariant();
+    }
+
+    private static void NormalizeModuleRegistration(ModuleRegistration module)
+    {
+        module.Name = module.Name?.Trim() ?? string.Empty;
+        module.Path = NormalizeManagedPath(module.Path)
+            ?? throw new InvalidOperationException("module.path 不能为空");
+        module.ParentModuleId = NormalizeOptionalString(module.ParentModuleId);
+        module.Maintainer = NormalizeOptionalString(module.Maintainer);
+        module.Summary = NormalizeOptionalString(module.Summary);
+        module.Boundary = NormalizeOptionalString(module.Boundary);
+
+        module.Dependencies = NormalizeStringList(module.Dependencies);
+        module.PublicApi = NormalizeNullableStringList(module.PublicApi);
+        module.Constraints = NormalizeNullableStringList(module.Constraints);
+        module.ManagedPaths = NormalizeNullableManagedPaths(module.ManagedPaths, module.Path);
+
+        if (module.Metadata is { Count: > 0 })
+        {
+            module.Metadata = module.Metadata
+                .Where(x => !string.IsNullOrWhiteSpace(x.Key) && !string.IsNullOrWhiteSpace(x.Value))
+                .ToDictionary(x => x.Key.Trim(), x => x.Value.Trim(), StringComparer.OrdinalIgnoreCase);
+            if (module.Metadata.Count == 0)
+                module.Metadata = null;
+        }
+    }
+
+    private void ValidateModuleHierarchyLocked(string discipline, ModuleRegistration module)
+    {
+        if (string.IsNullOrWhiteSpace(module.Name))
+            throw new InvalidOperationException("module.name 不能为空");
+
+        if (string.IsNullOrWhiteSpace(module.ParentModuleId))
+            return;
+
+        if (string.Equals(module.ParentModuleId, module.Id, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(module.ParentModuleId, module.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("模块不能将自己设置为父模块");
+        }
+
+        if (!TryFindModuleLocked(module.ParentModuleId, out var parentDiscipline, out var parentModule))
+            throw new InvalidOperationException($"未找到父模块：{module.ParentModuleId}");
+
+        if (!string.Equals(parentDiscipline, discipline, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("MVP 阶段父子模块必须在同一部门内");
+
+        var currentId = parentModule.ParentModuleId;
+        var guard = 0;
+        while (!string.IsNullOrWhiteSpace(currentId) && guard < 128)
+        {
+            if (string.Equals(currentId, module.Id, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentId, module.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("模块父子关系不能形成循环");
+            }
+
+            if (!TryFindModuleLocked(currentId, out _, out var currentParent))
+                break;
+
+            currentId = currentParent.ParentModuleId;
+            guard++;
+        }
+    }
+
+    private void RemoveExistingModuleRegistrationLocked(string moduleId, string moduleName)
+    {
+        foreach (var modules in _manifest.Disciplines.Values)
+        {
+            modules.RemoveAll(existing =>
+                (!string.IsNullOrWhiteSpace(moduleId) &&
+                 string.Equals(existing.Id, moduleId, StringComparison.OrdinalIgnoreCase)) ||
+                string.Equals(existing.Name, moduleName, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private void ClearParentReferencesLocked(string removedModuleId)
+    {
+        foreach (var modules in _manifest.Disciplines.Values)
+        {
+            foreach (var module in modules)
+            {
+                if (string.Equals(module.ParentModuleId, removedModuleId, StringComparison.OrdinalIgnoreCase))
+                    module.ParentModuleId = null;
+            }
+        }
+    }
+
+    private bool TryFindModuleLocked(string? moduleIdOrName, out string discipline, out ModuleRegistration module)
+    {
+        discipline = string.Empty;
+        module = default!;
+
+        if (string.IsNullOrWhiteSpace(moduleIdOrName))
+            return false;
+
+        var normalized = moduleIdOrName.Trim();
+        foreach (var (candidateDiscipline, modules) in _manifest.Disciplines)
+        {
+            var match = modules.FirstOrDefault(existing =>
+                string.Equals(existing.Id, normalized, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(existing.Name, normalized, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+                continue;
+
+            discipline = candidateDiscipline;
+            module = match;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? NormalizeOptionalString(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
+    }
+
+    private static List<string> NormalizeStringList(List<string>? values)
+    {
+        return (values ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<string>? NormalizeNullableStringList(List<string>? values)
+    {
+        var normalized = NormalizeStringList(values);
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static List<string>? NormalizeNullableManagedPaths(List<string>? values, string primaryPath)
+    {
+        var normalized = new List<string>();
+
+        void AddValue(string? raw)
+        {
+            var path = NormalizeManagedPath(raw);
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            if (!normalized.Contains(path, StringComparer.OrdinalIgnoreCase))
+                normalized.Add(path);
+        }
+
+        AddValue(primaryPath);
+        foreach (var value in values ?? [])
+            AddValue(value);
+
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static string? NormalizeManagedPath(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        var normalized = raw.Replace('\\', '/').Trim();
+        normalized = normalized.Trim('/');
+        return normalized.Length == 0 ? null : normalized;
     }
 
     public void RegisterFeature(string featureId, FeatureDefinition feature)
@@ -535,9 +717,11 @@ internal partial class MemoryStore
                 discipline TEXT NOT NULL,
                 path TEXT NOT NULL,
                 layer INTEGER NOT NULL DEFAULT 0,
+                parent_module_id TEXT,
                 is_crosswork_module INTEGER NOT NULL DEFAULT 0,
                 participants_json TEXT NOT NULL DEFAULT '[]',
                 dependencies_json TEXT NOT NULL DEFAULT '[]',
+                managed_paths_json TEXT,
                 maintainer TEXT,
                 summary TEXT,
                 boundary TEXT,
@@ -576,6 +760,24 @@ internal partial class MemoryStore
             );
             """;
         cmd.ExecuteNonQuery();
+        EnsureColumnExists(conn, "graph_modules", "parent_module_id", "TEXT");
+        EnsureColumnExists(conn, "graph_modules", "managed_paths_json", "TEXT");
+    }
+
+    private static void EnsureColumnExists(SqliteConnection conn, string tableName, string columnName, string definition)
+    {
+        using var pragma = conn.CreateCommand();
+        pragma.CommandText = $"PRAGMA table_info({tableName})";
+        using var reader = pragma.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        using var alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {definition}";
+        alter.ExecuteNonQuery();
     }
 
     private void LoadGraphSnapshotLocked()
@@ -606,8 +808,8 @@ internal partial class MemoryStore
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT id, name, discipline, path, layer, is_crosswork_module,
-                       participants_json, dependencies_json, maintainer, summary,
+                SELECT id, name, discipline, path, layer, parent_module_id, is_crosswork_module,
+                       participants_json, dependencies_json, managed_paths_json, maintainer, summary,
                        boundary, public_api_json, constraints_json, metadata_json
                 FROM graph_modules
                 """;
@@ -627,15 +829,17 @@ internal partial class MemoryStore
                     Name = reader.GetString(1),
                     Path = reader.GetString(3),
                     Layer = reader.GetInt32(4),
-                    IsCrossWorkModule = reader.GetInt64(5) == 1,
-                    Participants = DeserializeOrDefault(reader.IsDBNull(6) ? "[]" : reader.GetString(6), new List<CrossWorkParticipantRegistration>()),
-                    Dependencies = DeserializeOrDefault(reader.IsDBNull(7) ? "[]" : reader.GetString(7), new List<string>()),
-                    Maintainer = reader.IsDBNull(8) ? null : reader.GetString(8),
-                    Summary = reader.IsDBNull(9) ? null : reader.GetString(9),
-                    Boundary = reader.IsDBNull(10) ? null : reader.GetString(10),
-                    PublicApi = reader.IsDBNull(11) ? null : DeserializeOrDefault<List<string>>(reader.GetString(11), []),
-                    Constraints = reader.IsDBNull(12) ? null : DeserializeOrDefault<List<string>>(reader.GetString(12), []),
-                    Metadata = reader.IsDBNull(13) ? null : DeserializeOrDefault<Dictionary<string, string>>(reader.GetString(13), new Dictionary<string, string>())
+                    ParentModuleId = reader.IsDBNull(5) ? null : reader.GetString(5),
+                    IsCrossWorkModule = reader.GetInt64(6) == 1,
+                    Participants = DeserializeOrDefault(reader.IsDBNull(7) ? "[]" : reader.GetString(7), new List<CrossWorkParticipantRegistration>()),
+                    Dependencies = DeserializeOrDefault(reader.IsDBNull(8) ? "[]" : reader.GetString(8), new List<string>()),
+                    ManagedPaths = reader.IsDBNull(9) ? null : DeserializeOrDefault<List<string>>(reader.GetString(9), []),
+                    Maintainer = reader.IsDBNull(10) ? null : reader.GetString(10),
+                    Summary = reader.IsDBNull(11) ? null : reader.GetString(11),
+                    Boundary = reader.IsDBNull(12) ? null : reader.GetString(12),
+                    PublicApi = reader.IsDBNull(13) ? null : DeserializeOrDefault<List<string>>(reader.GetString(13), []),
+                    Constraints = reader.IsDBNull(14) ? null : DeserializeOrDefault<List<string>>(reader.GetString(14), []),
+                    Metadata = reader.IsDBNull(15) ? null : DeserializeOrDefault<Dictionary<string, string>>(reader.GetString(15), new Dictionary<string, string>())
                 };
                 modules.Add(module);
             }
@@ -728,12 +932,12 @@ internal partial class MemoryStore
                 cmd.Transaction = tx;
                 cmd.CommandText = """
                     INSERT INTO graph_modules
-                        (id, name, discipline, path, layer, is_crosswork_module,
-                         participants_json, dependencies_json, maintainer, summary,
+                        (id, name, discipline, path, layer, parent_module_id, is_crosswork_module,
+                         participants_json, dependencies_json, managed_paths_json, maintainer, summary,
                          boundary, public_api_json, constraints_json, metadata_json)
                     VALUES
-                        (@id, @name, @discipline, @path, @layer, @isCw,
-                         @participants, @dependencies, @maintainer, @summary,
+                        (@id, @name, @discipline, @path, @layer, @parentModuleId, @isCw,
+                         @participants, @dependencies, @managedPaths, @maintainer, @summary,
                          @boundary, @publicApi, @constraints, @metadata)
                     """;
                 cmd.Parameters.AddWithValue("@id", module.Id);
@@ -741,9 +945,11 @@ internal partial class MemoryStore
                 cmd.Parameters.AddWithValue("@discipline", discipline);
                 cmd.Parameters.AddWithValue("@path", module.Path);
                 cmd.Parameters.AddWithValue("@layer", module.Layer);
+                cmd.Parameters.AddWithValue("@parentModuleId", (object?)module.ParentModuleId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@isCw", module.IsCrossWorkModule ? 1 : 0);
                 cmd.Parameters.AddWithValue("@participants", JsonSerializer.Serialize(module.Participants ?? [], ModuleManifestJsonOpts));
                 cmd.Parameters.AddWithValue("@dependencies", JsonSerializer.Serialize(module.Dependencies ?? [], ModuleManifestJsonOpts));
+                cmd.Parameters.AddWithValue("@managedPaths", module.ManagedPaths == null ? DBNull.Value : JsonSerializer.Serialize(module.ManagedPaths, ModuleManifestJsonOpts));
                 cmd.Parameters.AddWithValue("@maintainer", (object?)module.Maintainer ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@summary", (object?)module.Summary ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("@boundary", (object?)module.Boundary ?? DBNull.Value);

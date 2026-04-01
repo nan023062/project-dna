@@ -4,6 +4,7 @@ using Dna.Auth;
 using Dna.Core.Logging;
 using Microsoft.AspNetCore.Mvc;
 using Dna.Core.Config;
+using Dna.Services;
 
 namespace Dna.Interfaces.Api;
 
@@ -21,7 +22,7 @@ public static class ConfigEndpoints
         var api = app.MapGroup("/api");
         api.RequireAuthorization(ServerPolicies.AdminOnly);
 
-        api.MapGet("/config", (ProjectConfig config) =>
+        api.MapGet("/config", (ProjectConfig config, ServerRuntimeLlmConfigService runtimeLlm) =>
         {
             var schedule = config.GetGovernanceCondenseSchedule();
             return Results.Json(new
@@ -35,14 +36,36 @@ public static class ConfigEndpoints
                         enabled = schedule.Enabled,
                         hourLocal = schedule.HourLocal,
                         maxSourceMemories = schedule.MaxSourceMemories
-                    }
+                    },
                 },
+                runtimeLlm = runtimeLlm.GetSummary(),
                 recentProjects = config.GetRecentProjects().Select(p => new
                 {
                     p.Path,
                     p.Name,
                     p.LastOpened
                 })
+            }, JsonOpts);
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
+
+        api.MapGet("/config/runtime-llm", (ServerRuntimeLlmConfigService runtimeLlm) =>
+        {
+            return Results.Json(new
+            {
+                filePath = runtimeLlm.FilePath,
+                config = runtimeLlm.Load(),
+                summary = runtimeLlm.GetSummary()
+            }, JsonOpts);
+        }).RequireAuthorization(ServerPolicies.AdminOnly);
+
+        api.MapPut("/config/runtime-llm", (RuntimeLlmConfigDocument request, ServerRuntimeLlmConfigService runtimeLlm) =>
+        {
+            return Results.Json(new
+            {
+                success = true,
+                filePath = runtimeLlm.FilePath,
+                config = runtimeLlm.Save(request),
+                summary = runtimeLlm.GetSummary()
             }, JsonOpts);
         }).RequireAuthorization(ServerPolicies.AdminOnly);
 

@@ -44,7 +44,7 @@ public static class TopologyEndpoints
                 .Where(e => !string.IsNullOrWhiteSpace(e.From) && !string.IsNullOrWhiteSpace(e.To))
                 .ToList();
 
-            var containmentEdges = BuildContainmentEdges(moduleDtos);
+            var containmentEdges = BuildContainmentEdges(moduleDtos, disciplineNames);
             var collaborationEdges = BuildCollaborationEdges(moduleDtos, topo.CrossWorks);
 
             var relationEdges = dependencyEdges
@@ -137,6 +137,7 @@ public static class TopologyEndpoints
             DisplayName = node.Name,
             NodeId = node.Id,
             RelativePath = node.RelativePath,
+            Layer = node.Layer,
             Discipline = disciplineId,
             DisciplineDisplayName = disciplineNames.GetValueOrDefault(disciplineId, disciplineId),
             Type = typeName,
@@ -159,44 +160,20 @@ public static class TopologyEndpoints
             Metadata = node.Metadata,
             ParentId = node.ParentId,
             ChildIds = node.ChildIds,
+            ParentModuleId = node.ParentId,
             IsCrossWorkModule = node.IsCrossWorkModule
         };
     }
 
-    private static List<RelationEdgeDto> BuildContainmentEdges(List<ModuleDto> modules)
+    private static List<RelationEdgeDto> BuildContainmentEdges(
+        List<ModuleDto> modules,
+        Dictionary<string, string> disciplineNames)
     {
         var edges = new List<RelationEdgeDto>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        BuildProjectContainmentEdges(modules, disciplineNames, edges, seen);
         BuildExplicitContainmentEdges(modules, edges, seen);
-
-        var candidates = modules
-            .Where(m => !IsTeam(m))
-            .Select(m => new { Module = m, Path = NormalizePath(m.RelativePath) })
-            .Where(x => x.Path != null)
-            .ToList();
-
-        foreach (var child in candidates)
-        {
-            var parent = candidates
-                .Where(p =>
-                    !ReferenceEquals(p.Module, child.Module) &&
-                    p.Path != null &&
-                    child.Path != null &&
-                    IsPathParent(p.Path, child.Path))
-                .OrderByDescending(p => p.Path!.Length)
-                .FirstOrDefault();
-
-            if (parent == null) continue;
-
-            TryAddContainmentEdge(
-                from: parent.Module.Name,
-                to: child.Module.Name,
-                kind: "aggregation",
-                isComputed: true,
-                edges,
-                seen);
-        }
 
         return edges;
     }
@@ -238,6 +215,54 @@ public static class TopologyEndpoints
                     edges,
                     seen);
             }
+        }
+    }
+
+    private static void BuildProjectContainmentEdges(
+        List<ModuleDto> modules,
+        Dictionary<string, string> disciplineNames,
+        List<RelationEdgeDto> edges,
+        HashSet<string> seen)
+    {
+        var departmentIds = modules
+            .Select(m => m.Discipline)
+            .Where(id => !string.IsNullOrWhiteSpace(id) && !string.Equals(id, "root", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var disciplineId in disciplineNames.Keys
+                     .Where(id => !string.IsNullOrWhiteSpace(id) && !string.Equals(id, "root", StringComparison.OrdinalIgnoreCase))
+                     .OrderBy(id => id, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!departmentIds.Contains(disciplineId, StringComparer.OrdinalIgnoreCase))
+                departmentIds.Add(disciplineId);
+        }
+
+        foreach (var disciplineId in departmentIds)
+        {
+            TryAddContainmentEdge(
+                from: "project",
+                to: ToDepartmentNodeId(disciplineId),
+                kind: "composition",
+                isComputed: false,
+                edges,
+                seen);
+        }
+
+        foreach (var module in modules.Where(m => string.IsNullOrWhiteSpace(m.ParentId)))
+        {
+            var parentNode = string.Equals(module.Discipline, "root", StringComparison.OrdinalIgnoreCase)
+                ? "project"
+                : ToDepartmentNodeId(module.Discipline);
+
+            TryAddContainmentEdge(
+                from: parentNode,
+                to: module.Name,
+                kind: "composition",
+                isComputed: false,
+                edges,
+                seen);
         }
     }
 
@@ -470,6 +495,9 @@ public static class TopologyEndpoints
 
     private static List<string> BuildManagedPathScopes(KnowledgeNode node, string typeName)
     {
+        if (node.ManagedPathScopes.Count > 0)
+            return MergeUnique(node.ManagedPathScopes);
+
         var metadataScopes = ParseGovernanceList(node.Metadata, "managedPathScopes", "pathScopes", "managedPaths");
         var normalizedPath = NormalizePath(node.RelativePath);
         var baseScopes = new List<string>();
@@ -571,6 +599,9 @@ public static class TopologyEndpoints
         return exact?.Name ?? nameOrPath;
     }
 
+    private static string ToDepartmentNodeId(string disciplineId)
+        => $"__dept__:{disciplineId}";
+
     private static string? NormalizePath(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
@@ -603,6 +634,7 @@ public static class TopologyEndpoints
         public string DisplayName { get; init; } = string.Empty;
         public string NodeId { get; init; } = string.Empty;
         public string? RelativePath { get; init; }
+        public int Layer { get; init; }
         public string Discipline { get; init; } = "root";
         public string DisciplineDisplayName { get; init; } = "root";
         public string Type { get; init; } = "Technical";
@@ -624,6 +656,7 @@ public static class TopologyEndpoints
         public List<string> ManagedPathScopes { get; init; } = [];
         public Dictionary<string, string>? Metadata { get; init; }
         public string? ParentId { get; init; }
+        public string? ParentModuleId { get; init; }
         public List<string> ChildIds { get; init; } = [];
         public bool IsCrossWorkModule { get; init; }
     }

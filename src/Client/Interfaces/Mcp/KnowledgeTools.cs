@@ -283,6 +283,9 @@ public sealed class KnowledgeTools(DnaServerApi api)
         [Description("模块名")] string name,
         [Description("所属部门 ID")] string discipline,
         [Description("模块路径")] string path,
+        [Description("层级编号")] int layer = 0,
+        [Description("父模块 ID 或名称")] string? parentModuleId = null,
+        [Description("受管路径列表，逗号分隔")] string? managedPaths = null,
         [Description("依赖，逗号分隔")] string? dependencies = null,
         [Description("职责摘要")] string? summary = null,
         [Description("边界")] string? boundary = null,
@@ -302,9 +305,12 @@ public sealed class KnowledgeTools(DnaServerApi api)
                 discipline,
                 module = new ModuleRegistration
                 {
+                    Id = name.Trim(),
                     Name = name,
                     Path = path,
-                    Layer = 0,
+                    Layer = Math.Max(layer, 0),
+                    ParentModuleId = parentModuleId,
+                    ManagedPaths = SplitCsvOrNull(managedPaths),
                     Dependencies = SplitCsv(dependencies),
                     Summary = summary,
                     Boundary = boundary,
@@ -379,6 +385,59 @@ public sealed class KnowledgeTools(DnaServerApi api)
         catch (Exception ex)
         {
             return $"错误：{ex.Message}";
+        }
+    }
+
+    [McpServerTool, Description("Create or update a module with an explicit stable id.")]
+    public async Task<string> upsert_module(
+        [Description("Stable module id.")] string id,
+        [Description("Module name.")] string name,
+        [Description("Discipline id.")] string discipline,
+        [Description("Module path.")] string path,
+        [Description("Layer number.")] int layer = 0,
+        [Description("Parent module id or name.")] string? parentModuleId = null,
+        [Description("Managed paths, comma separated.")] string? managedPaths = null,
+        [Description("Dependencies, comma separated.")] string? dependencies = null,
+        [Description("Summary.")] string? summary = null,
+        [Description("Boundary.")] string? boundary = null,
+        [Description("Public API, comma separated.")] string? publicApi = null,
+        [Description("Constraints, comma separated.")] string? constraints = null,
+        [Description("Metadata JSON.")] string? metadata = null,
+        [Description("Maintainer.")] string? maintainer = null)
+    {
+        try
+        {
+            Dictionary<string, string>? metadataObj = null;
+            if (!string.IsNullOrWhiteSpace(metadata))
+                metadataObj = JsonSerializer.Deserialize<Dictionary<string, string>>(metadata);
+
+            var payload = new
+            {
+                discipline,
+                module = new ModuleRegistration
+                {
+                    Id = id.Trim(),
+                    Name = name,
+                    Path = path,
+                    Layer = Math.Max(layer, 0),
+                    ParentModuleId = parentModuleId,
+                    ManagedPaths = SplitCsvOrNull(managedPaths),
+                    Dependencies = SplitCsv(dependencies),
+                    Summary = summary,
+                    Boundary = boundary,
+                    PublicApi = SplitCsvOrNull(publicApi),
+                    Constraints = SplitCsvOrNull(constraints),
+                    Metadata = metadataObj,
+                    Maintainer = maintainer
+                }
+            };
+
+            var result = await api.PostAsync("/api/modules/", payload);
+            return JsonSerializer.Serialize(result, PrettyJson);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
         }
     }
 

@@ -1,9 +1,10 @@
 .gov-section {
-  background: var(--bg-card);
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px;
+  border-radius: 20px;
+  padding: 18px;
   margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .gov-section h3 {
@@ -16,4 +17,36 @@
   color: var(--text-secondary);
   font-size: 13px;
   margin-bottom: 12px;
+  line-height: 1.6;
+}
+
+.gov-actions {
+  padding: 10px 14px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  flex-wrap: wrap;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.gov-grow {
+  flex: 1;
+}
+
+.gov-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.gov-meta + .gov-meta {
+  margin-left: 12px;
+}
+
+.gov-result {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: rgba(248, 250, 252, 0.78);
 }

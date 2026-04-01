@@ -5,31 +5,35 @@ namespace Client.Tests;
 public sealed class WebUiAssetSmokeTests
 {
     [Fact]
-    public void ClientIndex_ShouldContainWorkspaceKnowledgeAndChatEntryPoints()
+    public void ClientDesktopShell_ShouldContainWorkspaceAndToolingEntrances()
     {
-        var html = ReadRepoFile("Client", "wwwroot", "index.html");
+        var axaml = ReadRepoFile("Client", "Desktop", "MainWindow.axaml");
 
-        Assert.Contains("workspace-tab", html);
-        Assert.Contains("panelConnections", html);
-        Assert.Contains("manualServerAddress", html);
-        Assert.Contains("connect-manual-server", html);
-        Assert.Contains("mcpToolList", html);
-        Assert.Contains("mcpFlowDiagram", html);
-        Assert.Contains("accessProfileRole", html);
-        Assert.Contains("accessProfileIp", html);
-        Assert.Contains("accessProfileName", html);
-        Assert.Contains("panelMemory", html);
-        Assert.Contains("chatPanel", html);
-        Assert.Contains("chatInput", html);
-        Assert.Contains("llmSettingsOverlay", html);
-        Assert.Contains("marked.min.js", html);
+        Assert.Contains("ProjectLoadPanel", axaml);
+        Assert.Contains("WorkspacePanel", axaml);
+        Assert.Contains("RecentProjectsListBox", axaml);
+        Assert.Contains("ConnectionStatusText", axaml);
+        Assert.Contains("TopologyGraph", axaml);
+        Assert.Contains("MemoryListBox", axaml);
+        Assert.Contains("McpToolListBox", axaml);
     }
 
     [Fact]
-    public void ServerIndex_ShouldContainAdminWorkbenchAndReviewQueue()
+    public void ClientBrowserWorkbench_ShouldBeRemoved()
+    {
+        var srcRoot = FindSrcRoot();
+        var clientIndex = Path.Combine(srcRoot, "Client", "wwwroot", "index.html");
+
+        Assert.False(File.Exists(clientIndex), $"Client browser workbench should not exist anymore: {clientIndex}");
+    }
+
+    [Fact]
+    public void ServerIndex_ShouldContainOverviewAndConnectionAdminPanels()
     {
         var html = ReadRepoFile("Server", "wwwroot", "index.html");
 
+        Assert.Contains("panelOverview", html);
+        Assert.Contains("overviewServiceState", html);
         Assert.Contains("panelUsers", html);
         Assert.Contains("whitelistList", html);
         Assert.Contains("whitelistEditorForm", html);

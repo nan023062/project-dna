@@ -1,0 +1,46 @@
+.markdown-body,
+.markdown-body[data-color-mode="dark"] {
+  --color-canvas-default: #ffffff;
+  --color-canvas-subtle: #f8fafc;
+  --color-fg-default: #101828;
+  --color-fg-muted: #667085;
+  --color-border-default: #dbe2ea;
+  --color-border-muted: #eaecf0;
+  --color-accent-fg: #2f6fed;
+  --color-neutral-muted: #f4f6fb;
+  --color-danger-fg: #f04438;
+  color-scheme: light;
+  background: transparent;
+  color: #101828;
+}
+
+.markdown-body {
+  font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.markdown-body pre,
+.markdown-body code,
+.markdown-body blockquote,
+.markdown-body table tr {
+  background-color: #f8fafc !important;
+}
+
+.markdown-body pre,
+.markdown-body blockquote,
+.markdown-body table td,
+.markdown-body table th {
+  border-color: #dbe2ea !important;
+}
+
+.markdown-body a {
+  color: #2f6fed;
+}
+
+.overview-card,
+.summary-bar .stat,
+.detail-panel,
+.memory-layout,
+.arch-layout,
+.chat-panel {
+  backdrop-filter: blur(12px);
+}
