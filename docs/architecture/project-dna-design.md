@@ -2,201 +2,199 @@
 
 > Status: Active
 > Last Updated: 2026-04-01
-> Scope: current runtime architecture used by the repo
+> Scope: current supported runtime architecture
 
 ## 1. Product Shape
 
-Project DNA currently uses a **Server + Client desktop host** split.
+Project DNA is currently a **single desktop Client**.
 
-- `Server` is the shared knowledge service and management console.
-- `Client` is the only user-facing local workspace host.
-- `Client` is **single-process, single-window, single-lifecycle**.
-- The local `:5052` surface is embedded inside the desktop Client process. It exists only to support the desktop host and IDE MCP access.
+Supported product rules:
 
-This is the current MVP direction and the basis for architecture reviews.
+- one client
+- one process
+- one window
+- one mental model
+- one lifecycle
+
+The embedded runtime on `:5052` exists inside that desktop Client process and is shared by:
+
+- desktop UI
+- local CLI
+- IDE agents through MCP
+
+Legacy `Server` code may still exist temporarily in the repository, but it is not part of the active documented architecture.
 
 ## 2. Runtime Topology
 
 ```text
-Browser
+User
   |
-  +--> Project DNA Server (:5051)
-  |      - REST API
-  |      - Server dashboard (wwwroot)
-  |      - Knowledge graph / memory / governance
-  |
-  +--> Project DNA Client Desktop (single window)
+  +--> Agentic OS Client Desktop
          - project loader
-         - topology preview
+         - overview
+         - knowledge graph
          - knowledge preview
-         - connection status
+         - local agent shell
          - tooling / MCP entry
-         - embedded local API + MCP on :5052
+         - embedded local runtime on :5052
                 |
-                +--> Cursor / Codex / other IDE agents
+                +--> Desktop UI support APIs
+                +--> dna_client cli
+                +--> Cursor / Codex / other IDE agents via /mcp
 ```
 
 Key boundary:
 
-- IDEs do **not** connect directly to Server MCP.
-- IDEs connect to `Client` on `http://127.0.0.1:5052/mcp`.
-- The embedded `5052` surface is available only after the desktop Client has loaded a project.
+- there is no separate Client browser workbench
+- there is no second long-running service for Client
+- there is no supported multi-user runtime in the current product shape
 
-## 3. Layered Dependency Rule
+## 3. Layering Rule
 
-Current dependency chain must remain a DAG:
+For the supported Client-only runtime, the important layering direction is:
 
-`Dna.Core <- Dna.Knowledge <- Dna.Server`
+```text
+Dna.Core
+  ->
+Dna.Knowledge
+  ->
+Dna.Web.Shared
+  ->
+Client desktop host and local runtime
+```
 
-Additional UI-facing layers are attached without reversing this chain:
+Rules:
 
-- `Client` depends on shared runtime / API contracts but must not introduce reverse dependencies back into lower layers.
-- Shared web UI code should be extracted into dedicated shared modules instead of making Server and Client depend on each other.
+- lower layers must not depend on Client desktop code
+- desktop UX may depend on shared runtime and UI support code
+- graph, memory, tooling, and agent-shell features should be extracted into reusable layers before they are re-skinned
 
-## 4. Server Responsibilities
+## 4. Client Responsibilities
 
-`Server` is the system of record.
+The desktop Client is responsible for:
 
-Current responsibilities:
+- opening one main desktop window
+- loading one project through `.project.dna/project.json`
+- initializing the local project-scoped knowledge runtime
+- exposing the embedded local runtime on `http://127.0.0.1:5052`
+- previewing topology and knowledge
+- exposing MCP to IDE agents
+- exposing local CLI-compatible APIs
+- managing project-scoped workspace state
+- managing project-scoped LLM config reservation
+- hosting the lightweight local agent shell
 
-- store graph, memory, and governance data
-- keep server-scoped runtime model reservation in `<knowledge-store>/llm/server-llm.json`
-- expose REST APIs
-- host the server dashboard in `wwwroot`
-- maintain connection allowlist / role state
-- provide admin-facing management pages
+The desktop Client is not:
 
-Current non-responsibilities:
+- a browser-first product
+- a second host mode
+- a team server
+- a remote authority service
 
-- does not directly read project source code
-- does not act as the user-facing Client desktop shell
-- does not own IDE-local lifecycle
+## 5. Project-Scoped State
 
-## 5. Client Responsibilities
+The supported state layout is project-scoped under `.project.dna/`:
 
-`Client` is the local desktop host.
+- `project.json`
+- `llm.json`
+- `logs/`
+- `client-workspaces.json`
+- `agent-shell/agent-shell-state.json`
 
-Current responsibilities:
+Current behavior:
 
-- open one main desktop window
-- load one target project via `.project.dna/project.json`
-- keep project-scoped runtime model reservation in `.project.dna/llm.json`
-- keep project-scoped workspace state in `.project.dna/client-workspaces.json`
-- keep project-scoped local agent shell state in `.project.dna/agent-shell/agent-shell-state.json`
-- start and stop the embedded local API / MCP surface in the same process
-- preview topology and formal knowledge
-- show current Server connection / permission state
-- install or expose IDE integration endpoints
+- the project identity comes from `.project.dna/project.json`
+- the current runtime only requires `projectName`
+- legacy fields such as `serverBaseUrl` may remain in old configs, but they are not required by the current Client-only path
+- the local knowledge store is initialized from the project-scoped metadata root
 
-Current non-responsibilities:
+User-level global config may still exist under `~/.dna/config.json`, but it is separate from the project-scoped runtime data.
 
-- not a separate browser workbench
-- not a second standalone host mode
-- not a team-shared server entry
-- not the authority for permission decisions
+## 6. Embedded Local Runtime
 
-## 6. Data and Access Boundaries
-
-Current MVP boundary is intentionally narrow:
-
-- `Server` is the source of truth for formal knowledge.
-- `Client` mainly previews formal knowledge and exposes local MCP access.
-- direct formal knowledge writes are currently limited to `admin`
-- non-admin Client paths should not imply unrestricted formal knowledge editing
-
-Historical review / JWT / team-scale flows remain in the repo as future direction, but they are not the primary MVP runtime path.
-
-Runtime model reservation is now split by ownership:
-
-- `Server`: `<knowledge-store>/llm/server-llm.json`
-- `Client`: `.project.dna/llm.json`
-- `Client` workspace state: `.project.dna/client-workspaces.json`
-- `Client` local agent shell state: `.project.dna/agent-shell/agent-shell-state.json`
-- existing `~/.dna/config.json` remains a separate user-level global config source
-
-## 7. Embedded Client Surface
-
-The embedded local surface currently includes:
+The embedded runtime currently includes:
 
 - `/mcp`
-- `/api/client/status`
-- `/api/client/workspaces/*`
-- `/api/client/tooling/*`
 - `/api/status`
 - `/api/topology`
 - `/api/connection/access`
 - `/api/memory/*`
+- `/api/client/status`
+- `/api/client/workspaces/*`
+- `/api/client/tooling/*`
 - `/agent/*`
 
 Interpretation:
 
-- this surface exists to serve the desktop host and IDE integrations
-- it is not a separate Client web product
+- `/api/status` and `/api/topology` are the main local runtime read surfaces
+- `/api/client/*` supports desktop host state and tooling flows
+- `/agent/*` is the lightweight local agent shell surface
+- `/mcp` is the IDE agent entry
 
-## 8. Startup Model
+## 7. Startup Model
 
-### Server
+Current startup sequence:
 
-- fixed default port: `5051`
-- current startup requires `--db <directory>`
+1. launch the desktop Client
+2. choose a project containing `.project.dna/project.json`
+3. initialize project-scoped local runtime data
+4. bring local `:5052` runtime online
+5. enable desktop UI, CLI, and IDE integrations against the same local runtime
 
-### Client
-
-- fixed embedded local port: `5052`
-- desktop window starts first
-- user selects a project containing `.project.dna/project.json`
-- after project load succeeds, the embedded local API / MCP surface becomes available
-
-This enforces the product rule:
+This sequence preserves the core rule:
 
 > one client, one mental model, one lifecycle
 
-## 9. Current UX Entrances
+## 8. Current UX Entrances
 
-### Server
-
-Primary UX entrance:
-
-- browser -> `http://localhost:5051`
-
-Main page groups:
-
-- service overview
-- connection / allowlist management
-- review queue foundation
-- knowledge / topology management
-
-### Client
-
-Primary UX entrance:
+The active UX entrances are:
 
 - desktop main window
+- `dna_client cli`
+- MCP from Cursor / Codex / other IDE agents
 
-Main page groups:
+The desktop window currently centers on:
 
-- project loader
+- project loading
 - overview
-- connection permissions
-- topology preview
+- runtime status
+- knowledge graph
 - knowledge preview
-- tooling / MCP hub
+- tooling / MCP integration
+
+## 9. Current Graph Architecture Direction
+
+The topology subsystem is being split into layered graph parts:
+
+- scene model
+- layout engines
+- view state
+- render list
+- renderer backend
+- caches and LOD policy
+- spatial index and interaction helpers
+
+This work is tracked in:
+
+- [client-topology-upgrade-plan.md](./client-topology-upgrade-plan.md)
 
 ## 10. Architecture Review Checklist
 
 Future architecture reviews should check these questions first:
 
-1. Does any new change break the single-process, single-window Client model?
-2. Does any new module introduce reverse or circular dependencies?
-3. Does any new UX imply that Client is again a separate browser workbench?
-4. Does any new write path bypass Server ownership of formal knowledge?
-5. Are Server admin UX and Client desktop UX still clearly separated?
-6. Is shared UI logic extracted into shared libraries instead of copy-pasted?
+1. Does any change break the single-process, single-window Client model?
+2. Does any change introduce a second user-facing runtime mode?
+3. Does any new feature require a remote authority when it could remain local?
+4. Are project-scoped files still stored under `.project.dna/`?
+5. Do desktop UI, CLI, and MCP still converge on the same local `:5052` runtime?
+6. Are graph and agent features being extracted into layered modules instead of pushed back into one giant UI file?
 
 ## 11. Near-Term Direction
 
-The next evolution should continue from the current MVP baseline:
+The near-term direction remains:
 
-- keep Server focused on management, formal knowledge, and admin operations
-- keep Client focused on desktop hosting, project cognition, and local MCP access
-- postpone detailed task orchestration / chat workflows until the shared agent orchestration library is introduced
-- expand to team-scale auth / review only after the single-user local admin loop is stable
+- keep the product Client-only
+- continue improving local topology and knowledge UX
+- keep MCP and CLI as first-class integration surfaces
+- keep local project cognition and memory management as the main value
+- postpone any new team/server design until after the current Client-only architecture is fully settled

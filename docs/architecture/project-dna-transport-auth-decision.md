@@ -1,111 +1,140 @@
-# Project DNA Transport And Access Decision
+# Project DNA Local Transport And Access Decision
 
-> Status: Active for current MVP
+> Status: Active
 > Last Updated: 2026-04-01
+> Scope: current supported Client-only runtime
 
 ## 1. Current Effective Decision
 
-The original team-scale design explored `REST + JWT + SSE`.
+The active runtime decision is:
 
-For the **current MVP**, the effective runtime decision is narrower:
+- **Local REST + MCP**
 
-- main business access uses `REST`
-- `Client` exposes local `MCP` only for IDE / agent access
-- Server-side access control currently centers on **allowlist + role resolution**
-- team-scale `JWT + review + SSE` remains a planned evolution, not the main runtime path today
+More specifically:
+
+- desktop UI talks to the embedded local runtime through local HTTP APIs
+- local CLI talks to the same embedded local runtime
+- IDE agents talk to the same embedded local runtime through `/mcp`
+
+There is no supported JWT, SSE, or remote team-auth path in the current documented product architecture.
 
 ## 2. Current Transport Topology
 
 ```text
-Browser -> Server REST / dashboard
-Desktop Client -> Server REST
-IDE Agent -> Client MCP (:5052)
+Desktop UI -> local REST (:5052)
+Local CLI  -> local REST (:5052)
+IDE Agent  -> local MCP  (:5052/mcp)
 ```
 
 Important boundary:
 
-- IDE agents attach to the desktop Client, not directly to the Server
-- the Client `:5052` surface is embedded inside the desktop process
-- the Client is not a second team-shared service
+- all supported surfaces converge on the same local runtime
+- that runtime lives inside the desktop Client process
+- it is not a second standalone service
 
-## 3. Server Interface Layers
+## 3. Local Interface Layers
 
-Current Server interfaces can be understood in these layers:
+The embedded runtime can be understood in these layers:
 
-### 3.1 Service / status layer
+### 3.1 Runtime status layer
 
 Examples:
 
 - `/api/status`
+- `/api/client/status`
 - `/api/connection/access`
 
 Purpose:
 
-- expose current runtime state
-- show current permission profile
-- support dashboard and desktop connection checks
+- expose runtime health
+- expose current project identity
+- expose local access profile
+- support desktop overview and CLI status
 
-### 3.2 Formal knowledge read layer
+### 3.2 Topology and knowledge layer
 
 Examples:
 
 - `/api/topology`
-- `/api/graph/*`
-- `/api/memory/query`
-- `/api/memory/{id}`
-- `/api/memory/recall`
-- `/api/memory/stats`
+- `/api/memory/*`
+- `/mcp` graph tools
+- `/mcp` memory tools
 
 Purpose:
 
-- read formal knowledge
-- power topology preview and knowledge preview
+- read and maintain local project knowledge
+- support knowledge graph preview
+- support memory query and condensation flows
+- provide structured project cognition to IDE agents
 
-### 3.3 Admin / governance layer
+### 3.3 Desktop host support layer
 
 Examples:
 
-- allowlist management
-- review queue pages and APIs
-- direct formal knowledge maintenance
+- `/api/client/workspaces/*`
+- `/api/client/tooling/*`
+- `/api/client/mcp/tools`
 
 Purpose:
 
-- keep operational and administrative responsibilities on the Server side
+- manage local workspace state
+- expose IDE tooling installation helpers
+- expose MCP catalog metadata to the desktop UI and automation
 
-## 4. Current Authorization Boundary
+### 3.4 Local agent shell layer
 
-Current effective boundary:
+Examples:
 
-- `Server` decides whether a caller is allowed
-- `Server` resolves the caller role
-- `Client` only displays the current permission state
-- `Client` must not become the authority for access decisions
+- `/agent/providers`
+- `/agent/sessions/*`
+- `/agent/chat`
 
-Current role interpretation in the MVP:
+Purpose:
 
-- `viewer`: browse formal knowledge and use local MCP access
-- `editor`: reserved for future review submission flow
-- `admin`: may directly maintain formal knowledge and admin pages
+- support the lightweight local agent-shell flow
+- keep future orchestration work inside the same local runtime boundary
 
-## 5. Why This Is The Current MVP Choice
+## 4. Current Access Boundary
+
+The current access model is intentionally local and simple:
+
+- the local desktop process is the trust boundary
+- `/api/connection/access` reports the local runtime as allowed
+- the current local runtime resolves itself as `admin`
+- there is no active multi-user authorization model in the documented runtime
+
+This is acceptable because the current supported product shape is:
+
+- single machine
+- single desktop Client
+- project-scoped local runtime
+
+## 5. Why This Is The Current Choice
 
 This narrowing is intentional:
 
-- it closes the single-user local admin loop first
-- it keeps the runtime simple enough to verify quickly
-- it avoids mixing unfinished team collaboration flows into the main path
-- it preserves room to reintroduce `JWT + review + SSE` after the MVP is stable
+- it preserves the single-client mental model
+- it avoids reintroducing remote complexity before the local product loop is stable
+- it keeps desktop UX, CLI, and MCP consistent
+- it lets topology, memory, and agent features converge on one runtime surface
 
-## 6. Future Convergence Direction
+## 6. Non-Goals For The Current Docs
 
-After the local-admin MVP is stable, the intended convergence remains:
+The following are explicitly outside the current documented runtime:
 
-- `REST` for normal business operations
-- `JWT` for team-scale identity and role propagation
-- `SSE` for review queue refresh, agent streaming output, and long-running task progress
+- JWT-based role propagation
+- SSE-based multi-user streaming updates
+- remote shared server authority
+- allowlist-driven team access management
+- browser-first admin console
 
-That future path must still preserve the current product boundary:
+Legacy code for some of these ideas may still exist temporarily in the repository, but it is not part of the active documented architecture.
 
-- `Server` is the authority for shared knowledge and admin operations
-- `Client` remains the local desktop host and local MCP gateway
+## 7. Review Checklist
+
+When changing transport or access behavior, verify:
+
+1. Does the change still keep desktop UI, CLI, and MCP on the same local runtime?
+2. Does the change avoid creating a second long-lived Client-side service?
+3. Does the change keep the runtime local to the desktop process?
+4. Does the change avoid silently reintroducing remote team-auth assumptions into the current product?

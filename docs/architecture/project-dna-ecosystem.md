@@ -1,86 +1,129 @@
 # Project DNA Extension System
 
-> **Author**: nave
-> **Prerequisite**: Read [project-dna-design.md](./project-dna-design.md) for the core model
----
+> Status: Directional
+> Last Updated: 2026-04-01
+> Scope: extension surfaces that still make sense under the current Client-only architecture
 
-## Extension Dimensions
+## 1. Current Extension Principle
 
-Project DNA is designed as an extensible platform. Community members can contribute extensions in six dimensions:
+Project DNA is currently a **local desktop Client runtime**.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                     DNA Registry                          │
-│                                                          │
-│  ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌───────────┐  │
-│  │ Templates │ │ Scanners │ │ Gov Rules │ │Extractors │  │
-│  │          │ │          │ │           │ │           │  │
-│  │unity-game│ │csharp    │ │clean-arch │ │confluence │  │
-│  │react-app │ │typescript│ │unity-perf │ │jira       │  │
-│  │spring    │ │swagger   │ │game-team  │ │markdown   │  │
-│  └──────────┘ └──────────┘ └───────────┘ └───────────┘  │
-│                                                          │
-│  ┌──────────────┐ ┌──────────────────┐                   │
-│  │ Interpreters │ │ Storage Backends │                   │
-│  │ qa / devops  │ │ postgres / s3    │                   │
-│  └──────────────┘ └──────────────────┘                   │
-└──────────────────────────────────────────────────────────┘
-```
+That means extension points should first be designed to plug into the local Client runtime, not into a remote server.
 
----
+Good extension targets today:
 
-## 1. DNA Templates
+- project templates
+- file scanners
+- governance rules
+- knowledge extractors
+- role interpreters
+- local storage adapters
+- IDE tooling helpers
 
-Pre-built DNA structures for specific project types.
+## 2. Extension Dimensions
 
-**Format**: A JSON file describing the default node tree, dependencies, and knowledge.
+### 2.1 Templates
 
-```json
-{
-  "name": "unity-game",
-  "description": "Unity game project standard DNA template",
-  "version": "1.0.0",
-  "nodes": [
-    {
-      "name": "Root",
-      "type": "Root",
-      "knowledge": {
-        "identity": "Unity game project",
-        "constraints": ["Unity 2022+ LTS", "Target: iOS/Android"]
-      }
-    },
-    {
-      "name": "Engineering",
-      "type": "Department",
-      "parent": "Root"
-    },
-    {
-      "name": "Framework",
-      "type": "Module",
-      "parent": "Engineering",
-      "pathPattern": "Assets/Scripts/Framework/**",
-      "knowledge": {
-        "constraints": ["No heap allocation in Update", "Use PoolManager for object pooling"],
-        "contract": "IFrameworkService: Init/Tick/Dispose lifecycle"
-      }
-    }
-  ]
-}
-```
+Purpose:
 
-**Usage**:
+- create a starting module tree for a project type
+- prefill constraints, boundaries, and managed paths
 
-```bash
-dna init --template=unity-game
-```
+Typical examples:
 
----
+- `unity-game`
+- `react-app`
+- `service-backend`
+- `tools-pipeline`
 
-## 2. Scanners
+### 2.2 Scanners
 
-Auto-analyze project files to generate DNA nodes and edges.
+Purpose:
 
-**Interface**:
+- analyze project files
+- generate modules and relations
+- infer path ownership and dependency hints
+
+Typical examples:
+
+- C# scanner
+- Unity asmdef scanner
+- TypeScript scanner
+- Python scanner
+- Dockerfile scanner
+
+### 2.3 Governance Rules
+
+Purpose:
+
+- run architecture health checks
+- flag constraint violations
+- produce actionable suggestions for humans and agents
+
+Typical examples:
+
+- clean architecture rules
+- Unity performance rules
+- module boundary rules
+- naming convention rules
+
+### 2.4 Knowledge Extractors
+
+Purpose:
+
+- import knowledge from existing documents
+- turn external text into structured memories or module metadata
+
+Typical examples:
+
+- Markdown extractor
+- Swagger extractor
+- changelog extractor
+- commit-history extractor
+
+### 2.5 Interpreters
+
+Purpose:
+
+- present the same local knowledge graph from different role perspectives
+
+Typical perspectives:
+
+- `coder`
+- `designer`
+- `art`
+- `qa`
+- `devops`
+
+### 2.6 Local Storage Adapters
+
+Purpose:
+
+- control how the Client runtime persists project-scoped data
+
+Current preferred direction:
+
+- project-scoped local storage under `.project.dna/`
+
+Possible adapters:
+
+- SQLite-backed local store
+- file-backed fallback store
+- import/export bridge for Git-managed snapshots
+
+### 2.7 IDE Tooling Helpers
+
+Purpose:
+
+- generate or install MCP configs
+- install workspace-side helper files for Cursor / Codex
+- surface tool catalogs to desktop UX and automation
+
+## 3. Example Interface Shapes
+
+These are directional examples, not yet a frozen plugin ABI.
+
+### 3.1 Scanner
 
 ```csharp
 public interface IDnaScanner
@@ -90,25 +133,9 @@ public interface IDnaScanner
     bool CanScan(string projectRoot);
     ScanResult Scan(string projectRoot);
 }
-
-public class ScanResult
-{
-    public List<ScannedNode> Nodes { get; set; } = [];
-    public List<ScannedEdge> Edges { get; set; } = [];
-    public List<ScannedKnowledge> Knowledge { get; set; } = [];
-    public List<string> Warnings { get; set; } = [];
-}
 ```
 
-**Examples**: CSharpScanner, UnityAsmdefScanner, TypeScriptScanner, PythonScanner, SwaggerScanner, DockerfileScanner.
-
----
-
-## 3. Governance Rules
-
-Pluggable architecture checks.
-
-**Interface**:
+### 3.2 Governance Rule
 
 ```csharp
 public interface IGovernanceRule
@@ -121,15 +148,7 @@ public interface IGovernanceRule
 }
 ```
 
-**Examples**: `unity-performance-rules`, `clean-architecture-rules`, `react-architecture-rules`, `microservice-rules`.
-
----
-
-## 4. Knowledge Extractors
-
-Import knowledge from existing documents and external systems.
-
-**Interface**:
+### 3.3 Knowledge Extractor
 
 ```csharp
 public interface IKnowledgeExtractor
@@ -140,29 +159,21 @@ public interface IKnowledgeExtractor
 }
 ```
 
-**Examples**: MarkdownExtractor, ConfluenceExtractor, JiraExtractor, SwaggerExtractor, GitHistoryExtractor.
+## 4. Current Compatibility Rule
 
----
+Any future extension system should preserve these assumptions:
 
-## 5. Context Interpreters
+- the active runtime is local to the desktop Client
+- project-scoped data lives under `.project.dna/`
+- IDE integration continues to route through local `:5052`
+- extensions should not require a remote server to be useful
 
-Same DNA, different perspectives per role.
+## 5. Near-Term Direction
 
-| Interpreter | Perspective |
-|-------------|------------|
-| `coder` | Code constraints, API contracts, GC rules |
-| `designer` | Formulas, config fields, gameplay logic |
-| `art` | Polygon budget, texture specs, naming conventions |
-| `qa` | Test cases, regression checklists, known issues |
-| `devops` | Deploy dependencies, environment requirements |
+The most realistic next extension work is:
 
----
-
-## 6. Storage Backends
-
-| Backend | Use Case |
-|---------|----------|
-| `SqliteBackend` (default) | Single machine, small teams |
-| `PostgresBackend` | Large teams, enterprise |
-| `GitNativeBackend` | Offline, file-based fallback |
-| `S3Backend` | Cloud-native |
+1. template packs for common project structures
+2. scanners for folder-to-module bootstrap
+3. governance rule packs for architecture review
+4. importers for markdown and existing project notes
+5. better IDE tooling installers around MCP

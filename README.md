@@ -1,111 +1,95 @@
 # Project DNA
 
-**The knowledge engine for AI agents.**
+**The local project knowledge runtime for AI agents.**
 
 Project DNA gives agents project-level cognition: structure, dependencies, constraints, decisions, and lessons learned.
 
 [中文文档](README.zh-CN.md)
 
-## What It Is
+## Current Product Shape
 
-Project DNA currently uses a **Server + Client desktop host** split:
+Project DNA is currently documented and supported as a **single desktop Client**:
 
-- `Server` is the shared knowledge service. It stores graph, memory, governance data, and serves the management dashboard.
-- `Client` is a **single-process, single-window desktop host**. It loads one project, previews topology and knowledge, and exposes the local MCP endpoint for IDE agents.
-- The local `5052` surface is **embedded inside the desktop Client process**. It is not a second product, not a second host, and not a separate browser workbench.
+- one process
+- one window
+- one mental model
+- one lifecycle
+
+The embedded local runtime lives inside the desktop Client process on `http://127.0.0.1:5052`.
+
+That local runtime serves three surfaces at the same time:
+
+- desktop UI support APIs
+- local CLI
+- MCP for Cursor, Codex, and other IDE agents
+
+Legacy `Server` code may still exist temporarily in the repository, but it is **not** the active product direction described by the current docs.
+
+## Runtime Topology
 
 ```text
-Cursor / Codex / Other IDE Agents
+User
+  |
+  +--> Agentic OS Client Desktop (single window)
+         - project loader
+         - topology preview
+         - knowledge preview
+         - workspace state
+         - local agent shell
+         - tooling / MCP entry
+         - embedded local runtime on :5052
                 |
-                | MCP
-                v
-Project DNA Client Desktop (single window)
-                |
-                | local embedded API / MCP on :5052
-                |
-                +------> Desktop UX
-                |
-                +------> REST to Server
-                           |
-                           v
-Project DNA Server (:5051)
-  - Knowledge graph
-  - Memory store
-  - Governance engine
-  - Server dashboard (wwwroot)
+                +--> Desktop UI
+                +--> dna_client cli
+                +--> Cursor / Codex / other IDE agents via /mcp
 ```
-
-## Current MVP Focus
-
-The current MVP is intentionally narrowed to the **single-user local admin loop**:
-
-- Server dashboard is the main management entry.
-- Client desktop is the main local workspace host.
-- Access control currently centers on **server allowlist + role display**.
-- Client defaults to **formal knowledge preview + local MCP access**.
-- Direct formal knowledge writes are currently reserved for `admin`.
-- Review flow and team-scale auth remain in the repo, but are not the main runtime path of this MVP.
 
 ## Quick Start
 
 ### 1. Build
 
 ```bash
-cd src
-dotnet build
+dotnet build src/Client/Client.csproj
 ```
 
-### 2. Start the Server
+### 2. Start the Desktop Client
 
-`--db` is required. The server stores SQLite data in that directory.
-
-```bash
-# use current directory as the knowledge store
-cd /path/to/knowledge-store
-dna --db
-
-# or specify a store path explicitly
-dna --db /path/to/knowledge-store
-```
-
-Default server port: `5051`
-
-### 3. Start the Client Desktop Host
+Development:
 
 ```bash
 dotnet run --no-launch-profile --project src/Client
 ```
 
-Client behavior:
+Published executable:
 
-- Opens one desktop window
-- Lets you choose a project folder that contains `.project.dna/project.json`
-- Starts the embedded local Client surface on `http://127.0.0.1:5052` **after the project is loaded**
-- Keeps the window lifecycle and the local MCP/API lifecycle in the same process
+```bash
+publish/client/dna_client.exe
+```
 
-`.project.dna/project.json` example:
+### 3. Prepare a Project
+
+The desktop Client loads a target project folder that contains:
+
+```text
+.project.dna/project.json
+```
+
+Minimal example:
 
 ```json
 {
-  "projectName": "agentic-os",
-  "serverBaseUrl": "http://127.0.0.1:5051"
+  "projectName": "agentic-os"
 }
 ```
 
-Client-side LLM runtime reservation is stored separately in `.project.dna/llm.json`.
-Client-side project logs are written to `.project.dna/logs/`.
-Client-side workspace state is stored in `.project.dna/client-workspaces.json`.
-Client-side local agent shell state is stored in `.project.dna/agent-shell/agent-shell-state.json`.
+Notes:
 
-### 4. Connect from Cursor / Codex
+- the legacy `serverBaseUrl` field may still appear in old files, but the current Client-only runtime does not require it
+- the Client opens its local runtime only after the project is loaded
 
-First:
+### 4. Connect IDE Agents
 
-1. Start `Server`
-2. Start the desktop `Client`
-3. Load a project in the desktop window
-
-Then point your IDE MCP config to:
+After the desktop Client has loaded a project, point your IDE MCP config to:
 
 ```json
 {
@@ -117,63 +101,52 @@ Then point your IDE MCP config to:
 }
 ```
 
-Notes:
+## Project-Scoped State
 
-- `5052` is only available after the desktop Client has loaded a project.
-- IDEs connect to the **desktop Client**, not directly to the Server.
+The Client stores project-scoped state under `.project.dna/`:
 
-## Runtime Entrances
+- `project.json`: project identity
+- `llm.json`: Client runtime LLM config reservation
+- `logs/`: Client logs
+- `client-workspaces.json`: workspace state
+- `agent-shell/agent-shell-state.json`: local agent shell state
 
-### Server Dashboard
-
-Open `http://localhost:5051` in your browser.
-
-Current server-side UI focus:
-
-- Service overview
-- Connection / allowlist management
-- Review queue foundation
-- Topology and memory management
-
-Server-side runtime LLM reservation is stored in `<knowledge-store>/llm/server-llm.json`.
-
-### Client Desktop
-
-The desktop host is the only user-facing Client runtime.
-
-Current desktop capabilities:
-
-- Project picker and recent projects
-- Service / connection status overview
-- Topology preview
-- Formal knowledge preview
-- Local MCP tooling entry
-- One-click Cursor / Codex integration helpers
-
-There is **no separate Client browser workbench** in the current implementation.
-
-## CLI
-
-Server CLI remains available for inspection and maintenance:
-
-```bash
-dna cli status
-dna cli validate
-dna cli search combat
-dna cli recall "what constraints apply"
-dna cli stats
-```
+The current local knowledge store is also initialized from the project-scoped metadata root.
 
 ## Client Runtime Surface
 
-The embedded local Client surface currently exposes:
+The embedded local runtime currently exposes:
 
-- MCP endpoint: `/mcp`
-- Local desktop-support APIs: `/api/client/status`, `/api/client/workspaces/*`, `/api/client/tooling/*`
-- Upstream proxy / query surface: `/api/status`, `/api/topology`, `/api/connection/access`, `/api/memory/*`
-- Local lightweight agent shell: `/agent/*`
+- `/mcp`
+- `/api/status`
+- `/api/topology`
+- `/api/connection/access`
+- `/api/memory/*`
+- `/api/client/status`
+- `/api/client/workspaces/*`
+- `/api/client/tooling/*`
+- `/agent/*`
 
-This surface exists to support the desktop host and IDE integrations. It is not a separate browser product.
+This surface exists to support the desktop host, CLI, and IDE integrations. It is not a separate browser product.
+
+## CLI
+
+The desktop Client ships with a local CLI entry:
+
+```bash
+dna_client cli status
+dna_client cli topology
+dna_client cli search render
+dna_client cli recall "what constraints apply"
+dna_client cli memories
+dna_client cli tools
+```
+
+Default local runtime address:
+
+```text
+http://127.0.0.1:5052
+```
 
 ## MCP Tools
 
@@ -185,8 +158,8 @@ This surface exists to support the desktop host and IDE integrations. It is not 
 | `get_context` | Get module context with constraints, dependencies, and lessons |
 | `search_modules` | Search nodes by keyword |
 | `get_dependency_order` | Topological sort for multi-module changes |
-| `register_module` | Add a knowledge node |
-| `register_crosswork` | Declare cross-team collaboration |
+| `register_module` | Add or update a knowledge node |
+| `register_crosswork` | Declare cross-module collaboration |
 | `validate_architecture` | Architecture health check |
 
 ### Memory Tools
@@ -209,15 +182,17 @@ The Client also exposes `GET /api/client/mcp/tools` for UI and automation usage.
 
 ## Architecture Notes
 
-- `Server` is the source of truth for graph and memory storage.
-- `Server` does not read project source files directly.
-- `Client` is the local desktop host and MCP gateway.
-- Team-scale auth and review architecture are still being converged, but the current MVP runtime path is local-admin first.
+- the supported runtime is **Client-only**
+- the embedded runtime is local to the desktop process
+- desktop UI, CLI, and MCP all converge on the same local `:5052` surface
+- topology work is currently being split into scene, layout, render, cache, and LOD layers
+- legacy Server code is temporary repository residue, not current product architecture
 
 See:
 
 - [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
 - [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
+- [docs/architecture/client-topology-upgrade-plan.md](docs/architecture/client-topology-upgrade-plan.md)
 
 ## Contributing
 
