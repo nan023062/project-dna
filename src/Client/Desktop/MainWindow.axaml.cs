@@ -15,8 +15,13 @@ public partial class MainWindow : Window
 
     private readonly EmbeddedClientHost _host;
     private readonly DispatcherTimer _statusTimer;
+    private readonly DesktopRecentProjectsStore _recentProjectsStore;
+    private readonly Dictionary<string, TopologyNodeViewModel> _topologyNodes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<TopologyEdgeViewModel> _topologyEdges = [];
 
     private DesktopProjectConfig? _project;
+    private string? _selectedTopologyNodeId;
+    private List<DesktopRecentProjectEntry> _recentProjects = [];
 
     public MainWindow()
         : this(new EmbeddedClientHost())
@@ -26,124 +31,260 @@ public partial class MainWindow : Window
     public MainWindow(EmbeddedClientHost host)
     {
         _host = host;
+        _recentProjectsStore = DesktopRecentProjectsStore.CreateDefault();
+
         InitializeComponent();
         InitializeDefaults();
+
+        TopologyGraph.NodeSelected += TopologyGraph_OnNodeSelected;
 
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _statusTimer.Tick += async (_, _) => await RefreshRuntimeStatusAsync();
         _statusTimer.Start();
 
-        Opened += async (_, _) => await RefreshAllAsync();
+        Opened += async (_, _) => await OnOpenedAsync();
         Closed += (_, _) => _statusTimer.Stop();
+    }
+
+    private async Task OnOpenedAsync()
+    {
+        RefreshRecentProjects();
+        ShowProjectLoadPage("请选择项目。加载后会进入工作区。");
+        await RefreshRuntimeStatusAsync();
     }
 
     private void InitializeDefaults()
     {
-        ProjectRootBox.Text = string.Empty;
-        ProjectNameBox.Text = string.Empty;
-        ServerBaseUrlBox.Text = "-";
-        ClientAddressBox.Text = "http://127.0.0.1:5052";
-        McpAddressBox.Text = "http://127.0.0.1:5052/mcp";
-        ProjectConfigPathText.Text = "配置文件: 未选择项目";
-
         SelectedProjectText.Text = "目标项目: 未选择";
         ClientStateText.Text = "Client: 检查中...";
         ServerStateText.Text = "Server: 检查中...";
         AccessStateText.Text = "权限: 检查中...";
-        StatusText.Text = "请选择项目目录后启动 Client。";
+        StatusText.Text = "请先在项目加载页选择项目，进入工作区后将自动连接服务器。";
 
         TopologySummaryText.Text = "尚未加载拓扑。";
+        TopologyDetailTitle.Text = "未选择节点";
+        TopologyDetailMeta.Text = "-";
+        TopologyDetailSummary.Text = "点击左侧节点查看模块详情。";
+        TopologyRelationListBox.ItemsSource = Array.Empty<string>();
+        TopologyListBox.ItemsSource = Array.Empty<TopologyModuleListItem>();
+        StatModulesText.Text = "-";
+        StatDependenciesText.Text = "-";
+        StatCollaborationText.Text = "-";
+        StatDisciplinesText.Text = "-";
+
         MemoryStatusText.Text = "记忆区就绪。";
         ToolingStatusText.Text = "工具区就绪。";
         McpSummaryText.Text = "MCP 清单未加载。";
+
+        RecentCountText.Text = "最近项目（0）";
+        RecentProjectsListBox.ItemsSource = Array.Empty<RecentProjectListItem>();
+        RecentProjectHintText.Text = "尚未选择最近项目。你也可以点击“打开项目目录...”加载新项目。";
+        LoaderStatusText.Text = "请选择项目。";
+
+        ProjectLoadPanel.IsVisible = true;
+        WorkspacePanel.IsVisible = false;
+        ApplyTopologyRelationFilter();
+        UpdateWindowTitle();
     }
 
-    private async void SelectProject_OnClick(object? sender, RoutedEventArgs e)
+    private void MenuSwitchWorkspace_OnClick(object? sender, RoutedEventArgs e)
+    {
+        RefreshRecentProjects();
+        ShowProjectLoadPage(_project is null
+            ? "请选择项目。"
+            : $"当前工作区：{_project.ProjectName}。选择其他项目后会自动切换。");
+    }
+
+    private void ReloadRecentProjects_OnClick(object? sender, RoutedEventArgs e)
+    {
+        RefreshRecentProjects();
+        LoaderStatusText.Text = "最近项目列表已刷新。";
+    }
+
+    private void MenuExit_OnClick(object? sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private async void OpenProjectFolder_OnClick(object? sender, RoutedEventArgs e)
     {
         try
         {
             var selected = await PickProjectFolderAsync();
             if (string.IsNullOrWhiteSpace(selected))
             {
-                StatusText.Text = "已取消项目选择。";
+                LoaderStatusText.Text = "已取消项目选择。";
                 return;
             }
 
-            var project = DesktopProjectConfig.Load(selected);
+            await LoadProjectAsync(selected);
+        }
+        catch (Exception ex)
+        {
+            LoaderStatusText.Text = $"项目选择失败：{ex.Message}";
+        }
+    }
+
+    private async void LoadSelectedRecent_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var selected = ResolveSelectedRecent();
+        if (selected is null)
+        {
+            LoaderStatusText.Text = "请先在最近项目列表中选择一项。";
+            return;
+        }
+
+        await LoadProjectAsync(selected.ProjectRoot);
+    }
+
+    private void RemoveSelectedRecent_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var selected = ResolveSelectedRecent();
+        if (selected is null)
+        {
+            LoaderStatusText.Text = "请先选择要移除的项目。";
+            return;
+        }
+
+        _recentProjectsStore.Remove(selected.ProjectRoot);
+        RefreshRecentProjects();
+        LoaderStatusText.Text = $"已移除：{selected.ProjectName}";
+    }
+
+    private void RecentProjectsListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        RenderRecentProjectHint(ResolveSelectedRecent());
+    }
+
+    private async Task LoadProjectAsync(string projectRoot)
+    {
+        try
+        {
+            var project = DesktopProjectConfig.Load(projectRoot);
             project.EnsureWorkspaceConfig();
+
+            await EnsureClientRunningAsync(project);
             ApplyProject(project);
 
-            StatusText.Text = $"项目已就绪：{project.ProjectName}";
+            _recentProjectsStore.Upsert(project);
+            RefreshRecentProjects(project.ProjectRoot);
+
+            ShowWorkspacePage();
+            StatusText.Text = $"已加载工作区：{project.ProjectName}";
+            LoaderStatusText.Text = $"已加载：{project.ProjectName}";
+
             await RefreshAllAsync();
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"项目配置无效：{ex.Message}";
-            await RefreshRuntimeStatusAsync();
+            LoaderStatusText.Text = $"加载失败：{ex.Message}";
+            if (WorkspacePanel.IsVisible)
+                StatusText.Text = $"切换工作区失败：{ex.Message}";
         }
     }
 
-    private async void StartClient_OnClick(object? sender, RoutedEventArgs e)
+    private async Task EnsureClientRunningAsync(DesktopProjectConfig project)
     {
-        try
-        {
-            var project = EnsureProjectSelected();
-            await _host.StartAsync(project);
-            StatusText.Text = "Client 已启动（单进程内嵌）。";
-            await RefreshClientPanelsAsync();
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"启动失败：{ex.Message}";
-            await RefreshRuntimeStatusAsync();
-        }
-    }
+        if (_host.IsRunning && IsSameProject(_host.CurrentProject, project))
+            return;
 
-    private async void StopClient_OnClick(object? sender, RoutedEventArgs e)
-    {
-        try
-        {
+        if (_host.IsRunning)
             await _host.StopAsync();
-            StatusText.Text = "Client 已停止。";
-            await RefreshClientPanelsAsync();
-        }
-        catch (Exception ex)
-        {
-            StatusText.Text = $"停止失败：{ex.Message}";
-        }
+
+        await _host.StartAsync(project);
     }
 
-    private async void RefreshAll_OnClick(object? sender, RoutedEventArgs e)
+    private static bool IsSameProject(DesktopProjectConfig? a, DesktopProjectConfig? b)
     {
-        await RefreshAllAsync();
+        return a is not null &&
+               b is not null &&
+               string.Equals(a.ProjectRoot, b.ProjectRoot, StringComparison.OrdinalIgnoreCase);
     }
 
-    private async void CopyMcp_OnClick(object? sender, RoutedEventArgs e)
+    private void ShowProjectLoadPage(string status)
     {
-        try
-        {
-            var text = (McpAddressBox.Text ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(text))
-                throw new InvalidOperationException("MCP 地址为空。");
+        ProjectLoadPanel.IsVisible = true;
+        WorkspacePanel.IsVisible = false;
+        LoaderStatusText.Text = status;
+        UpdateWindowTitle();
+    }
 
-            if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
-            {
-                await clipboard.SetTextAsync(text);
-                StatusText.Text = $"MCP 地址已复制：{text}";
-                return;
-            }
+    private void ShowWorkspacePage()
+    {
+        ProjectLoadPanel.IsVisible = false;
+        WorkspacePanel.IsVisible = true;
+        UpdateWindowTitle();
+    }
 
-            StatusText.Text = "无法访问系统剪贴板。";
-        }
-        catch (Exception ex)
+    private void UpdateWindowTitle()
+    {
+        if (WorkspacePanel.IsVisible && _project is not null)
         {
-            StatusText.Text = $"复制失败：{ex.Message}";
+            Title = $"Project DNA Client - {_project.ProjectName}";
+            return;
         }
+
+        Title = "Project DNA Client - 项目加载";
+    }
+
+    private void RefreshRecentProjects(string? preferredProjectRoot = null)
+    {
+        _recentProjects = _recentProjectsStore.Load().ToList();
+
+        var list = _recentProjects
+            .Select(entry => new RecentProjectListItem(entry))
+            .ToList();
+
+        RecentProjectsListBox.ItemsSource = list;
+        RecentCountText.Text = $"最近项目（{list.Count}）";
+
+        if (list.Count == 0)
+        {
+            RecentProjectsListBox.SelectedItem = null;
+            RenderRecentProjectHint(null);
+            return;
+        }
+
+        var selected = list[0];
+        if (!string.IsNullOrWhiteSpace(preferredProjectRoot))
+        {
+            selected = list.FirstOrDefault(x =>
+                string.Equals(x.Entry.ProjectRoot, preferredProjectRoot, StringComparison.OrdinalIgnoreCase)) ?? selected;
+        }
+
+        RecentProjectsListBox.SelectedItem = selected;
+        RenderRecentProjectHint(selected.Entry);
+    }
+
+    private DesktopRecentProjectEntry? ResolveSelectedRecent()
+    {
+        return (RecentProjectsListBox.SelectedItem as RecentProjectListItem)?.Entry;
+    }
+
+    private void RenderRecentProjectHint(DesktopRecentProjectEntry? entry)
+    {
+        if (entry is null)
+        {
+            RecentProjectHintText.Text = "尚未选择最近项目。你也可以点击“打开项目目录...”加载新项目。";
+            return;
+        }
+
+        var lastOpened = entry.LastOpenedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+        RecentProjectHintText.Text =
+            $"项目：{entry.ProjectName}\n" +
+            $"目录：{entry.ProjectRoot}\n" +
+            $"服务：{entry.ServerBaseUrl}\n" +
+            $"上次打开：{lastOpened}";
     }
 
     private async void RefreshTopology_OnClick(object? sender, RoutedEventArgs e)
     {
         await RefreshTopologyAsync();
+    }
+
+    private void TopologyFilter_OnChanged(object? sender, RoutedEventArgs e)
+    {
+        ApplyTopologyRelationFilter();
     }
 
     private async void RefreshMemories_OnClick(object? sender, RoutedEventArgs e)
@@ -176,18 +317,22 @@ public partial class MainWindow : Window
         await RefreshMcpToolsAsync();
     }
 
+    private void TopologyGraph_OnNodeSelected(TopologyNodeViewModel node)
+    {
+        SelectTopologyNode(node.Id, syncGraph: false, syncList: true);
+    }
+
+    private void TopologyListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (TopologyListBox.SelectedItem is TopologyModuleListItem item)
+            SelectTopologyNode(item.Key, syncGraph: true, syncList: false);
+    }
+
     private async Task RefreshAllAsync()
     {
         await RefreshRuntimeStatusAsync();
         await RefreshTopologyAsync();
         await RefreshMemoriesAsync();
-        await RefreshToolingStatusAsync();
-        await RefreshMcpToolsAsync();
-    }
-
-    private async Task RefreshClientPanelsAsync()
-    {
-        await RefreshRuntimeStatusAsync();
         await RefreshToolingStatusAsync();
         await RefreshMcpToolsAsync();
     }
@@ -248,7 +393,7 @@ public partial class MainWindow : Window
         if (_project is null)
         {
             TopologySummaryText.Text = "未选择项目，无法加载拓扑。";
-            TopologyListBox.ItemsSource = Array.Empty<string>();
+            ResetTopologyState();
             return;
         }
 
@@ -257,30 +402,56 @@ public partial class MainWindow : Window
             var topology = await GetJsonAsync($"{_project.ServerBaseUrl}/api/topology");
             TopologySummaryText.Text = GetString(topology, "summary", "拓扑已加载")!;
 
-            var lines = new List<string>();
-            if (topology.TryGetProperty("modules", out var modules) && modules.ValueKind == JsonValueKind.Array)
+            var nodes = ParseTopologyNodes(topology);
+            var edges = ParseTopologyEdges(topology);
+            var modulesListItems = nodes
+                .OrderBy(n => n.DisciplineLabel, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(n => n.Label, StringComparer.OrdinalIgnoreCase)
+                .Select(n => new TopologyModuleListItem(
+                    n.Id,
+                    $"{n.Label} | L{ResolveNodeLayer(n)} | {n.TypeLabel} | {n.DisciplineLabel} | deps={n.DependencyCount}"))
+                .ToList();
+
+            _topologyNodes.Clear();
+            foreach (var node in nodes)
+                _topologyNodes[node.Id] = node;
+
+            _topologyEdges.Clear();
+            _topologyEdges.AddRange(edges);
+
+            TopologyGraph.SetTopology(nodes, edges);
+            ApplyTopologyRelationFilter();
+            TopologyListBox.ItemsSource = modulesListItems;
+
+            var dependencyCount = edges.Count(e => string.Equals(e.Relation, "dependency", StringComparison.OrdinalIgnoreCase));
+            var collaborationCount = edges.Count(e => string.Equals(e.Relation, "collaboration", StringComparison.OrdinalIgnoreCase));
+            var disciplinesCount = topology.TryGetProperty("disciplines", out var disciplines) && disciplines.ValueKind == JsonValueKind.Array
+                ? disciplines.GetArrayLength()
+                : nodes.Select(n => n.DisciplineLabel).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            StatModulesText.Text = nodes.Count.ToString();
+            StatDependenciesText.Text = dependencyCount.ToString();
+            StatCollaborationText.Text = collaborationCount.ToString();
+            StatDisciplinesText.Text = disciplinesCount.ToString();
+
+            if (!string.IsNullOrWhiteSpace(_selectedTopologyNodeId) && _topologyNodes.ContainsKey(_selectedTopologyNodeId))
             {
-                foreach (var module in modules.EnumerateArray())
-                {
-                    var name = GetString(module, "displayName", GetString(module, "name", "-"));
-                    var typeLabel = GetString(module, "typeLabel", GetString(module, "type", "-"));
-                    var discipline = GetString(module, "disciplineDisplayName", GetString(module, "discipline", "-"));
-                    var relativePath = GetString(module, "relativePath", "-");
-
-                    var depCount = 0;
-                    if (module.TryGetProperty("dependencies", out var deps) && deps.ValueKind == JsonValueKind.Array)
-                        depCount = deps.GetArrayLength();
-
-                    lines.Add($"{name} | {typeLabel} | {discipline} | deps={depCount} | {relativePath}");
-                }
+                SelectTopologyNode(_selectedTopologyNodeId, syncGraph: true, syncList: true);
+                return;
             }
 
-            TopologyListBox.ItemsSource = lines;
+            if (modulesListItems.Count > 0)
+            {
+                SelectTopologyNode(modulesListItems[0].Key, syncGraph: true, syncList: true);
+                return;
+            }
+
+            RenderTopologyDetails(null);
         }
         catch (Exception ex)
         {
             TopologySummaryText.Text = $"拓扑加载失败：{ex.Message}";
-            TopologyListBox.ItemsSource = Array.Empty<string>();
+            ResetTopologyState();
         }
     }
 
@@ -361,6 +532,14 @@ public partial class MainWindow : Window
 
     private async Task RefreshToolingStatusAsync()
     {
+        if (_project is null)
+        {
+            CursorStateText.Text = "Cursor: 未加载项目";
+            CodexStateText.Text = "Codex: 未加载项目";
+            ToolingStatusText.Text = "请先加载项目工作区。";
+            return;
+        }
+
         if (!await IsClientOnlineAsync())
         {
             CursorStateText.Text = "Cursor: Client 未运行";
@@ -489,17 +668,183 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SelectTopologyNode(string? nodeId, bool syncGraph, bool syncList)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId) || !_topologyNodes.ContainsKey(nodeId))
+        {
+            RenderTopologyDetails(null);
+            return;
+        }
+
+        _selectedTopologyNodeId = nodeId;
+
+        if (syncGraph)
+            TopologyGraph.SelectNode(nodeId);
+
+        if (syncList && TopologyListBox.ItemsSource is IEnumerable<TopologyModuleListItem> items)
+        {
+            var selected = items.FirstOrDefault(i => string.Equals(i.Key, nodeId, StringComparison.OrdinalIgnoreCase));
+            if (selected is not null && !ReferenceEquals(TopologyListBox.SelectedItem, selected))
+                TopologyListBox.SelectedItem = selected;
+        }
+
+        RenderTopologyDetails(nodeId);
+    }
+
+    private void RenderTopologyDetails(string? nodeId)
+    {
+        if (string.IsNullOrWhiteSpace(nodeId) || !_topologyNodes.TryGetValue(nodeId, out var node))
+        {
+            TopologyDetailTitle.Text = "未选择节点";
+            TopologyDetailMeta.Text = "-";
+            TopologyDetailSummary.Text = "点击左侧节点查看模块详情。";
+            TopologyRelationListBox.ItemsSource = Array.Empty<string>();
+            return;
+        }
+
+        TopologyDetailTitle.Text = node.Label;
+        TopologyDetailMeta.Text = $"L{ResolveNodeLayer(node)} | {node.TypeLabel} | {node.DisciplineLabel} | deps {node.DependencyCount}";
+        TopologyDetailSummary.Text = string.IsNullOrWhiteSpace(node.Summary)
+            ? "暂无摘要。"
+            : node.Summary;
+
+        var outgoing = _topologyEdges.Where(e => string.Equals(e.From, nodeId, StringComparison.OrdinalIgnoreCase)).ToList();
+        var incoming = _topologyEdges.Where(e => string.Equals(e.To, nodeId, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var lines = new List<string>
+        {
+            $"出边: {outgoing.Count} | 入边: {incoming.Count}",
+            string.Empty
+        };
+
+        lines.AddRange(outgoing
+            .OrderBy(e => e.Relation, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => ResolveNodeLabel(e.To), StringComparer.OrdinalIgnoreCase)
+            .Select(e => $"OUT [{e.Relation}] -> {ResolveNodeLabel(e.To)}"));
+
+        lines.AddRange(incoming
+            .OrderBy(e => e.Relation, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => ResolveNodeLabel(e.From), StringComparer.OrdinalIgnoreCase)
+            .Select(e => $"IN  [{e.Relation}] <- {ResolveNodeLabel(e.From)}"));
+
+        TopologyRelationListBox.ItemsSource = lines;
+    }
+
+    private string ResolveNodeLabel(string nodeId)
+    {
+        return _topologyNodes.TryGetValue(nodeId, out var node)
+            ? node.Label
+            : nodeId;
+    }
+
+    private void ResetTopologyState()
+    {
+        _topologyNodes.Clear();
+        _topologyEdges.Clear();
+        _selectedTopologyNodeId = null;
+
+        TopologyGraph.ClearTopology();
+        TopologyListBox.ItemsSource = Array.Empty<TopologyModuleListItem>();
+        TopologyRelationListBox.ItemsSource = Array.Empty<string>();
+        TopologyDetailTitle.Text = "未选择节点";
+        TopologyDetailMeta.Text = "-";
+        TopologyDetailSummary.Text = "点击左侧节点查看模块详情。";
+
+        StatModulesText.Text = "-";
+        StatDependenciesText.Text = "-";
+        StatCollaborationText.Text = "-";
+        StatDisciplinesText.Text = "-";
+    }
+
+    private static List<TopologyNodeViewModel> ParseTopologyNodes(JsonElement topology)
+    {
+        var nodes = new List<TopologyNodeViewModel>();
+
+        if (!topology.TryGetProperty("modules", out var modules) || modules.ValueKind != JsonValueKind.Array)
+            return nodes;
+
+        foreach (var module in modules.EnumerateArray())
+        {
+            var id = GetString(module, "name", string.Empty) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            var label = GetString(module, "displayName", id) ?? id;
+            var type = GetString(module, "type", "Unknown") ?? "Unknown";
+            var typeLabel = GetString(module, "typeLabel", type) ?? type;
+            var discipline = GetString(module, "discipline", "unknown") ?? "unknown";
+            var disciplineLabel = GetString(module, "disciplineDisplayName", discipline) ?? discipline;
+            var summary = GetString(module, "summary", string.Empty) ?? string.Empty;
+            var computedLayer = ParseNullableInt(module, "computedLayer") ??
+                                ParseNullableInt(module, "layer");
+
+            var depCount = 0;
+            if (module.TryGetProperty("dependencies", out var deps) && deps.ValueKind == JsonValueKind.Array)
+                depCount = deps.GetArrayLength();
+
+            nodes.Add(new TopologyNodeViewModel(
+                id,
+                label,
+                type,
+                typeLabel,
+                discipline,
+                disciplineLabel,
+                depCount,
+                summary,
+                computedLayer));
+        }
+
+        return nodes;
+    }
+
+    private static List<TopologyEdgeViewModel> ParseTopologyEdges(JsonElement topology)
+    {
+        var edges = new List<TopologyEdgeViewModel>();
+
+        JsonElement source;
+        if (topology.TryGetProperty("relationEdges", out var relationEdges) && relationEdges.ValueKind == JsonValueKind.Array)
+        {
+            source = relationEdges;
+        }
+        else if (topology.TryGetProperty("edges", out var dependencyEdges) && dependencyEdges.ValueKind == JsonValueKind.Array)
+        {
+            source = dependencyEdges;
+        }
+        else
+        {
+            return edges;
+        }
+
+        foreach (var edge in source.EnumerateArray())
+        {
+            var from = GetString(edge, "from", string.Empty) ?? string.Empty;
+            var to = GetString(edge, "to", string.Empty) ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
+                continue;
+
+            var relation = GetString(edge, "relation", "dependency") ?? "dependency";
+            var isComputed = edge.TryGetProperty("isComputed", out var computed) && computed.ValueKind == JsonValueKind.True;
+
+            edges.Add(new TopologyEdgeViewModel(from, to, relation, isComputed));
+        }
+
+        return edges;
+    }
+
     private async Task<string?> PickProjectFolderAsync()
     {
         if (StorageProvider is not { CanOpen: true })
             throw new InvalidOperationException("当前平台不支持文件夹选择器。");
 
-        var startLocation = string.IsNullOrWhiteSpace(_project?.ProjectRoot)
-            ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-            : _project.ProjectRoot;
+        var selectedRecentRoot = ResolveSelectedRecent()?.ProjectRoot;
+        var startLocation = !string.IsNullOrWhiteSpace(selectedRecentRoot)
+            ? selectedRecentRoot
+            : string.IsNullOrWhiteSpace(_project?.ProjectRoot)
+                ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+                : _project.ProjectRoot;
 
         IStorageFolder? suggested = null;
-        if (Directory.Exists(startLocation))
+        if (!string.IsNullOrWhiteSpace(startLocation) && Directory.Exists(startLocation))
             suggested = await StorageProvider.TryGetFolderFromPathAsync(startLocation);
 
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
@@ -519,11 +864,10 @@ public partial class MainWindow : Window
     {
         _project = project;
 
-        ProjectRootBox.Text = project.ProjectRoot;
-        ProjectNameBox.Text = project.ProjectName;
-        ServerBaseUrlBox.Text = project.ServerBaseUrl;
-        ProjectConfigPathText.Text = $"配置文件: {project.ConfigPath}";
         SelectedProjectText.Text = $"目标项目: {project.ProjectName}";
+        LaunchModeText.Text = $"启动方式: 嵌入单进程 | MCP: http://127.0.0.1:5052/mcp";
+
+        UpdateWindowTitle();
     }
 
     private DesktopProjectConfig EnsureProjectSelected()
@@ -615,6 +959,23 @@ public partial class MainWindow : Window
             : DateTime.MinValue;
     }
 
+    private static int? ParseNullableInt(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value))
+            return null;
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            return number;
+
+        if (value.ValueKind == JsonValueKind.String &&
+            int.TryParse(value.GetString(), out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
     private static string BuildMemoryLine(JsonElement memory)
     {
         var createdAt = ParseDate(memory, "createdAt");
@@ -673,4 +1034,55 @@ public partial class MainWindow : Window
 
     private static string FormatToolingTargetName(string target)
         => string.Equals(target, "cursor", StringComparison.OrdinalIgnoreCase) ? "Cursor" : "Codex";
+
+    private static int ResolveNodeLayer(TopologyNodeViewModel node)
+    {
+        if (node.ComputedLayer.HasValue)
+            return node.ComputedLayer.Value;
+
+        return node.Type.ToLowerInvariant() switch
+        {
+            "department" => 0,
+            "technical" => 1,
+            "gateway" => 1,
+            "team" => 2,
+            _ => 1
+        };
+    }
+
+    private void ApplyTopologyRelationFilter()
+    {
+        var dependency = TopologyDependencyFilter.IsChecked != false;
+        var composition = TopologyCompositionFilter.IsChecked != false;
+        var aggregation = TopologyAggregationFilter.IsChecked != false;
+        var parentChild = TopologyParentChildFilter.IsChecked != false;
+        var collaboration = TopologyCollaborationFilter.IsChecked != false;
+
+        if (!dependency && !composition && !aggregation && !parentChild && !collaboration)
+        {
+            dependency = true;
+            TopologyDependencyFilter.IsChecked = true;
+        }
+
+        TopologyGraph.SetRelationFilter(
+            dependency,
+            composition,
+            aggregation,
+            parentChild,
+            collaboration);
+    }
+
+    private sealed record TopologyModuleListItem(string Key, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record RecentProjectListItem(DesktopRecentProjectEntry Entry)
+    {
+        public override string ToString()
+        {
+            var lastOpened = Entry.LastOpenedAtUtc.ToLocalTime().ToString("MM-dd HH:mm");
+            return $"{Entry.ProjectName}  [{lastOpened}]\n{Entry.ProjectRoot}";
+        }
+    }
 }

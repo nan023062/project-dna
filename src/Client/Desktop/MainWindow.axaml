@@ -2,128 +2,228 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="1080" d:DesignHeight="760"
+        xmlns:desktop="clr-namespace:Dna.Client.Desktop"
+        mc:Ignorable="d" d:DesignWidth="1240" d:DesignHeight="820"
         x:Class="Dna.Client.Desktop.MainWindow"
         Title="Project DNA Client"
-        MinWidth="960"
-        MinHeight="680">
-    <Grid RowDefinitions="Auto,*" Margin="16">
-        <Border Background="#122033" CornerRadius="12" Padding="14">
-            <StackPanel Spacing="10">
-                <TextBlock FontSize="20" FontWeight="Bold" Text="Project DNA Client" />
-                <TextBlock Opacity="0.85" Text="单进程模式：窗口 UI + MCP/API 共用同一个 Client 进程。" />
+        MinWidth="1080"
+        MinHeight="760"
+        Background="#0A0A14">
+    <Grid RowDefinitions="Auto,*" Margin="18" RowSpacing="12">
+        <Menu>
+            <MenuItem Header="_项目">
+                <MenuItem Header="切换工作区..." Click="MenuSwitchWorkspace_OnClick" />
+                <MenuItem Header="刷新最近项目" Click="ReloadRecentProjects_OnClick" />
+                <Separator />
+                <MenuItem Header="退出" Click="MenuExit_OnClick" />
+            </MenuItem>
+        </Menu>
 
-                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="10">
-                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="项目目录" />
-                    <TextBox Grid.Row="0" Grid.Column="1" x:Name="ProjectRootBox" IsReadOnly="True" Watermark="请选择目标项目目录（根目录需包含 .project.dna）" />
-                    <Button Grid.Row="0" Grid.Column="2" Content="选择项目" Click="SelectProject_OnClick" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="项目名称" />
-                    <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ProjectNameBox" IsReadOnly="True" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Server 地址" />
-                    <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ServerBaseUrlBox" IsReadOnly="True" />
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" VerticalAlignment="Center" Text="Client 地址" />
-                    <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" x:Name="ClientAddressBox" IsReadOnly="True" />
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="MCP 地址" />
-                    <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" x:Name="McpAddressBox" IsReadOnly="True" />
-                </Grid>
-
-                <WrapPanel Orientation="Horizontal" ItemHeight="34" ItemWidth="150">
-                    <Button Content="启动 Client" Click="StartClient_OnClick" />
-                    <Button Content="停止 Client" Click="StopClient_OnClick" Margin="8,0,0,0" />
-                    <Button Content="刷新全部" Click="RefreshAll_OnClick" Margin="8,0,0,0" />
-                    <Button Content="复制 MCP 地址" Click="CopyMcp_OnClick" Margin="8,0,0,0" />
-                </WrapPanel>
-
-                <TextBlock x:Name="ProjectConfigPathText" Opacity="0.8" Text="配置文件: 未选择项目" />
-            </StackPanel>
-        </Border>
-
-        <TabControl Grid.Row="1" Margin="0,14,0,0">
-            <TabItem Header="概览">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="10" Spacing="10">
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="运行状态" />
-                        <TextBlock x:Name="SelectedProjectText" Text="目标项目: 未选择" />
-                        <TextBlock x:Name="ClientStateText" Text="Client: 检查中..." />
-                        <TextBlock x:Name="ServerStateText" Text="Server: 检查中..." />
-                        <TextBlock x:Name="AccessStateText" Text="权限: 检查中..." />
-                        <TextBlock x:Name="LaunchModeText" Opacity="0.86" Text="启动方式: 嵌入单进程" />
-                        <TextBlock x:Name="StatusText" TextWrapping="Wrap" />
+        <Grid Grid.Row="1">
+            <Border x:Name="ProjectLoadPanel" Background="#12122A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="14" Padding="18" IsVisible="True">
+                <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+                    <StackPanel>
+                        <TextBlock FontSize="28" FontWeight="Bold" Foreground="#E2E8F0" Text="加载项目工作区" />
+                        <TextBlock Margin="0,6,0,0" Foreground="#94A3B8" Text="选择包含 .project.dna 的项目目录，进入和 VSCode 类似的工作区视图。" />
                     </StackPanel>
-                </ScrollViewer>
-            </TabItem>
 
-            <TabItem Header="拓扑">
-                <Grid RowDefinitions="Auto,Auto,*" Margin="10">
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" ItemHeight="34" ItemWidth="140">
-                        <Button Content="刷新拓扑" Click="RefreshTopology_OnClick" />
-                    </WrapPanel>
-                    <TextBlock Grid.Row="1" x:Name="TopologySummaryText" Margin="0,8,0,8" Text="尚未加载拓扑。" TextWrapping="Wrap" />
-                    <ListBox Grid.Row="2" x:Name="TopologyListBox" />
-                </Grid>
-            </TabItem>
-
-            <TabItem Header="记忆">
-                <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10">
-                    <WrapPanel Grid.Row="0" Orientation="Horizontal" ItemHeight="34" ItemWidth="140">
-                        <Button Content="刷新记忆" Click="RefreshMemories_OnClick" />
+                    <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                        <Button Content="打开项目目录..." Click="OpenProjectFolder_OnClick" Margin="0,0,8,0" />
+                        <Button Content="加载所选项目" Click="LoadSelectedRecent_OnClick" Margin="0,0,8,0" />
+                        <Button Content="移除列表项" Click="RemoveSelectedRecent_OnClick" />
                     </WrapPanel>
 
-                    <Grid Grid.Row="1" ColumnDefinitions="Auto,200,Auto,*,Auto,140" Margin="0,10,0,8" ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="类型" />
-                        <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="2">
-                            <ComboBoxItem Content="Structural" />
-                            <ComboBoxItem Content="Semantic" />
-                            <ComboBoxItem Content="Episodic" />
-                            <ComboBoxItem Content="Working" />
-                            <ComboBoxItem Content="Procedural" />
-                        </ComboBox>
+                    <Grid Grid.Row="2" ColumnDefinitions="2.1*,1.4*" ColumnSpacing="12">
+                        <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="RecentCountText" FontWeight="SemiBold" Foreground="#E2E8F0" Text="最近项目（0）" />
+                                <ListBox x:Name="RecentProjectsListBox" SelectionChanged="RecentProjectsListBox_OnSelectionChanged" />
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="标签" />
-                        <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Watermark="#desktop-note,#decision" />
-
-                        <TextBlock Grid.Column="4" VerticalAlignment="Center" Text="discipline" />
-                        <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="engineering" />
+                        <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="项目信息" />
+                                <TextBlock x:Name="RecentProjectHintText" Foreground="#94A3B8" TextWrapping="Wrap" Text="尚未选择最近项目。你也可以点击“打开项目目录...”加载新项目。" />
+                                <TextBlock x:Name="LoaderStatusText" Foreground="#CBD5E1" TextWrapping="Wrap" Text="请选择项目。" />
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
-                    <StackPanel Grid.Row="2" Spacing="8">
-                        <TextBox x:Name="MemoryContentBox" AcceptsReturn="True" Height="92" TextWrapping="Wrap" Watermark="输入要写入的知识内容" />
-                        <WrapPanel Orientation="Horizontal" ItemHeight="34" ItemWidth="160">
-                            <Button Content="写入记忆" Click="AddMemory_OnClick" />
-                        </WrapPanel>
-                        <TextBlock x:Name="MemoryStatusText" Opacity="0.86" Text="记忆区就绪。" TextWrapping="Wrap" />
-                    </StackPanel>
-
-                    <ListBox Grid.Row="3" x:Name="MemoryListBox" Margin="0,8,0,0" />
+                    <TextBlock Grid.Row="3" Foreground="#64748B" Text="提示：进入工作区后，如需切换项目，仅通过顶部菜单“项目 -> 切换工作区...”操作。" />
                 </Grid>
-            </TabItem>
+            </Border>
 
-            <TabItem Header="工具与MCP">
-                <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10">
-                    <TextBlock Grid.Row="0" FontSize="16" FontWeight="SemiBold" Text="工具安装" />
-                    <WrapPanel Grid.Row="1" Margin="0,8,0,0" Orientation="Horizontal" ItemHeight="34" ItemWidth="160">
-                        <Button Content="安装 Cursor" Click="InstallCursor_OnClick" />
-                        <Button Content="安装 Codex" Click="InstallCodex_OnClick" Margin="8,0,0,0" />
-                        <Button Content="刷新工具状态" Click="RefreshTooling_OnClick" Margin="8,0,0,0" />
-                    </WrapPanel>
+            <Grid x:Name="WorkspacePanel" IsVisible="False" RowDefinitions="*">
+                <TabControl>
+                    <TabItem Header="概览">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="10" Spacing="12">
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
+                                    <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Foreground="#94A3B8" Text="目标项目" />
+                                            <TextBlock x:Name="SelectedProjectText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="目标项目: 未选择" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Foreground="#94A3B8" Text="Client 状态" />
+                                            <TextBlock x:Name="ClientStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="Client: 检查中..." />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="2" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Foreground="#94A3B8" Text="Server 状态" />
+                                            <TextBlock x:Name="ServerStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="Server: 检查中..." />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Grid.Column="3" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="12">
+                                        <StackPanel>
+                                            <TextBlock Foreground="#94A3B8" Text="权限" />
+                                            <TextBlock x:Name="AccessStateText" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="#E2E8F0" Text="权限: 检查中..." TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
 
-                    <StackPanel Grid.Row="2" Margin="0,10,0,10" Spacing="4">
-                        <TextBlock x:Name="CursorStateText" Text="Cursor: 检查中..." />
-                        <TextBlock x:Name="CodexStateText" Text="Codex: 检查中..." />
-                        <TextBlock x:Name="ToolingStatusText" Opacity="0.86" TextWrapping="Wrap" Text="工具区就绪。" />
-                        <WrapPanel Orientation="Horizontal" ItemHeight="34" ItemWidth="160">
-                            <Button Content="刷新 MCP 清单" Click="RefreshMcpTools_OnClick" />
-                        </WrapPanel>
-                        <TextBlock x:Name="McpSummaryText" Margin="0,6,0,0" Text="MCP 清单未加载。" TextWrapping="Wrap" />
-                    </StackPanel>
+                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="14">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock x:Name="LaunchModeText" Foreground="#94A3B8" Text="启动方式: 嵌入单进程" />
+                                        <TextBlock x:Name="StatusText" Foreground="#E2E8F0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
 
-                    <ListBox Grid.Row="3" x:Name="McpToolListBox" />
-                </Grid>
-            </TabItem>
-        </TabControl>
+                    <TabItem Header="拓扑">
+                        <Grid Margin="10" RowDefinitions="Auto,Auto,*" RowSpacing="10">
+                            <WrapPanel Grid.Row="0" Orientation="Horizontal">
+                                <Button Content="刷新拓扑" Click="RefreshTopology_OnClick" Margin="0,0,8,0" />
+                                <CheckBox x:Name="TopologyDependencyFilter" IsChecked="True" Content="依赖" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox x:Name="TopologyCompositionFilter" IsChecked="True" Content="组合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox x:Name="TopologyAggregationFilter" IsChecked="True" Content="聚合" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox x:Name="TopologyParentChildFilter" IsChecked="True" Content="父子" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <CheckBox x:Name="TopologyCollaborationFilter" IsChecked="True" Content="协作" Margin="0,0,8,0" Checked="TopologyFilter_OnChanged" Unchecked="TopologyFilter_OnChanged" />
+                                <TextBlock VerticalAlignment="Center" Foreground="#94A3B8" Text="拖拽节点/画布，滚轮缩放，点击节点看详情" />
+                            </WrapPanel>
+
+                            <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Foreground="#94A3B8" Text="节点" />
+                                        <TextBlock x:Name="StatModulesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#4ADE80" Text="-" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Foreground="#94A3B8" Text="依赖" />
+                                        <TextBlock x:Name="StatDependenciesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#60A5FA" Text="-" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Foreground="#94A3B8" Text="协作" />
+                                        <TextBlock x:Name="StatCollaborationText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#C084FC" Text="-" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="3" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="10" Padding="10">
+                                    <StackPanel>
+                                        <TextBlock Foreground="#94A3B8" Text="部门" />
+                                        <TextBlock x:Name="StatDisciplinesText" Margin="0,4,0,0" FontSize="22" FontWeight="Bold" Foreground="#FBBF24" Text="-" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <Grid Grid.Row="2" ColumnDefinitions="2.4*,1.2*" ColumnSpacing="10">
+                                <Border Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="8">
+                                    <desktop:TopologyGraphControl x:Name="TopologyGraph" />
+                                </Border>
+
+                                <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1F2A44" BorderThickness="1" CornerRadius="12" Padding="10">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel Spacing="10">
+                                            <TextBlock x:Name="TopologySummaryText" Foreground="#94A3B8" TextWrapping="Wrap" Text="尚未加载拓扑。" />
+
+                                            <Border Background="#111B30" BorderBrush="#23324E" BorderThickness="1" CornerRadius="10" Padding="10">
+                                                <StackPanel Spacing="6">
+                                                    <TextBlock x:Name="TopologyDetailTitle" FontWeight="Bold" Foreground="#E2E8F0" Text="未选择节点" />
+                                                    <TextBlock x:Name="TopologyDetailMeta" Foreground="#94A3B8" TextWrapping="Wrap" Text="-" />
+                                                    <TextBlock x:Name="TopologyDetailSummary" Foreground="#CBD5E1" TextWrapping="Wrap" Text="点击左侧节点查看模块详情。" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="关联关系" />
+                                            <ListBox x:Name="TopologyRelationListBox" MaxHeight="220" />
+
+                                            <TextBlock FontWeight="SemiBold" Foreground="#E2E8F0" Text="模块清单" />
+                                            <ListBox x:Name="TopologyListBox" MaxHeight="320" SelectionChanged="TopologyListBox_OnSelectionChanged" />
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="记忆">
+                        <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
+                            <WrapPanel Grid.Row="0" Orientation="Horizontal" ItemHeight="34" ItemWidth="140">
+                                <Button Content="刷新记忆" Click="RefreshMemories_OnClick" />
+                            </WrapPanel>
+
+                            <Grid Grid.Row="1" ColumnDefinitions="Auto,200,Auto,*,Auto,140" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Foreground="#94A3B8" Text="类型" />
+                                <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="2">
+                                    <ComboBoxItem Content="Structural" />
+                                    <ComboBoxItem Content="Semantic" />
+                                    <ComboBoxItem Content="Episodic" />
+                                    <ComboBoxItem Content="Working" />
+                                    <ComboBoxItem Content="Procedural" />
+                                </ComboBox>
+
+                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#94A3B8" Text="标签" />
+                                <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Watermark="#desktop-note,#decision" />
+
+                                <TextBlock Grid.Column="4" VerticalAlignment="Center" Foreground="#94A3B8" Text="discipline" />
+                                <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="engineering" />
+                            </Grid>
+
+                            <StackPanel Grid.Row="2" Spacing="8">
+                                <TextBox x:Name="MemoryContentBox" AcceptsReturn="True" Height="100" TextWrapping="Wrap" Watermark="输入要写入的知识内容" />
+                                <WrapPanel Orientation="Horizontal" ItemHeight="34" ItemWidth="160">
+                                    <Button Content="写入记忆" Click="AddMemory_OnClick" />
+                                </WrapPanel>
+                                <TextBlock x:Name="MemoryStatusText" Foreground="#94A3B8" Text="记忆区就绪。" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <ListBox Grid.Row="3" x:Name="MemoryListBox" Margin="0,4,0,0" />
+                        </Grid>
+                    </TabItem>
+
+                    <TabItem Header="工具与MCP">
+                        <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="10" RowSpacing="8">
+                            <TextBlock Grid.Row="0" FontSize="16" FontWeight="SemiBold" Foreground="#E2E8F0" Text="工具安装" />
+                            <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                                <Button Content="安装 Cursor" Click="InstallCursor_OnClick" Margin="0,0,8,0" />
+                                <Button Content="安装 Codex" Click="InstallCodex_OnClick" Margin="0,0,8,0" />
+                                <Button Content="刷新工具状态" Click="RefreshTooling_OnClick" />
+                            </WrapPanel>
+
+                            <StackPanel Grid.Row="2" Spacing="4">
+                                <TextBlock x:Name="CursorStateText" Foreground="#E2E8F0" Text="Cursor: 检查中..." />
+                                <TextBlock x:Name="CodexStateText" Foreground="#E2E8F0" Text="Codex: 检查中..." />
+                                <TextBlock x:Name="ToolingStatusText" Foreground="#94A3B8" TextWrapping="Wrap" Text="工具区就绪。" />
+                                <WrapPanel Orientation="Horizontal">
+                                    <Button Content="刷新 MCP 清单" Click="RefreshMcpTools_OnClick" />
+                                </WrapPanel>
+                                <TextBlock x:Name="McpSummaryText" Margin="0,4,0,0" Foreground="#94A3B8" Text="MCP 清单未加载。" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <ListBox Grid.Row="3" x:Name="McpToolListBox" />
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>
