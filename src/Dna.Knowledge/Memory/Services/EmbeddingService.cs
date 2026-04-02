@@ -67,7 +67,7 @@ internal class EmbeddingService
 
         try
         {
-            var client = _httpClientFactory.CreateClient("embedding");
+            var app = _httpClientFactory.CreateClient("embedding");
 
             var baseUrl = !string.IsNullOrEmpty(provider.EmbeddingBaseUrl)
                 ? provider.EmbeddingBaseUrl
@@ -84,7 +84,7 @@ internal class EmbeddingService
             };
             request.Headers.Add("Authorization", $"Bearer {provider.ApiKey}");
 
-            var response = await client.SendAsync(request);
+            var response = await app.SendAsync(request);
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<EmbeddingResponse>(JsonOpts);

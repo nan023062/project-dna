@@ -1,4 +1,4 @@
-using Dna.Knowledge.Models;
+using Dna.Knowledge;
 using Dna.Memory.Models;
 using Dna.Memory.Store;
 using Microsoft.Extensions.Logging;
@@ -12,18 +12,22 @@ namespace Dna.Memory.Services;
 /// </summary>
 internal class MemoryWriter
 {
+    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
     private readonly MemoryStore _store;
+    private readonly ITopoGraphStore _topoGraphStore;
     private readonly EmbeddingService _embeddingService;
     private readonly VectorIndex _vectorIndex;
     private readonly ILogger<MemoryWriter> _logger;
 
     public MemoryWriter(
         MemoryStore store,
+        ITopoGraphStore topoGraphStore,
         EmbeddingService embeddingService,
         VectorIndex vectorIndex,
         ILogger<MemoryWriter> logger)
     {
         _store = store;
+        _topoGraphStore = topoGraphStore;
         _embeddingService = embeddingService;
         _vectorIndex = vectorIndex;
         _logger = logger;
@@ -33,7 +37,7 @@ internal class MemoryWriter
     public async Task<MemoryEntry> RememberAsync(RememberRequest request)
     {
         ValidateSystemTagPayload(request.Tags, request.Content);
-        var nodeId = _store.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
+        var nodeId = _topoGraphStore.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
 
         var entry = new MemoryEntry
         {
@@ -49,6 +53,7 @@ internal class MemoryWriter
             PathPatterns = request.PathPatterns ?? [],
             Tags = request.Tags,
             ParentId = request.ParentId,
+            Stage = request.Stage ?? MemoryStage.LongTerm,
             Importance = request.Importance,
             ExternalSourceUrl = request.ExternalSourceUrl,
             ExternalSourceId = request.ExternalSourceId,
@@ -74,7 +79,7 @@ internal class MemoryWriter
     public async Task<MemoryEntry> UpdateAsync(string memoryId, RememberRequest request)
     {
         ValidateSystemTagPayload(request.Tags, request.Content);
-        var nodeId = _store.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
+        var nodeId = _topoGraphStore.ResolveNodeIdCandidates(request.NodeId, strict: true).FirstOrDefault();
 
         var existing = _store.GetById(memoryId);
         if (existing == null)
@@ -94,6 +99,7 @@ internal class MemoryWriter
             PathPatterns = request.PathPatterns ?? [],
             Tags = request.Tags,
             ParentId = request.ParentId,
+            Stage = request.Stage ?? existing.Stage,
             Importance = request.Importance,
             ExternalSourceUrl = request.ExternalSourceUrl,
             ExternalSourceId = request.ExternalSourceId,
@@ -184,7 +190,7 @@ internal class MemoryWriter
     {
         try
         {
-            var payload = JsonSerializer.Deserialize<T>(content);
+            var payload = JsonSerializer.Deserialize<T>(content, JsonOpts);
             return payload ?? throw new InvalidOperationException($"标签 {tag} 的 content 不能为空 JSON。");
         }
         catch (JsonException ex)

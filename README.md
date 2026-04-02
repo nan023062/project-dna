@@ -8,14 +8,14 @@ Project DNA gives agents project-level cognition: structure, dependencies, const
 
 ## Current Product Shape
 
-Project DNA is currently documented and supported as a **single desktop Client**:
+Project DNA is currently documented and supported as a **single desktop App**:
 
 - one process
 - one window
 - one mental model
 - one lifecycle
 
-The embedded local runtime lives inside the desktop Client process on `http://127.0.0.1:5052`.
+The embedded local runtime lives inside the desktop App process on `http://127.0.0.1:5052`.
 
 That local runtime serves three surfaces at the same time:
 
@@ -28,7 +28,7 @@ That local runtime serves three surfaces at the same time:
 ```text
 User
   |
-  +--> Agentic OS Client Desktop (single window)
+  +--> Agentic OS App Desktop (single window)
          - project loader
          - topology preview
          - knowledge preview
@@ -47,15 +47,15 @@ User
 ### 1. Build
 
 ```bash
-dotnet build src/Client/Client.csproj
+dotnet build src/App/App.csproj
 ```
 
-### 2. Start the Desktop Client
+### 2. Start the Desktop App
 
 Development:
 
 ```bash
-dotnet run --no-launch-profile --project src/Client
+dotnet run --no-launch-profile --project src/App
 ```
 
 Published executable:
@@ -66,7 +66,7 @@ publish/agentic-os.exe
 
 ### 3. Prepare a Project
 
-The desktop Client loads a target project folder that contains:
+The desktop App loads a target project folder that contains:
 
 ```text
 .agentic-os/project.json
@@ -82,12 +82,12 @@ Minimal example:
 
 Notes:
 
-- the legacy `serverBaseUrl` field may still appear in old files, but the current Client-only runtime does not require it
-- the Client opens its local runtime only after the project is loaded
+- the legacy `serverBaseUrl` field may still appear in old files, but the current App-only runtime does not require it
+- the App opens its local runtime only after the project is loaded
 
 ### 4. Connect IDE Agents
 
-After the desktop Client has loaded a project, point your IDE MCP config to:
+After the desktop App has loaded a project, point your IDE MCP config to:
 
 ```json
 {
@@ -101,17 +101,17 @@ After the desktop Client has loaded a project, point your IDE MCP config to:
 
 ## Project-Scoped State
 
-The Client stores project-scoped state under `.agentic-os/`:
+The App stores project-scoped state under `.agentic-os/`:
 
 - `project.json`: project identity
-- `llm.json`: Client runtime LLM config reservation
-- `logs/`: Client logs
-- `client-workspaces.json`: workspace state
+- `llm.json`: App runtime LLM config reservation
+- `logs/`: App logs
+- `app-workspaces.json`: workspace state
 - `agent-shell/agent-shell-state.json`: local agent shell state
 
 The current local knowledge store is also initialized from the project-scoped metadata root.
 
-## Client Runtime Surface
+## App Runtime Surface
 
 The embedded local runtime currently exposes:
 
@@ -120,16 +120,16 @@ The embedded local runtime currently exposes:
 - `/api/topology`
 - `/api/connection/access`
 - `/api/memory/*`
-- `/api/client/status`
-- `/api/client/workspaces/*`
-- `/api/client/tooling/*`
+- `/api/app/status`
+- `/api/app/workspaces/*`
+- `/api/app/tooling/*`
 - `/agent/*`
 
 This surface exists to support the desktop host, CLI, and IDE integrations. It is not a separate browser product.
 
 ## CLI
 
-The desktop Client ships with a local CLI entry:
+The desktop App ships with a local CLI entry:
 
 ```bash
 agentic-os cli status
@@ -176,11 +176,11 @@ http://127.0.0.1:5052
 | `condense_module_knowledge` | Condense one module into `NodeKnowledge` |
 | `condense_all_module_knowledge` | Run full condensation for all modules |
 
-The Client also exposes `GET /api/client/mcp/tools` for UI and automation usage.
+The App also exposes `GET /api/app/mcp/tools` for UI and automation usage.
 
 ## Architecture Notes
 
-- the supported runtime is **Client-only**
+- the supported runtime is **App-only**
 - the embedded runtime is local to the desktop process
 - desktop UI, CLI, and MCP all converge on the same local `:5052` surface
 - topology work is currently being split into scene, layout, render, cache, and LOD layers
@@ -189,7 +189,7 @@ See:
 
 - [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
 - [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
-- [docs/architecture/client-topology-upgrade-plan.md](docs/architecture/client-topology-upgrade-plan.md)
+- [docs/architecture/app-topology-upgrade-plan.md](docs/architecture/app-topology-upgrade-plan.md)
 
 ## Contributing
 

@@ -20,6 +20,7 @@ public sealed class RememberRequest
     public List<string>? PathPatterns { get; init; }
     public List<string> Tags { get; init; } = [];
     public string? ParentId { get; init; }
+    public MemoryStage? Stage { get; init; }
     public double Importance { get; init; } = 0.5;
     public string? ExternalSourceUrl { get; init; }
     public string? ExternalSourceId { get; init; }

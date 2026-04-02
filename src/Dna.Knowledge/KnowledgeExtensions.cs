@@ -1,10 +1,12 @@
+using Dna.Knowledge.Workspace;
+using Dna.Memory.Store;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Dna.Knowledge;
 
 /// <summary>
-/// 知识图谱 DI 注册 — 三引擎架构，共享底层 MemoryStore。
+/// 知识底座 DI 注册，组装四层模块并共享底层存储实例。
 /// </summary>
 public static class KnowledgeGraphExtensions
 {
@@ -12,11 +14,20 @@ public static class KnowledgeGraphExtensions
     {
         services.AddSingleton(sp => new DnaServiceHolder(sp));
 
+        services.AddSingleton<WorkspaceEngine>(sp => sp.GetRequiredService<DnaServiceHolder>().Workspace);
+        services.AddSingleton<IWorkspaceEngine>(sp => sp.GetRequiredService<WorkspaceEngine>());
+
+        services.AddSingleton<MemoryStore>(sp => sp.GetRequiredService<DnaServiceHolder>().Store);
+        services.AddSingleton<TopoGraphStore>(sp => sp.GetRequiredService<DnaServiceHolder>().TopoGraphStore);
+        services.AddSingleton<ITopoGraphStore>(sp => sp.GetRequiredService<TopoGraphStore>());
+        services.AddSingleton<ITopoGraphContextProvider>(sp => new MemoryTopoGraphContextProvider(sp.GetRequiredService<MemoryStore>()));
+
         services.AddSingleton<GraphEngine>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
+            var store = sp.GetRequiredService<ITopoGraphStore>();
+            var contextProvider = sp.GetRequiredService<ITopoGraphContextProvider>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            var engine = new GraphEngine(holder, loggerFactory.CreateLogger<GraphEngine>());
+            var engine = new GraphEngine(store, contextProvider, loggerFactory.CreateLogger<GraphEngine>());
             var adapter = sp.GetService<IProjectAdapter>();
             if (adapter != null)
                 engine.SetAdapter(adapter);
@@ -26,17 +37,18 @@ public static class KnowledgeGraphExtensions
 
         services.AddSingleton<IMemoryEngine>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
+            var store = sp.GetRequiredService<MemoryStore>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new MemoryEngine(holder, loggerFactory.CreateLogger<MemoryEngine>());
+            return new MemoryEngine(store, loggerFactory.CreateLogger<MemoryEngine>());
         });
 
         services.AddSingleton<IGovernanceEngine>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
-            var graph = sp.GetRequiredService<GraphEngine>();
+            var memoryStore = sp.GetRequiredService<MemoryStore>();
+            var topoGraphStore = sp.GetRequiredService<ITopoGraphStore>();
+            var graph = sp.GetRequiredService<IGraphEngine>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new GovernanceEngine(holder, graph, loggerFactory);
+            return new GovernanceEngine(memoryStore, topoGraphStore, graph, loggerFactory);
         });
 
         return services;

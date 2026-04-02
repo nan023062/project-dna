@@ -9,44 +9,33 @@ namespace Dna.Knowledge;
 /// </summary>
 public sealed class GovernanceEngine : IGovernanceEngine
 {
-    private readonly GraphEngine _graphEngine;
+    private readonly IGraphEngine _graphEngine;
     private readonly FreshnessChecker _freshnessChecker;
     private readonly MemoryMaintainer _memoryMaintainer;
 
-    internal GovernanceEngine(DnaServiceHolder holder, GraphEngine graphEngine, ILoggerFactory loggerFactory)
+    public GovernanceEngine(MemoryStore memoryStore, ITopoGraphStore topoGraphStore, IGraphEngine graphEngine, ILoggerFactory loggerFactory)
     {
         _graphEngine = graphEngine;
-        _freshnessChecker = new FreshnessChecker(holder.Store, loggerFactory.CreateLogger<FreshnessChecker>());
-        _memoryMaintainer = new MemoryMaintainer(holder.Store, loggerFactory.CreateLogger<MemoryMaintainer>());
+        _freshnessChecker = new FreshnessChecker(memoryStore, loggerFactory.CreateLogger<FreshnessChecker>());
+        _memoryMaintainer = new MemoryMaintainer(memoryStore, topoGraphStore, loggerFactory.CreateLogger<MemoryMaintainer>());
     }
 
     public GovernanceReport ValidateArchitecture()
-        => _graphEngine.ValidateArchitectureInternal();
-
-    public int CheckFreshness()
     {
-        var topology = _graphEngine.GetTopology();
-        return _freshnessChecker.CheckAll(topology);
+        _graphEngine.BuildTopology();
+        return _graphEngine.ValidateArchitecture();
     }
 
-    public int DetectMemoryConflicts()
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.DetectConflicts(topology);
-    }
+    public int CheckFreshness() => _freshnessChecker.CheckAll();
+
+    public int DetectMemoryConflicts() => _memoryMaintainer.DetectConflicts();
 
     public int ArchiveStaleMemories(TimeSpan staleThreshold)
         => _memoryMaintainer.ArchiveStaleMemories(staleThreshold);
 
     public Task<KnowledgeCondenseResult> CondenseNodeKnowledgeAsync(string nodeIdOrName, int maxSourceMemories = 200)
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.CondenseNodeKnowledgeAsync(topology, nodeIdOrName, maxSourceMemories);
-    }
+        => _memoryMaintainer.CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories);
 
     public Task<List<KnowledgeCondenseResult>> CondenseAllNodesAsync(int maxSourceMemories = 200)
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.CondenseAllNodesAsync(topology, maxSourceMemories);
-    }
+        => _memoryMaintainer.CondenseAllNodesAsync(maxSourceMemories);
 }

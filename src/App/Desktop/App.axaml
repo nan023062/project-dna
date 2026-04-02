@@ -1,0 +1,210 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Dna.App.Desktop.App"
+             RequestedThemeVariant="Light">
+    <Application.Styles>
+        <FluentTheme />
+        <Style Selector="Window">
+            <Setter Property="Background" Value="#F3F5F9" />
+            <Setter Property="FontFamily" Value="avares://Avalonia.Fonts.Inter#Inter" />
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="avares://Avalonia.Fonts.Inter#Inter" />
+        </Style>
+        <Style Selector="Border.workspaceShell">
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="24" />
+        </Style>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="18" />
+        </Style>
+        <Style Selector="Border.cardSoft">
+            <Setter Property="Background" Value="#FCFCFD" />
+            <Setter Property="BorderBrush" Value="#EAECF0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="16" />
+        </Style>
+        <Style Selector="Border.chatShell">
+            <Setter Property="MinWidth" Value="320" />
+        </Style>
+        <Style Selector="Border.chatBubble">
+            <Setter Property="CornerRadius" Value="16" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="MaxWidth" Value="320" />
+        </Style>
+        <Style Selector="Border.chatBubble.user">
+            <Setter Property="Background" Value="#2F6FED" />
+            <Setter Property="BorderBrush" Value="#2F6FED" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="Border.chatBubble.assistant">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="TextBlock.chatBubbleText.user">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+        <Style Selector="TextBlock.chatBubbleText.assistant">
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="Foreground" Value="#2F6FED" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.heroTitle">
+            <Setter Property="Foreground" Value="#101828" />
+            <Setter Property="FontSize" Value="30" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.sectionTitle">
+            <Setter Property="Foreground" Value="#101828" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.cardTitle">
+            <Setter Property="Foreground" Value="#101828" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.primaryText">
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="TextBlock.secondaryText">
+            <Setter Property="Foreground" Value="#475467" />
+        </Style>
+        <Style Selector="TextBlock.mutedText">
+            <Setter Property="Foreground" Value="#667085" />
+        </Style>
+        <Style Selector="TextBlock.tertiaryText">
+            <Setter Property="Foreground" Value="#98A2B3" />
+        </Style>
+        <Style Selector="TextBlock.metricValue">
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.formLabel">
+            <Setter Property="Foreground" Value="#667085" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="Button:pointerover">
+            <Setter Property="Background" Value="#EEF4FF" />
+            <Setter Property="BorderBrush" Value="#B8CEFF" />
+        </Style>
+        <Style Selector="Button:pressed">
+            <Setter Property="Background" Value="#E7F0FF" />
+        </Style>
+        <Style Selector="Button.primaryAction">
+            <Setter Property="Background" Value="#2F6FED" />
+            <Setter Property="BorderBrush" Value="#2F6FED" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.primaryAction:pointerover">
+            <Setter Property="Background" Value="#2159CF" />
+            <Setter Property="BorderBrush" Value="#2159CF" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.primaryAction:pressed">
+            <Setter Property="Background" Value="#1D4FB8" />
+            <Setter Property="BorderBrush" Value="#1D4FB8" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="Button.chatModeButton">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="Foreground" Value="#475467" />
+        </Style>
+        <Style Selector="Button.chatModeButton.active">
+            <Setter Property="Background" Value="#E7F0FF" />
+            <Setter Property="BorderBrush" Value="#B8CEFF" />
+            <Setter Property="Foreground" Value="#175CD3" />
+        </Style>
+        <Style Selector="Button.quietIcon">
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="Foreground" Value="#667085" />
+        </Style>
+        <Style Selector="Button.quietIcon:pointerover">
+            <Setter Property="Background" Value="#FFF1F3" />
+            <Setter Property="BorderBrush" Value="#F97066" />
+            <Setter Property="Foreground" Value="#C01048" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="ListBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+        </Style>
+        <Style Selector="ListBoxItem:pointerover">
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#B8CEFF" />
+        </Style>
+        <Style Selector="ListBoxItem:selected">
+            <Setter Property="Background" Value="#E7F0FF" />
+            <Setter Property="BorderBrush" Value="#B8CEFF" />
+        </Style>
+        <Style Selector="TabControl">
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="TabItem">
+            <Setter Property="Background" Value="#F8FAFC" />
+            <Setter Property="BorderBrush" Value="#E4E7EC" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#667085" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Padding" Value="14,10" />
+        </Style>
+        <Style Selector="TabItem:pointerover">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#B8CEFF" />
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="TabItem:selected">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D0D5DD" />
+            <Setter Property="Foreground" Value="#101828" />
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="#475467" />
+        </Style>
+        <Style Selector="CheckBox.filterChip">
+            <Setter Property="Background" Value="#FFFFFF" />
+        </Style>
+    </Application.Styles>
+</Application>

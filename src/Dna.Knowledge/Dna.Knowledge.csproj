@@ -1,20 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <RootNamespace>Dna.KnowledgeGraph</RootNamespace>
-        <AssemblyName>Dna.KnowledgeGraph</AssemblyName>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Dna.KnowledgeGraph</RootNamespace>
+    <AssemblyName>Dna.KnowledgeGraph</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\Dna.Core\Dna.Core.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Dna.Core\Dna.Core.csproj" />
+  </ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.5" />
+  </ItemGroup>
 
 </Project>

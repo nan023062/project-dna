@@ -8,6 +8,7 @@ namespace Dna.Core.Config;
 /// </summary>
 public class ProjectConfig
 {
+    private const string MetadataDirectoryName = ".agentic-os";
     private static readonly string ConfigDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dna");
 
@@ -18,6 +19,9 @@ public class ProjectConfig
 
     public string DefaultProjectRoot => _projectRoot;
     public string DnaStorePath => _storePath;
+    public string MetadataRootPath => _storePath;
+    public string MemoryStorePath => string.IsNullOrWhiteSpace(_storePath) ? string.Empty : ResolveMemoryStorePath(_storePath);
+    public string KnowledgeStorePath => string.IsNullOrWhiteSpace(_storePath) ? string.Empty : ResolveKnowledgeStorePath(_storePath);
     public bool HasStore => !string.IsNullOrEmpty(_storePath);
 
     public ProjectConfig()
@@ -60,9 +64,17 @@ public class ProjectConfig
             return Path.GetFullPath(providedStore);
         if (!string.IsNullOrWhiteSpace(_storePath))
             return Path.GetFullPath(_storePath);
-        var projectName = Path.GetFileName(projectRoot);
-        return Path.Combine(ConfigDir, "projects", projectName);
+        return ResolveMetadataRootPath(projectRoot);
     }
+
+    public static string ResolveMetadataRootPath(string projectRoot)
+        => Path.Combine(Path.GetFullPath(projectRoot), MetadataDirectoryName);
+
+    public static string ResolveMemoryStorePath(string metadataRootPath)
+        => Path.Combine(Path.GetFullPath(metadataRootPath), "memory");
+
+    public static string ResolveKnowledgeStorePath(string metadataRootPath)
+        => Path.Combine(Path.GetFullPath(metadataRootPath), "knowledge");
 
     /// <summary>
     /// 任务级节流间隔（毫秒）。用于 Agent 每次工具调用后主动等待，降低 LLM 429 风险。
@@ -164,7 +176,7 @@ public class ProjectConfig
         {
             return new SetProjectResult(true, $"检测到你选择的是子目录，已自动修正项目根目录：{normalized}");
         }
-        return new SetProjectResult(true, $"项目已切换到：{normalized}（存储路径：{resolvedStore}）");
+        return new SetProjectResult(true, $"项目已切换到：{normalized}（元数据根：{resolvedStore}）");
     }
 
     /// <summary>

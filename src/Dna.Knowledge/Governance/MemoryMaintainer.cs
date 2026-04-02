@@ -1,3 +1,4 @@
+using Dna.Knowledge;
 using Dna.Memory.Models;
 using Dna.Memory.Store;
 using Microsoft.Extensions.Logging;
@@ -11,24 +12,26 @@ namespace Dna.Knowledge.Governance;
 /// </summary>
 internal class MemoryMaintainer
 {
-    private readonly MemoryStore _store;
+    private readonly MemoryStore _memoryStore;
+    private readonly ITopoGraphStore _topoGraphStore;
     private readonly ILogger<MemoryMaintainer> _logger;
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    public MemoryMaintainer(MemoryStore store, ILogger<MemoryMaintainer> logger)
+    public MemoryMaintainer(MemoryStore memoryStore, ITopoGraphStore topoGraphStore, ILogger<MemoryMaintainer> logger)
     {
-        _store = store;
+        _memoryStore = memoryStore;
+        _topoGraphStore = topoGraphStore;
         _logger = logger;
     }
 
     /// <summary>
     /// 执行冲突检测，给互相矛盾的记忆打上 #conflict 标签
     /// </summary>
-    public int DetectConflicts(TopologySnapshot topology)
+    public int DetectConflicts()
     {
         var conflictCount = 0;
         
-        var activeMemories = _store.Query(new MemoryFilter
+        var activeMemories = _memoryStore.Query(new MemoryFilter
         {
             Freshness = FreshnessFilter.FreshAndAging,
             Limit = 10000
@@ -48,7 +51,7 @@ internal class MemoryMaintainer
                 if (!memory.Tags.Contains("#conflict"))
                 {
                     var updatedTags = new List<string>(memory.Tags) { "#conflict" };
-                    _store.UpdateTags(memory.Id, updatedTags);
+                    _memoryStore.UpdateTags(memory.Id, updatedTags);
                     conflictCount++;
                     _logger.LogWarning("检测到模块 [{ModuleId}] 存在冗余的 Identity 记忆 [{MemoryId}]，已标记为 #conflict", group.Key, memory.Id);
                 }
@@ -66,7 +69,7 @@ internal class MemoryMaintainer
         var archivedCount = 0;
         var thresholdDate = DateTime.UtcNow - staleThreshold;
 
-        var staleMemories = _store.Query(new MemoryFilter
+        var staleMemories = _memoryStore.Query(new MemoryFilter
         {
             Freshness = FreshnessFilter.IncludeStale,
             Limit = 10000
@@ -77,7 +80,7 @@ internal class MemoryMaintainer
             var lastActive = memory.LastVerifiedAt ?? memory.CreatedAt;
             if (lastActive < thresholdDate)
             {
-                _store.UpdateFreshness(memory.Id, FreshnessStatus.Archived);
+                _memoryStore.UpdateFreshness(memory.Id, FreshnessStatus.Archived);
                 archivedCount++;
                 _logger.LogInformation("记忆 [{Id}] 长期处于 Stale 状态，已自动归档", memory.Id);
             }
@@ -90,17 +93,16 @@ internal class MemoryMaintainer
     /// 按模块压缩记忆：将短期记忆提炼为模块 Identity，并归档已提炼的 Episodic/Working 记忆。
     /// </summary>
     public async Task<KnowledgeCondenseResult> CondenseNodeKnowledgeAsync(
-        TopologySnapshot topology,
         string nodeIdOrName,
         int maxSourceMemories = 200)
     {
         if (string.IsNullOrWhiteSpace(nodeIdOrName))
             throw new ArgumentException("nodeIdOrName 不能为空。", nameof(nodeIdOrName));
 
-        var node = ResolveNode(topology, nodeIdOrName.Trim())
+        var node = ResolveNode(nodeIdOrName.Trim())
             ?? throw new InvalidOperationException($"节点不存在: {nodeIdOrName}");
 
-        var source = _store.Query(new MemoryFilter
+        var source = _memoryStore.Query(new MemoryFilter
         {
             NodeId = node.Id,
             Freshness = FreshnessFilter.FreshAndAging,
@@ -139,7 +141,7 @@ internal class MemoryMaintainer
             Importance = 0.9
         };
 
-        var condensed = await _store.RememberAsync(identityRequest);
+        var condensed = await _memoryStore.RememberAsync(identityRequest);
 
         // 归档已提炼的短期记忆（避免持续膨胀）
         var archivedCount = 0;
@@ -148,13 +150,13 @@ internal class MemoryMaintainer
             if (m.Id == condensed.Id) continue;
             if (m.Type is MemoryType.Episodic or MemoryType.Working)
             {
-                _store.UpdateFreshness(m.Id, FreshnessStatus.Archived);
+                _memoryStore.UpdateFreshness(m.Id, FreshnessStatus.Archived);
                 archivedCount++;
             }
         }
 
         // 历史 identity 仅保留最新一条为 Fresh（其余归档）
-        var identities = _store.Query(new MemoryFilter
+        var identities = _memoryStore.Query(new MemoryFilter
         {
             NodeId = node.Id,
             Tags = [WellKnownTags.Identity],
@@ -165,12 +167,12 @@ internal class MemoryMaintainer
         {
             if (old.Freshness != FreshnessStatus.Archived)
             {
-                _store.UpdateFreshness(old.Id, FreshnessStatus.Archived);
+                _memoryStore.UpdateFreshness(old.Id, FreshnessStatus.Archived);
             }
         }
 
         var knowledgeView = BuildNodeKnowledgeView(identity, source, condensed);
-        _store.UpsertNodeKnowledge(node.Id, knowledgeView);
+        _topoGraphStore.UpsertNodeKnowledge(node.Id, knowledgeView);
 
         _logger.LogInformation("模块知识压缩完成: node={Node} source={Source} archived={Archived} identity={IdentityId}",
             node.Name, source.Count, archivedCount, condensed.Id);
@@ -190,15 +192,14 @@ internal class MemoryMaintainer
     /// 全量压缩所有模块节点。
     /// </summary>
     public async Task<List<KnowledgeCondenseResult>> CondenseAllNodesAsync(
-        TopologySnapshot topology,
         int maxSourceMemories = 200)
     {
         var results = new List<KnowledgeCondenseResult>();
-        foreach (var node in topology.Nodes.Where(n => n.Type is NodeType.Technical or NodeType.Team))
+        foreach (var node in GetGovernanceTargets())
         {
             try
             {
-                var result = await CondenseNodeKnowledgeAsync(topology, node.Id, maxSourceMemories);
+                var result = await CondenseNodeKnowledgeAsync(node.Id, maxSourceMemories);
                 results.Add(result);
             }
             catch (Exception ex)
@@ -209,14 +210,50 @@ internal class MemoryMaintainer
         return results;
     }
 
-    private static KnowledgeNode? ResolveNode(TopologySnapshot topology, string nodeIdOrName)
+    private GovernanceTargetNode? ResolveNode(string nodeIdOrName)
     {
-        return topology.Nodes.FirstOrDefault(n =>
-            string.Equals(n.Id, nodeIdOrName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(n.Name, nodeIdOrName, StringComparison.OrdinalIgnoreCase));
+        var candidates = _topoGraphStore.ResolveNodeIdCandidates(nodeIdOrName, strict: true);
+        var manifest = _topoGraphStore.GetModulesManifest();
+
+        foreach (var candidate in candidates)
+        {
+            foreach (var (discipline, modules) in manifest.Disciplines)
+            {
+                var match = modules.FirstOrDefault(module =>
+                    string.Equals(module.Id, candidate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(module.Name, candidate, StringComparison.OrdinalIgnoreCase));
+                if (match == null)
+                    continue;
+
+                return ToGovernanceTarget(match, discipline);
+            }
+        }
+
+        return null;
     }
 
-    private static IdentityPayload BuildIdentityPayload(KnowledgeNode node, List<MemoryEntry> source)
+    private IEnumerable<GovernanceTargetNode> GetGovernanceTargets()
+    {
+        var manifest = _topoGraphStore.GetModulesManifest();
+        foreach (var (discipline, modules) in manifest.Disciplines)
+        {
+            foreach (var module in modules)
+                yield return ToGovernanceTarget(module, discipline);
+        }
+    }
+
+    private static GovernanceTargetNode ToGovernanceTarget(ModuleRegistration module, string discipline)
+    {
+        return new GovernanceTargetNode(
+            module.Id,
+            module.Name,
+            module.IsCrossWorkModule ? NodeType.Team : NodeType.Technical,
+            discipline,
+            module.Summary,
+            null);
+    }
+
+    private static IdentityPayload BuildIdentityPayload(GovernanceTargetNode node, List<MemoryEntry> source)
     {
         var previousIdentity = source
             .Where(m => m.Tags.Contains(WellKnownTags.Identity, StringComparer.OrdinalIgnoreCase))
@@ -370,4 +407,12 @@ internal class MemoryMaintainer
             MemoryIds = memoryIds
         };
     }
+
+    private sealed record GovernanceTargetNode(
+        string Id,
+        string Name,
+        NodeType Type,
+        string? Discipline,
+        string? Summary,
+        string? Contract);
 }

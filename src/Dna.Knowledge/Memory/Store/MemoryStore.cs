@@ -1,5 +1,4 @@
 using Dna.Knowledge;
-using Dna.Knowledge.Models;
 using Dna.Memory.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +10,7 @@ namespace Dna.Memory.Store;
 /// 记忆存储 — 纯 SQLite 存储引擎。
 /// memory.db 存储索引/元数据/向量/FTS，记忆内容不再落盘为 JSON 文件。
 /// </summary>
-internal partial class MemoryStore : IDisposable
+public partial class MemoryStore : IDisposable
 {
     private readonly ILogger<MemoryStore> _logger;
     private SqliteConnection? _db;
@@ -34,8 +33,7 @@ internal partial class MemoryStore : IDisposable
     public void Reload()
     {
         if (!_initialized) return;
-        LoadAllManifests();
-        _logger.LogInformation("MemoryStore 已重载配置");
+        _logger.LogInformation("MemoryStore 已重载");
     }
 
     public void Initialize(string storePath)
@@ -43,12 +41,12 @@ internal partial class MemoryStore : IDisposable
         if (_initialized && _storePath == storePath) return;
 
         _storePath = storePath;
-        _memoryDir = Path.Combine(storePath, "memory");
+        _memoryDir = storePath;
         Directory.CreateDirectory(_memoryDir);
 
-        var dbPath = Path.Combine(storePath, "memory.db");
-        var legacyRootIndexDbPath = Path.Combine(storePath, "index.db");
-        var legacyMemoryDirIndexDbPath = Path.Combine(_memoryDir, "index.db");
+        var dbPath = Path.Combine(_memoryDir, "memory.db");
+        var legacyRootIndexDbPath = Path.Combine(_memoryDir, "index.db");
+        var legacyNestedMemoryDirIndexDbPath = Path.Combine(_memoryDir, "memory", "index.db");
 
         if (!File.Exists(dbPath))
         {
@@ -57,10 +55,10 @@ internal partial class MemoryStore : IDisposable
                 MoveSqliteDbWithSidecars(legacyRootIndexDbPath, dbPath);
                 _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyRootIndexDbPath, dbPath);
             }
-            else if (File.Exists(legacyMemoryDirIndexDbPath))
+            else if (File.Exists(legacyNestedMemoryDirIndexDbPath))
             {
-                MoveSqliteDbWithSidecars(legacyMemoryDirIndexDbPath, dbPath);
-                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyMemoryDirIndexDbPath, dbPath);
+                MoveSqliteDbWithSidecars(legacyNestedMemoryDirIndexDbPath, dbPath);
+                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyNestedMemoryDirIndexDbPath, dbPath);
             }
         }
 
@@ -75,7 +73,6 @@ internal partial class MemoryStore : IDisposable
         }
 
         EnsureSchema();
-        LoadAllManifests();
 
         _initialized = true;
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
@@ -110,6 +107,7 @@ internal partial class MemoryStore : IDisposable
                 summary         TEXT,
                 importance      REAL DEFAULT 0.5,
                 freshness       TEXT DEFAULT 'Fresh',
+                stage           TEXT NOT NULL DEFAULT 'LongTerm',
                 created_at      TEXT NOT NULL,
                 last_verified_at TEXT,
                 stale_after     TEXT,
@@ -161,6 +159,7 @@ internal partial class MemoryStore : IDisposable
 
             CREATE INDEX IF NOT EXISTS idx_layer ON memory_entries(layer);
             CREATE INDEX IF NOT EXISTS idx_freshness ON memory_entries(freshness);
+            CREATE INDEX IF NOT EXISTS idx_stage ON memory_entries(stage);
             CREATE INDEX IF NOT EXISTS idx_parent ON memory_entries(parent_id);
             CREATE INDEX IF NOT EXISTS idx_node ON memory_entries(node_id);
             CREATE INDEX IF NOT EXISTS idx_created ON memory_entries(created_at);
@@ -183,27 +182,30 @@ internal partial class MemoryStore : IDisposable
 
     private void MigrateSchemaIfNeeded()
     {
-        var hasContent = false;
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using (var pragma = _db!.CreateCommand())
         {
             pragma.CommandText = "PRAGMA table_info(memory_entries)";
             using var reader = pragma.ExecuteReader();
             while (reader.Read())
-            {
-                if (string.Equals(reader.GetString(1), "content", StringComparison.OrdinalIgnoreCase))
-                {
-                    hasContent = true;
-                    break;
-                }
-            }
+                columns.Add(reader.GetString(1));
         }
 
-        if (hasContent) return;
+        if (!columns.Contains("content"))
+        {
+            _logger.LogInformation("迁移 Schema: memory_entries 表添加 content 列");
+            using var alterContent = _db.CreateCommand();
+            alterContent.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
+            alterContent.ExecuteNonQuery();
+        }
 
-        _logger.LogInformation("迁移 Schema: memory_entries 表添加 content 列");
-        using var alter = _db.CreateCommand();
-        alter.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
-        alter.ExecuteNonQuery();
+        if (!columns.Contains("stage"))
+        {
+            _logger.LogInformation("迁移 Schema: memory_entries 表添加 stage 列");
+            using var alterStage = _db.CreateCommand();
+            alterStage.CommandText = "ALTER TABLE memory_entries ADD COLUMN stage TEXT NOT NULL DEFAULT 'LongTerm'";
+            alterStage.ExecuteNonQuery();
+        }
     }
 
     private void MigrateLegacyLayerValuesToNodeType()
@@ -372,11 +374,45 @@ internal partial class MemoryStore : IDisposable
 
     public void UpdateTags(string id, List<string> tags)
     {
-        using var cmd = _db!.CreateCommand();
-        cmd.CommandText = "UPDATE memory_entries SET tags = @tags WHERE id = @id";
-        cmd.Parameters.AddWithValue("@id", id);
-        cmd.Parameters.AddWithValue("@tags", string.Join(",", tags));
-        cmd.ExecuteNonQuery();
+        using var transaction = _db!.BeginTransaction();
+
+        using (var deleteCmd = _db.CreateCommand())
+        {
+            deleteCmd.Transaction = transaction;
+            deleteCmd.CommandText = "DELETE FROM memory_tags WHERE memory_id = @id";
+            deleteCmd.Parameters.AddWithValue("@id", id);
+            deleteCmd.ExecuteNonQuery();
+        }
+
+        if (tags.Count > 0)
+        {
+            using var insertCmd = _db.CreateCommand();
+            insertCmd.Transaction = transaction;
+            insertCmd.CommandText = "INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (@mid, @tag)";
+            insertCmd.Parameters.AddWithValue("@mid", id);
+            var tagParam = insertCmd.Parameters.Add("@tag", SqliteType.Text);
+
+            foreach (var tag in tags)
+            {
+                tagParam.Value = tag;
+                insertCmd.ExecuteNonQuery();
+            }
+        }
+
+        using (var updateFts = _db.CreateCommand())
+        {
+            updateFts.Transaction = transaction;
+            updateFts.CommandText = """
+                UPDATE memory_fts
+                SET tags = @tags
+                WHERE id = @id
+                """;
+            updateFts.Parameters.AddWithValue("@id", id);
+            updateFts.Parameters.AddWithValue("@tags", string.Join(" ", tags));
+            updateFts.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
     }
 
     /// <summary>扫描并自动降级过期的记忆</summary>
@@ -478,7 +514,7 @@ internal partial class MemoryStore : IDisposable
         var (whereClause, parameters) = BuildWhereClause(filter);
         var sql = $"""
             SELECT DISTINCT e.id, e.type, e.layer, e.source, e.content, e.summary,
-                   e.importance, e.freshness, e.created_at, e.last_verified_at,
+                   e.importance, e.freshness, e.stage, e.created_at, e.last_verified_at,
                    e.stale_after, e.superseded_by, e.parent_id, e.node_id,
                    e.version, e.ext_source_url, e.ext_source_id
             FROM memory_entries e
@@ -605,11 +641,11 @@ internal partial class MemoryStore : IDisposable
         cmd.CommandText = """
             INSERT OR REPLACE INTO memory_entries
                 (id, type, layer, source, content, summary, importance, freshness,
-                 created_at, last_verified_at, stale_after, superseded_by,
+                 stage, created_at, last_verified_at, stale_after, superseded_by,
                  parent_id, node_id, version, embedding, ext_source_url, ext_source_id)
             VALUES
                 (@id, @type, @layer, @source, @content, @summary, @importance, @freshness,
-                 @created_at, @last_verified_at, @stale_after, @superseded_by,
+                 @stage, @created_at, @last_verified_at, @stale_after, @superseded_by,
                  @parent_id, @node_id, @version, @embedding, @ext_source_url, @ext_source_id)
             """;
 
@@ -621,6 +657,7 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@summary", (object?)entry.Summary ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@importance", entry.Importance);
         cmd.Parameters.AddWithValue("@freshness", entry.Freshness.ToString());
+        cmd.Parameters.AddWithValue("@stage", entry.Stage.ToString());
         cmd.Parameters.AddWithValue("@created_at", entry.CreatedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@last_verified_at",
             entry.LastVerifiedAt.HasValue ? entry.LastVerifiedAt.Value.ToString("O") : DBNull.Value);
@@ -755,7 +792,7 @@ internal partial class MemoryStore : IDisposable
 
         if (!string.IsNullOrEmpty(filter.NodeId))
         {
-            var nodeCandidates = ResolveNodeIdCandidates(filter.NodeId, strict: false);
+            var nodeCandidates = TopoGraphStore.ResolveNodeIdCandidates(filter.NodeId, strict: false);
             if (nodeCandidates.Count == 1)
             {
                 conditions.Add("e.node_id = @nodeId0");
@@ -809,7 +846,7 @@ internal partial class MemoryStore : IDisposable
 
     private const string SelectAllColumns = """
         SELECT e.id, e.type, e.layer, e.source, e.content, e.summary,
-               e.importance, e.freshness, e.created_at, e.last_verified_at,
+               e.importance, e.freshness, e.stage, e.created_at, e.last_verified_at,
                e.stale_after, e.superseded_by, e.parent_id, e.node_id,
                e.version, e.ext_source_url, e.ext_source_id
         FROM memory_entries e
@@ -839,6 +876,7 @@ internal partial class MemoryStore : IDisposable
             : NodeType.Technical;
         Enum.TryParse<MemorySource>(reader.GetString(3), true, out var source);
         Enum.TryParse<FreshnessStatus>(reader.GetString(7), true, out var freshness);
+        var hasStage = Enum.TryParse<MemoryStage>(reader.GetString(8), true, out var stage);
 
         return new MemoryEntry
         {
@@ -850,15 +888,16 @@ internal partial class MemoryStore : IDisposable
             Summary = reader.IsDBNull(5) ? null : reader.GetString(5),
             Importance = reader.GetDouble(6),
             Freshness = freshness,
-            CreatedAt = DateTime.TryParse(reader.GetString(8), out var ca) ? ca : DateTime.UtcNow,
-            LastVerifiedAt = reader.IsDBNull(9) ? null : DateTime.TryParse(reader.GetString(9), out var lv) ? lv : null,
-            StaleAfter = reader.IsDBNull(10) ? null : DateTime.TryParse(reader.GetString(10), out var sa) ? sa : null,
-            SupersededBy = reader.IsDBNull(11) ? null : reader.GetString(11),
-            ParentId = reader.IsDBNull(12) ? null : reader.GetString(12),
-            NodeId = reader.IsDBNull(13) ? null : reader.GetString(13),
-            Version = reader.GetInt32(14),
-            ExternalSourceUrl = reader.IsDBNull(15) ? null : reader.GetString(15),
-            ExternalSourceId = reader.IsDBNull(16) ? null : reader.GetString(16),
+            Stage = hasStage ? stage : MemoryStage.LongTerm,
+            CreatedAt = DateTime.TryParse(reader.GetString(9), out var ca) ? ca : DateTime.UtcNow,
+            LastVerifiedAt = reader.IsDBNull(10) ? null : DateTime.TryParse(reader.GetString(10), out var lv) ? lv : null,
+            StaleAfter = reader.IsDBNull(11) ? null : DateTime.TryParse(reader.GetString(11), out var sa) ? sa : null,
+            SupersededBy = reader.IsDBNull(12) ? null : reader.GetString(12),
+            ParentId = reader.IsDBNull(13) ? null : reader.GetString(13),
+            NodeId = reader.IsDBNull(14) ? null : reader.GetString(14),
+            Version = reader.GetInt32(15),
+            ExternalSourceUrl = reader.IsDBNull(16) ? null : reader.GetString(16),
+            ExternalSourceId = reader.IsDBNull(17) ? null : reader.GetString(17),
             Disciplines = QueryMultiValues("memory_disciplines", "discipline", id),
             Features = QueryMultiValues("memory_features", "feature", id),
             Tags = QueryMultiValues("memory_tags", "tag", id),

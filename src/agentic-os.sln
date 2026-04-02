@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -7,9 +7,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dna.Core", "Dna.Core\Dna.Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Dna.Knowledge", "Dna.Knowledge\Dna.Knowledge.csproj", "{6297BC6A-F767-4DC9-B614-DB8AD402A440}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{CAA90818-D13E-4FF1-938A-FBFD47D96921}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "App\App.csproj", "{CAA90818-D13E-4FF1-938A-FBFD47D96921}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Tests", "Client.Tests\Client.Tests.csproj", "{8F34B92C-4B3A-464C-8464-A740C14BF940}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App.Tests", "App.Tests\App.Tests.csproj", "{8F34B92C-4B3A-464C-8464-A740C14BF940}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

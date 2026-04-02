@@ -23,8 +23,8 @@ Open an issue with:
 ```bash
 # Prerequisites: .NET 10 SDK
 
-dotnet build src/Client/Client.csproj
-dotnet run --no-launch-profile --project src/Client
+dotnet build src/App/App.csproj
+dotnet run --no-launch-profile --project src/App
 ```
 
 ## License
