@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Dna.Web.Shared.AgentShell;
+using Dna.Client.Services.AgentShell;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dna.Client.Interfaces.Api;

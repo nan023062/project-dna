@@ -1,4 +1,4 @@
-namespace Dna.Web.Shared.AgentShell;
+namespace Dna.Client.Services.AgentShell;
 
 public interface IAgentShellContext
 {

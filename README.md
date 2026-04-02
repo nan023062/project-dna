@@ -23,8 +23,6 @@ That local runtime serves three surfaces at the same time:
 - local CLI
 - MCP for Cursor, Codex, and other IDE agents
 
-Legacy `Server` code may still exist temporarily in the repository, but it is **not** the active product direction described by the current docs.
-
 ## Runtime Topology
 
 ```text
@@ -40,7 +38,7 @@ User
          - embedded local runtime on :5052
                 |
                 +--> Desktop UI
-                +--> dna_client cli
+                +--> agentic-os cli
                 +--> Cursor / Codex / other IDE agents via /mcp
 ```
 
@@ -63,7 +61,7 @@ dotnet run --no-launch-profile --project src/Client
 Published executable:
 
 ```bash
-publish/client/dna_client.exe
+publish/agentic-os.exe
 ```
 
 ### 3. Prepare a Project
@@ -71,7 +69,7 @@ publish/client/dna_client.exe
 The desktop Client loads a target project folder that contains:
 
 ```text
-.project.dna/project.json
+.agentic-os/project.json
 ```
 
 Minimal example:
@@ -103,7 +101,7 @@ After the desktop Client has loaded a project, point your IDE MCP config to:
 
 ## Project-Scoped State
 
-The Client stores project-scoped state under `.project.dna/`:
+The Client stores project-scoped state under `.agentic-os/`:
 
 - `project.json`: project identity
 - `llm.json`: Client runtime LLM config reservation
@@ -134,12 +132,12 @@ This surface exists to support the desktop host, CLI, and IDE integrations. It i
 The desktop Client ships with a local CLI entry:
 
 ```bash
-dna_client cli status
-dna_client cli topology
-dna_client cli search render
-dna_client cli recall "what constraints apply"
-dna_client cli memories
-dna_client cli tools
+agentic-os cli status
+agentic-os cli topology
+agentic-os cli search render
+agentic-os cli recall "what constraints apply"
+agentic-os cli memories
+agentic-os cli tools
 ```
 
 Default local runtime address:
@@ -186,7 +184,6 @@ The Client also exposes `GET /api/client/mcp/tools` for UI and automation usage.
 - the embedded runtime is local to the desktop process
 - desktop UI, CLI, and MCP all converge on the same local `:5052` surface
 - topology work is currently being split into scene, layout, render, cache, and LOD layers
-- legacy Server code is temporary repository residue, not current product architecture
 
 See:
 

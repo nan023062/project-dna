@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Dna.Web.Shared.AgentShell;
+namespace Dna.Client.Services.AgentShell;
 
 public sealed class AgentShellService(
     AgentShellStorageOptions storageOptions,

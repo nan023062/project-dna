@@ -1,6 +1,6 @@
 using System.Text;
 using System.Text.Json;
-using Dna.Web.Shared.AgentShell;
+using Dna.Client.Services.AgentShell;
 
 namespace Dna.Client.Services;
 

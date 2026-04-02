@@ -2,7 +2,7 @@
 
 Project DNA 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手具备项目级上下文与记忆能力。
 
-本指南会把 Codex 连接到 **本地 Client MCP**（默认 `5052`），再由 Client 代理到共享 Server（默认 `5051`）。
+本指南会把 Codex 连接到 **本地 Client MCP**（默认 `5052`）。
 
 ## 目录
 - [前提条件](#前提条件)
@@ -16,13 +16,9 @@ Project DNA 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手
 ## 前提条件
 
 1. 已安装 Codex CLI / Codex IDE。
-2. 已启动 Project DNA Server（团队共享，默认 `5051`）：
+2. 已启动 Project DNA Client（本地 MCP 宿主，默认 `5052`）：
    ```bash
-   dotnet run --project src/Server -- --db <知识库目录> --port 5051
-   ```
-3. 已启动 Project DNA Client（本地 MCP 宿主，默认 `5052`）：
-   ```bash
-   dotnet run --project src/Client -- --server http://127.0.0.1:5051 --port 5052
+   dotnet run --no-launch-profile --project src/Client
    ```
 
 ---
@@ -102,5 +98,4 @@ bash .codex/skills/project-dna/scripts/install-client.sh
 
 ## 访问控制台
 
-- Client 控制台（本地）：`http://127.0.0.1:5052`
-- Server 管理台（共享服务）：`http://127.0.0.1:5051`
+- Client 控制台（本地运行时）：`http://127.0.0.1:5052`

@@ -1,9 +1,12 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Dna.Client.Services;
@@ -30,7 +33,16 @@ public partial class MainWindow : Window
     private string _topologyEditorBaselineState = string.Empty;
     private bool _topologyEditorDirty;
     private bool _isPopulatingTopologyEditor;
+    private bool _isPopulatingChatProviders;
+    private bool _isChatStreaming;
+    private bool _isViewingChatSessions;
     private List<DesktopRecentProjectEntry> _recentProjects = [];
+    private List<ChatMessageEntry> _chatMessages = [];
+    private string _chatMode = "agent";
+    private string _chatSessionId = Guid.NewGuid().ToString("N");
+    private string? _activeChatProviderId;
+    private string _activeChatProviderLabel = "未配置";
+    private CancellationTokenSource? _chatStreamingCts;
     private ConnectionAccessState _connectionAccess = ConnectionAccessState.None;
 
     public MainWindow()
@@ -56,7 +68,11 @@ public partial class MainWindow : Window
         _statusTimer.Start();
 
         Opened += async (_, _) => await OnOpenedAsync();
-        Closed += (_, _) => _statusTimer.Stop();
+        Closed += (_, _) =>
+        {
+            _statusTimer.Stop();
+            StopChatStreaming();
+        };
     }
 
     private static string BuildLocalUrl(string relativePath)
@@ -66,7 +82,7 @@ public partial class MainWindow : Window
         => $"Client API: {ClientRuntimeConstants.ApiBaseUrl}/api/*\n" +
            $"Desktop API: {ClientRuntimeConstants.ApiBaseUrl}/api/client/*\n" +
            $"MCP: {ClientRuntimeConstants.ApiBaseUrl}/mcp\n" +
-           $"CLI: dna_client cli";
+           $"CLI: agentic-os cli";
 
     private async Task OnOpenedAsync()
     {
@@ -272,7 +288,7 @@ public partial class MainWindow : Window
         AccessStateText.Text = "写入边界: 检查中...";
         LaunchModeText.Text = "启动方式: 桌面主宿主 + 嵌入式 Client API";
         OverviewModeText.Text = "桌面主宿主负责项目切换、知识图谱预览、记忆维护，以及本地 CLI / MCP 连接。";
-        OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后确认本地运行时与知识库状态。";
+        OverviewPrimaryActionText.Text = "先加载一个包含 .agentic-os/project.json 的项目，然后确认本地运行时与知识库状态。";
         OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
         OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
         StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
@@ -300,12 +316,28 @@ public partial class MainWindow : Window
         StatDisciplinesText.Text = "-";
         ResetTopologyEditor();
 
-        MemoryAccessText.Text = "当前记忆库位于项目 .project.dna；写入能力由本地运行时状态决定。";
+        MemoryAccessText.Text = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
         MemoryStatusText.Text = "记忆区就绪。";
         AddMemoryButton.IsEnabled = false;
         ToolingHubText.Text = "Client 保留本地 5052 运行时，既服务桌面宿主内部调用，也向外暴露 CLI 与 /mcp。";
         ToolingStatusText.Text = "工具区就绪。";
         McpSummaryText.Text = "MCP 清单未加载。";
+        ChatSubtitleText.Text = "加载项目后可在这里直接与本地 Agent Shell 对话。";
+        ChatStatusText.Text = "加载项目后可用。";
+        ChatInputBox.Text = string.Empty;
+        ChatProviderBox.ItemsSource = Array.Empty<ChatProviderOption>();
+        ChatProviderBox.SelectedItem = null;
+        ChatMessagesHost.Children.Clear();
+        ChatSessionsHost.Children.Clear();
+        _chatMessages = [];
+        _chatMode = "agent";
+        _chatSessionId = Guid.NewGuid().ToString("N");
+        _activeChatProviderId = null;
+        _activeChatProviderLabel = "未配置";
+        _isViewingChatSessions = false;
+        SetChatMode("agent");
+        RenderChatTranscript();
+        UpdateChatAvailability();
 
         RecentCountText.Text = "最近项目（0）";
         RecentProjectsListBox.ItemsSource = Array.Empty<RecentProjectListItem>();
@@ -421,6 +453,13 @@ public partial class MainWindow : Window
     {
         try
         {
+            if (_project is not null &&
+                !string.Equals(_project.ProjectRoot, projectRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                await SaveCurrentChatSessionAsync();
+                StopChatStreaming();
+            }
+
             var project = DesktopProjectConfig.Load(projectRoot);
             project.EnsureProjectScopedClientState();
             ClientDesktopLog.ConfigureProject(project);
@@ -664,6 +703,679 @@ public partial class MainWindow : Window
         await RefreshMemoriesAsync();
         await RefreshToolingStatusAsync();
         await RefreshMcpToolsAsync();
+        await RefreshChatShellAsync();
+    }
+
+    private async void RefreshChatShell_OnClick(object? sender, RoutedEventArgs e)
+    {
+        await RefreshChatShellAsync();
+    }
+
+    private async void ToggleChatSessions_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (_isViewingChatSessions)
+        {
+            _isViewingChatSessions = false;
+            RenderChatTranscript();
+            return;
+        }
+
+        await SaveCurrentChatSessionAsync();
+        await ShowChatSessionsAsync();
+    }
+
+    private async void NewChat_OnClick(object? sender, RoutedEventArgs e)
+    {
+        await StartNewChatAsync();
+    }
+
+    private async void SendChatMessage_OnClick(object? sender, RoutedEventArgs e)
+    {
+        await SendChatMessageAsync();
+    }
+
+    private void StopChat_OnClick(object? sender, RoutedEventArgs e)
+    {
+        StopChatStreaming();
+        ChatStatusText.Text = "已请求停止当前输出。";
+        UpdateChatAvailability();
+    }
+
+    private void SwitchChatModeAsk_OnClick(object? sender, RoutedEventArgs e) => SetChatMode("ask");
+
+    private void SwitchChatModePlan_OnClick(object? sender, RoutedEventArgs e) => SetChatMode("plan");
+
+    private void SwitchChatModeAgent_OnClick(object? sender, RoutedEventArgs e) => SetChatMode("agent");
+
+    private async void ChatProviderBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_isPopulatingChatProviders || ChatProviderBox.SelectedItem is not ChatProviderOption option)
+            return;
+
+        try
+        {
+            await PostJsonAsync(BuildLocalUrl("/agent/providers/active"), new { id = option.Id });
+            _activeChatProviderId = option.Id;
+            _activeChatProviderLabel = option.Label;
+            ChatStatusText.Text = $"已切换模型：{option.Label}";
+            UpdateChatSubtitle();
+        }
+        catch (Exception ex)
+        {
+            ChatStatusText.Text = $"切换模型失败：{ex.Message}";
+        }
+    }
+
+    private async void ChatInputBox_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            return;
+
+        e.Handled = true;
+        await SendChatMessageAsync();
+    }
+
+    private async void LoadChatSessionButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string sessionId } || string.IsNullOrWhiteSpace(sessionId))
+            return;
+
+        await LoadChatSessionAsync(sessionId);
+    }
+
+    private async Task RefreshChatShellAsync()
+    {
+        UpdateChatAvailability();
+
+        if (_project is null)
+        {
+            ChatSubtitleText.Text = "加载项目后可在这里直接与本地 Agent Shell 对话。";
+            ChatStatusText.Text = "请先加载项目。";
+            _isPopulatingChatProviders = true;
+            ChatProviderBox.ItemsSource = Array.Empty<ChatProviderOption>();
+            ChatProviderBox.SelectedItem = null;
+            _isPopulatingChatProviders = false;
+            _activeChatProviderId = null;
+            _activeChatProviderLabel = "未配置";
+            RenderChatTranscript();
+            return;
+        }
+
+        if (!_connectionAccess.RuntimeOnline)
+        {
+            ChatStatusText.Text = "本地 5052 运行时未连接，聊天暂不可用。";
+            _isPopulatingChatProviders = true;
+            ChatProviderBox.ItemsSource = Array.Empty<ChatProviderOption>();
+            ChatProviderBox.SelectedItem = null;
+            _isPopulatingChatProviders = false;
+            _activeChatProviderId = null;
+            _activeChatProviderLabel = "未连接";
+            UpdateChatSubtitle();
+            return;
+        }
+
+        try
+        {
+            var providerState = await GetJsonAsync(BuildLocalUrl("/agent/providers"));
+            var activeProviderId = GetString(providerState, "activeProviderId", null);
+            var options = new List<ChatProviderOption>();
+
+            if (providerState.TryGetProperty("providers", out var providers) &&
+                providers.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var provider in providers.EnumerateArray())
+                {
+                    var id = GetString(provider, "id", string.Empty) ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(id))
+                        continue;
+
+                    var label = BuildChatProviderLabel(provider);
+                    options.Add(new ChatProviderOption(id, label));
+                }
+            }
+
+            _isPopulatingChatProviders = true;
+            ChatProviderBox.ItemsSource = options;
+            ChatProviderBox.SelectedItem = options.FirstOrDefault(item =>
+                string.Equals(item.Id, activeProviderId, StringComparison.OrdinalIgnoreCase))
+                ?? options.FirstOrDefault();
+            _isPopulatingChatProviders = false;
+
+            _activeChatProviderId = (ChatProviderBox.SelectedItem as ChatProviderOption)?.Id;
+            _activeChatProviderLabel = (ChatProviderBox.SelectedItem as ChatProviderOption)?.Label
+                ?? (options.Count == 0 ? "未配置" : options[0].Label);
+
+            UpdateChatSubtitle();
+            if (_isViewingChatSessions)
+                await ShowChatSessionsAsync();
+            else
+                RenderChatTranscript();
+
+            if (!_isChatStreaming)
+                ChatStatusText.Text = options.Count == 0 ? "当前没有可用模型。" : "本地 Agent Shell 已就绪。";
+        }
+        catch (Exception ex)
+        {
+            ChatStatusText.Text = $"聊天面板刷新失败：{ex.Message}";
+        }
+        finally
+        {
+            _isPopulatingChatProviders = false;
+            UpdateChatAvailability();
+        }
+    }
+
+    private async Task ShowChatSessionsAsync()
+    {
+        _isViewingChatSessions = true;
+        ChatMessagesScrollViewer.IsVisible = false;
+        ChatSessionsScrollViewer.IsVisible = true;
+        ChatSessionsToggleButton.Content = "返回";
+        ChatSessionsHost.Children.Clear();
+
+        if (_project is null || !_connectionAccess.RuntimeOnline)
+        {
+            RenderChatSessionPlaceholder("当前没有可读取的本地会话。");
+            UpdateChatAvailability();
+            return;
+        }
+
+        try
+        {
+            var data = await GetJsonAsync(BuildLocalUrl("/agent/sessions"));
+            var sessions = new List<ChatSessionSummary>();
+
+            if (data.TryGetProperty("sessions", out var array) && array.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in array.EnumerateArray())
+                {
+                    var id = GetString(item, "id", string.Empty) ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(id))
+                        continue;
+
+                    sessions.Add(new ChatSessionSummary(
+                        id,
+                        GetString(item, "title", "未命名会话") ?? "未命名会话",
+                        NormalizeChatMode(GetString(item, "mode", "agent")),
+                        ParseDate(item, "updatedAt").ToLocalTime().ToString("MM-dd HH:mm"),
+                        ParseNullableInt(item, "messageCount") ?? 0));
+                }
+            }
+
+            RenderChatSessions(sessions);
+        }
+        catch (Exception ex)
+        {
+            RenderChatSessionPlaceholder($"加载会话失败：{ex.Message}");
+        }
+        finally
+        {
+            UpdateChatAvailability();
+        }
+    }
+
+    private void RenderChatSessions(IReadOnlyList<ChatSessionSummary> sessions)
+    {
+        ChatSessionsHost.Children.Clear();
+
+        if (sessions.Count == 0)
+        {
+            RenderChatSessionPlaceholder("当前项目还没有历史会话。");
+            return;
+        }
+
+        foreach (var session in sessions)
+        {
+            var card = new Border
+            {
+                Classes = { "card" },
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+
+            var stack = new StackPanel { Spacing = 8 };
+            stack.Children.Add(new TextBlock
+            {
+                Text = session.Title,
+                FontWeight = FontWeight.SemiBold,
+                TextWrapping = TextWrapping.Wrap
+            });
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"{GetChatModeLabel(session.Mode)} · {session.MessageCount} 条消息 · {session.UpdatedAtLabel}",
+                Classes = { "mutedText" },
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var button = new Button
+            {
+                Content = string.Equals(session.Id, _chatSessionId, StringComparison.OrdinalIgnoreCase) ? "当前会话" : "打开会话",
+                Tag = session.Id,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            if (string.Equals(session.Id, _chatSessionId, StringComparison.OrdinalIgnoreCase))
+                button.Classes.Add("primaryAction");
+
+            button.Click += LoadChatSessionButton_OnClick;
+            stack.Children.Add(button);
+
+            card.Child = stack;
+            ChatSessionsHost.Children.Add(card);
+        }
+    }
+
+    private void RenderChatSessionPlaceholder(string message)
+    {
+        ChatSessionsHost.Children.Clear();
+        ChatSessionsHost.Children.Add(new Border
+        {
+            Classes = { "cardSoft" },
+            Padding = new Thickness(14),
+            Child = new TextBlock
+            {
+                Text = message,
+                Classes = { "mutedText" },
+                TextWrapping = TextWrapping.Wrap
+            }
+        });
+    }
+
+    private async Task LoadChatSessionAsync(string sessionId)
+    {
+        var session = await GetJsonAsync(BuildLocalUrl($"/agent/sessions/{Uri.EscapeDataString(sessionId)}"));
+        var loaded = new List<ChatMessageEntry>();
+
+        if (session.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in messages.EnumerateArray())
+            {
+                var role = NormalizeChatRole(GetString(item, "role", "assistant"));
+                var content = GetString(item, "content", string.Empty) ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(content))
+                    continue;
+
+                loaded.Add(new ChatMessageEntry(role, content));
+            }
+        }
+
+        _chatSessionId = GetString(session, "id", sessionId) ?? sessionId;
+        _chatMode = NormalizeChatMode(GetString(session, "mode", "agent"));
+        _chatMessages = loaded;
+        _isViewingChatSessions = false;
+
+        SetChatMode(_chatMode);
+        RenderChatTranscript();
+        ChatStatusText.Text = $"已加载会话：{GetString(session, "title", "未命名会话")}";
+        UpdateChatAvailability();
+    }
+
+    private async Task StartNewChatAsync()
+    {
+        await SaveCurrentChatSessionAsync();
+        StopChatStreaming();
+        _chatMessages = [];
+        _chatSessionId = Guid.NewGuid().ToString("N");
+        _isViewingChatSessions = false;
+        RenderChatTranscript();
+        ChatStatusText.Text = "已创建新对话。";
+        UpdateChatAvailability();
+        ChatInputBox.Focus();
+    }
+
+    private async Task SendChatMessageAsync()
+    {
+        if (_project is null)
+        {
+            ChatStatusText.Text = "请先加载项目后再发消息。";
+            return;
+        }
+
+        if (!_connectionAccess.RuntimeOnline)
+        {
+            ChatStatusText.Text = "本地运行时未就绪，暂时无法发送。";
+            return;
+        }
+
+        var prompt = (ChatInputBox.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            ChatStatusText.Text = "请输入要发送的内容。";
+            return;
+        }
+
+        StopChatStreaming();
+        _isViewingChatSessions = false;
+        AppendChatMessage("user", prompt);
+        ChatInputBox.Text = string.Empty;
+        ChatStatusText.Text = $"正在以 {GetChatModeLabel(_chatMode)} 模式发送…";
+        SetChatStreaming(true);
+
+        var assistantIndex = -1;
+        _chatStreamingCts = new CancellationTokenSource();
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, BuildLocalUrl("/agent/chat"))
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new
+                {
+                    messages = _chatMessages.Select(message => new { role = message.Role, content = message.Content }).ToList(),
+                    mode = _chatMode,
+                    sessionId = _chatSessionId,
+                    resume = false
+                }), Encoding.UTF8, "application/json")
+            };
+
+            using var response = await ApiHttp.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                _chatStreamingCts.Token);
+
+            if (!response.IsSuccessStatusCode)
+                throw new InvalidOperationException(await response.Content.ReadAsStringAsync(_chatStreamingCts.Token));
+
+            await using var stream = await response.Content.ReadAsStreamAsync(_chatStreamingCts.Token);
+            using var reader = new StreamReader(stream);
+
+            while (true)
+            {
+                var line = await reader.ReadLineAsync();
+                if (line is null)
+                    break;
+
+                if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var payload = line["data:".Length..].Trim();
+                if (string.IsNullOrWhiteSpace(payload))
+                    continue;
+
+                using var document = JsonDocument.Parse(payload);
+                var evt = document.RootElement;
+                var type = GetString(evt, "type", string.Empty) ?? string.Empty;
+
+                if (string.Equals(type, "text", StringComparison.OrdinalIgnoreCase))
+                {
+                    var chunk = GetString(evt, "content", string.Empty) ?? string.Empty;
+                    if (assistantIndex < 0)
+                    {
+                        _chatMessages.Add(new ChatMessageEntry("assistant", chunk));
+                        assistantIndex = _chatMessages.Count - 1;
+                    }
+                    else
+                    {
+                        _chatMessages[assistantIndex] = _chatMessages[assistantIndex] with
+                        {
+                            Content = _chatMessages[assistantIndex].Content + chunk
+                        };
+                    }
+
+                    RenderChatTranscript();
+                }
+                else if (string.Equals(type, "done", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+            }
+
+            ChatStatusText.Text = "本轮对话已完成。";
+            await SaveCurrentChatSessionAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            ChatStatusText.Text = "当前输出已停止。";
+            await SaveCurrentChatSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            ChatStatusText.Text = $"发送失败：{ex.Message}";
+        }
+        finally
+        {
+            SetChatStreaming(false);
+            _chatStreamingCts?.Dispose();
+            _chatStreamingCts = null;
+            UpdateChatAvailability();
+        }
+    }
+
+    private void StopChatStreaming()
+    {
+        if (_chatStreamingCts is null)
+            return;
+
+        try
+        {
+            _chatStreamingCts.Cancel();
+        }
+        catch
+        {
+            // best effort
+        }
+    }
+
+    private async Task SaveCurrentChatSessionAsync()
+    {
+        if (_project is null || !_connectionAccess.RuntimeOnline || _chatMessages.Count == 0)
+            return;
+
+        try
+        {
+            await PostJsonAsync(BuildLocalUrl("/agent/sessions/save"), new
+            {
+                id = _chatSessionId,
+                mode = _chatMode,
+                title = BuildChatSessionTitle(),
+                messages = _chatMessages.Select(message => new { role = message.Role, content = message.Content }).ToList()
+            });
+        }
+        catch
+        {
+            // 当前只做 best effort，避免切项目或关闭窗口时因保存失败阻断主流程。
+        }
+    }
+
+    private void SetChatMode(string mode)
+    {
+        _chatMode = NormalizeChatMode(mode);
+
+        ToggleChatModeButton(ChatModeAskButton, string.Equals(_chatMode, "ask", StringComparison.OrdinalIgnoreCase));
+        ToggleChatModeButton(ChatModePlanButton, string.Equals(_chatMode, "plan", StringComparison.OrdinalIgnoreCase));
+        ToggleChatModeButton(ChatModeAgentButton, string.Equals(_chatMode, "agent", StringComparison.OrdinalIgnoreCase));
+
+        UpdateChatSubtitle();
+    }
+
+    private static void ToggleChatModeButton(Button button, bool isActive)
+    {
+        if (isActive)
+        {
+            if (!button.Classes.Contains("active"))
+                button.Classes.Add("active");
+            return;
+        }
+
+        button.Classes.Remove("active");
+    }
+
+    private void SetChatStreaming(bool isStreaming)
+    {
+        _isChatStreaming = isStreaming;
+        ChatStopButton.IsVisible = isStreaming;
+        UpdateChatAvailability();
+    }
+
+    private void UpdateChatAvailability()
+    {
+        var runtimeReady = _project is not null && _connectionAccess.RuntimeOnline;
+        var hasProvider = ChatProviderBox.SelectedItem is ChatProviderOption || !string.IsNullOrWhiteSpace(_activeChatProviderId);
+
+        ChatProviderBox.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatRefreshButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatSessionsToggleButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatNewButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatModeAskButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatModePlanButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatModeAgentButton.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatInputBox.IsEnabled = runtimeReady && !_isChatStreaming;
+        ChatSendButton.IsEnabled = runtimeReady && !_isChatStreaming && hasProvider;
+        ChatStopButton.IsEnabled = _isChatStreaming;
+    }
+
+    private void UpdateChatSubtitle()
+    {
+        var mode = GetChatModeLabel(_chatMode);
+        var projectName = _project?.ProjectName ?? "未选择项目";
+        ChatSubtitleText.Text = $"当前项目：{projectName} · 模式：{mode} · 模型：{_activeChatProviderLabel}";
+    }
+
+    private void RenderChatTranscript()
+    {
+        _isViewingChatSessions = false;
+        ChatMessagesScrollViewer.IsVisible = true;
+        ChatSessionsScrollViewer.IsVisible = false;
+        ChatSessionsToggleButton.Content = "会话";
+        ChatMessagesHost.Children.Clear();
+
+        if (_chatMessages.Count == 0)
+        {
+            RenderChatWelcome();
+            return;
+        }
+
+        foreach (var message in _chatMessages)
+        {
+            var isUser = string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase);
+            var container = new StackPanel
+            {
+                Spacing = 4,
+                HorizontalAlignment = isUser ? HorizontalAlignment.Right : HorizontalAlignment.Left
+            };
+
+            container.Children.Add(new TextBlock
+            {
+                Text = isUser ? "你" : "AI 助手",
+                Classes = { "tertiaryText" },
+                HorizontalAlignment = container.HorizontalAlignment
+            });
+
+            var text = new TextBlock
+            {
+                Text = message.Content,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 300
+            };
+            text.Classes.Add("chatBubbleText");
+            text.Classes.Add(isUser ? "user" : "assistant");
+
+            var bubble = new Border
+            {
+                Child = text,
+                HorizontalAlignment = container.HorizontalAlignment
+            };
+            bubble.Classes.Add("chatBubble");
+            bubble.Classes.Add(isUser ? "user" : "assistant");
+
+            container.Children.Add(bubble);
+            ChatMessagesHost.Children.Add(container);
+        }
+
+        ScrollChatToBottom();
+    }
+
+    private void RenderChatWelcome()
+    {
+        ChatMessagesHost.Children.Clear();
+
+        var welcome = new StackPanel
+        {
+            Spacing = 10,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        welcome.Children.Add(new TextBlock
+        {
+            Text = "Project DNA AI 助手",
+            FontSize = 20,
+            FontWeight = FontWeight.Bold
+        });
+
+        welcome.Children.Add(new TextBlock
+        {
+            Text = _project is null
+                ? "先加载桌面工作区，然后就可以在右侧直接和本地 Agent Shell 对话。"
+                : "这里是 Client 原生右侧 chat 窗，直接连接本地 5052 的 /agent/* 会话与流式输出。",
+            Classes = { "secondaryText" },
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        welcome.Children.Add(new TextBlock
+        {
+            Text = "Shift+Enter 换行，Enter 发送。",
+            Classes = { "mutedText" },
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        ChatMessagesHost.Children.Add(welcome);
+    }
+
+    private void AppendChatMessage(string role, string content)
+    {
+        _chatMessages.Add(new ChatMessageEntry(NormalizeChatRole(role), content));
+        RenderChatTranscript();
+    }
+
+    private void ScrollChatToBottom()
+    {
+        if (ChatMessagesHost.Children.Count == 0)
+            return;
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ChatMessagesHost.Children.LastOrDefault() is Control control)
+                control.BringIntoView();
+        }, DispatcherPriority.Background);
+    }
+
+    private static string BuildChatProviderLabel(JsonElement provider)
+    {
+        var name = GetString(provider, "name", "未命名模型") ?? "未命名模型";
+        var model = GetString(provider, "model", string.Empty);
+        return string.IsNullOrWhiteSpace(model) ? name : $"{name} · {model}";
+    }
+
+    private string BuildChatSessionTitle()
+    {
+        var firstUser = _chatMessages.FirstOrDefault(message => string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
+        if (firstUser is null || string.IsNullOrWhiteSpace(firstUser.Content))
+            return $"新会话 {DateTime.Now:MM-dd HH:mm}";
+
+        var title = firstUser.Content.ReplaceLineEndings(" ").Trim();
+        return title.Length <= 24 ? title : $"{title[..24]}...";
+    }
+
+    private static string NormalizeChatMode(string? mode)
+    {
+        var normalized = (mode ?? "agent").Trim().ToLowerInvariant();
+        return normalized is "ask" or "plan" or "agent" or "chat" ? normalized : "agent";
+    }
+
+    private static string NormalizeChatRole(string? role)
+    {
+        var normalized = (role ?? "assistant").Trim().ToLowerInvariant();
+        return normalized is "user" or "assistant" ? normalized : "assistant";
+    }
+
+    private static string GetChatModeLabel(string mode)
+    {
+        return NormalizeChatMode(mode) switch
+        {
+            "ask" => "Ask",
+            "plan" => "Plan",
+            "chat" => "Chat",
+            _ => "Agent"
+        };
     }
 
     private async Task RefreshRuntimeStatusAsync()
@@ -894,7 +1606,7 @@ public partial class MainWindow : Window
             var workspaceRoot = GetString(tooling, "workspaceRoot", "-");
             CursorStateText.Text = cursorInstalled ? "Cursor: 已安装" : "Cursor: 未安装";
             CodexStateText.Text = codexInstalled ? "Codex: 已安装" : "Codex: 未安装";
-            ToolingHubText.Text = $"本地 5052 运行时已就绪。当前工作区：{workspaceRoot}；CLI：dna_client cli；MCP 入口：{ClientRuntimeConstants.ApiBaseUrl}/mcp";
+            ToolingHubText.Text = $"本地 5052 运行时已就绪。当前工作区：{workspaceRoot}；CLI：agentic-os cli；MCP 入口：{ClientRuntimeConstants.ApiBaseUrl}/mcp";
             ToolingStatusText.Text = $"工具状态已刷新。工作区：{workspaceRoot}";
         }
         catch (Exception ex)
@@ -1822,7 +2534,7 @@ public partial class MainWindow : Window
 
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "选择目标项目根目录（必须包含 .project.dna/project.json）",
+            Title = "选择目标项目根目录（必须包含 .agentic-os/project.json）",
             AllowMultiple = false,
             SuggestedStartLocation = suggested
         });
@@ -1836,19 +2548,26 @@ public partial class MainWindow : Window
     private void ApplyProject(DesktopProjectConfig project)
     {
         _project = project;
+        _chatMessages = [];
+        _chatSessionId = Guid.NewGuid().ToString("N");
+        _isViewingChatSessions = false;
+        StopChatStreaming();
 
         SelectedProjectText.Text = $"目标项目: {project.ProjectName}";
-        LaunchModeText.Text = $"启动方式: 桌面主宿主 + 嵌入式 Client API | MCP: {ClientRuntimeConstants.ApiBaseUrl}/mcp | CLI: dna_client cli";
+        LaunchModeText.Text = $"启动方式: 桌面主宿主 + 嵌入式 Client API | MCP: {ClientRuntimeConstants.ApiBaseUrl}/mcp | CLI: agentic-os cli";
         OverviewModeText.Text = BuildWorkspaceModeText(project);
         ToolingHubText.Text = $"当前项目 {project.ProjectName} 已连接本地 5052 运行时，可为 IDE Agent 暴露 API、CLI 与 /mcp。";
         ConnectionServerText.Text = BuildRuntimeEndpointSummary();
+        ChatSubtitleText.Text = $"当前项目：{project.ProjectName} · 本地 Agent Shell";
+        RenderChatTranscript();
+        UpdateChatAvailability();
 
         UpdateWindowTitle();
     }
 
     private DesktopProjectConfig EnsureProjectSelected()
     {
-        return _project ?? throw new InvalidOperationException("请先选择目标项目并完成 .project.dna/project.json 校验。");
+        return _project ?? throw new InvalidOperationException("请先选择目标项目并完成 .agentic-os/project.json 校验。");
     }
 
     private static async Task<bool> IsClientOnlineAsync()
@@ -2009,12 +2728,13 @@ public partial class MainWindow : Window
             ConnectionServerText.Text = "尚未选择项目。";
             ConnectionNoteText.Text = "本地状态页会集中显示 5052 运行时、当前项目与写入边界。";
             ConnectionRecommendationText.Text = "加载项目后自动读取本地 /api/status 与 /api/connection/access。";
-            MemoryAccessText.Text = "当前记忆库位于项目 .project.dna；写入能力由本地运行时状态决定。";
+            MemoryAccessText.Text = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
             AddMemoryButton.IsEnabled = false;
             StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
-            OverviewPrimaryActionText.Text = "先加载一个包含 .project.dna/project.json 的项目，然后确认本地运行时与知识库状态。";
+            OverviewPrimaryActionText.Text = "先加载一个包含 .agentic-os/project.json 的项目，然后确认本地运行时与知识库状态。";
             OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
             OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
+            UpdateChatAvailability();
             return;
         }
 
@@ -2036,6 +2756,7 @@ public partial class MainWindow : Window
                 : "请先确认桌面宿主已经启动，并且 5052 没有被其他进程占用。";
             OverviewWorkflowText.Text = "运行时恢复后，重新打开“本地状态”确认项目与写入边界。";
             OverviewRecommendationText.Text = "单机 MVP 优先保证“项目加载 -> 本地 5052 -> 图谱/记忆/MCP”这条主路径稳定。";
+            UpdateChatAvailability();
             return;
         }
 
@@ -2054,6 +2775,7 @@ public partial class MainWindow : Window
             OverviewPrimaryActionText.Text = "下一步建议先检查项目配置与写入边界，再继续修改知识。";
             OverviewWorkflowText.Text = "只读模式下可继续浏览图谱、记忆与 MCP 工具。";
             OverviewRecommendationText.Text = "单机 MVP 默认推荐以本地管理员模式运行，避免手动编辑与 MCP 写入出现分叉。";
+            UpdateChatAvailability();
             return;
         }
 
@@ -2075,6 +2797,7 @@ public partial class MainWindow : Window
             OverviewPrimaryActionText.Text = "当前已具备本地管理员能力，建议优先检查图谱、记忆和 Agent 连接配置是否完整。";
             OverviewWorkflowText.Text = "推荐顺序：本地状态确认 -> 知识图谱预览 -> 记忆维护 -> 连接Agent分发到 IDE。";
             OverviewRecommendationText.Text = "如果只是单人本地 MVP，这已经是最完整的闭环路径。";
+            UpdateChatAvailability();
             return;
         }
 
@@ -2085,6 +2808,7 @@ public partial class MainWindow : Window
         OverviewPrimaryActionText.Text = "当前连接已可用，下一步建议先浏览知识图谱与记忆，再完成 IDE Agent 连接。";
         OverviewWorkflowText.Text = "后续若重新引入协作流，再把多人审核与权限模型叠加到这条本地主路径上。";
         OverviewRecommendationText.Text = "当前桌面 MVP 先把浏览、编辑、MCP、CLI 这条单机主路径打稳。";
+        UpdateChatAvailability();
     }
 
     private static string DescribeRole(string? role)
@@ -2176,6 +2900,15 @@ public partial class MainWindow : Window
 
         public override string ToString() => $"{Title}\n{ProjectRoot}";
     }
+
+    private sealed record ChatMessageEntry(string Role, string Content);
+
+    private sealed record ChatProviderOption(string Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record ChatSessionSummary(string Id, string Title, string Mode, string UpdatedAtLabel, int MessageCount);
 
     private sealed record ConnectionAccessState(
         bool HasProject,

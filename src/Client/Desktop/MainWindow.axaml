@@ -17,7 +17,7 @@
                 <StackPanel Spacing="8">
                     <TextBlock Classes="heroTitle" Text="加载桌面工作区" />
                     <TextBlock Classes="mutedText" TextWrapping="Wrap"
-                               Text="选择包含 .project.dna/project.json 的项目目录，进入单进程桌面主宿主。项目日志、LLM 配置、工作区状态和本地 agent shell 都会收口到当前项目的 .project.dna 目录中。" />
+                               Text="选择包含 .agentic-os/project.json 的项目目录，进入单进程桌面主宿主。项目日志、LLM 配置、工作区状态和本地 agent shell 都会收口到当前项目的 .agentic-os 目录中。" />
                 </StackPanel>
                 <WrapPanel Grid.Row="1" Orientation="Horizontal">
                     <Button Classes="primaryAction" Content="打开项目目录..." Click="OpenProjectFolder_OnClick" Margin="0,0,8,0" />
@@ -67,8 +67,8 @@
             </Grid>
         </Border>
 
-        <Grid x:Name="WorkspacePanel" IsVisible="False">
-            <Border Classes="workspaceShell" Padding="18">
+        <Grid x:Name="WorkspacePanel" IsVisible="False" ColumnDefinitions="*,10,360" ColumnSpacing="0">
+            <Border Grid.Column="0" Classes="workspaceShell" Padding="18">
             <TabControl>
                 <TabItem Header="概览">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -129,7 +129,7 @@
                                     </StackPanel>
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Classes="cardTitle" Text="单机数据边界" />
-                                        <TextBlock Margin="0,6,0,0" Classes="mutedText" TextWrapping="Wrap" Text="知识图谱、记忆、LLM 配置与 agent shell 都以当前项目的 .project.dna 为根，不再依赖独立服务端。" />
+                                        <TextBlock Margin="0,6,0,0" Classes="mutedText" TextWrapping="Wrap" Text="知识图谱、记忆、LLM 配置与 agent shell 都以当前项目的 .agentic-os 为根，不再依赖独立服务端。" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="2">
                                         <TextBlock Classes="cardTitle" Text="连接 Agent" />
@@ -301,6 +301,65 @@
                     </Grid>
                 </TabItem>
             </TabControl>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          ShowsPreview="True"
+                          Background="Transparent" />
+
+            <Border Grid.Column="2" Classes="workspaceShell chatShell" Padding="16">
+                <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="12">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <StackPanel Spacing="4">
+                            <TextBlock Classes="sectionTitle" Text="AI 助手" />
+                            <TextBlock x:Name="ChatSubtitleText" Classes="mutedText" TextWrapping="Wrap" Text="加载项目后可在这里直接与本地 Agent Shell 对话。" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="ChatSessionsToggleButton" Content="会话" Click="ToggleChatSessions_OnClick" />
+                        <Button Grid.Column="2" x:Name="ChatNewButton" Classes="primaryAction" Content="新建" Click="NewChat_OnClick" />
+                    </Grid>
+
+                    <Border Grid.Row="1" Classes="cardSoft" Padding="10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <ComboBox x:Name="ChatProviderBox" SelectionChanged="ChatProviderBox_OnSelectionChanged" />
+                            <Button Grid.Column="1" x:Name="ChatRefreshButton" Content="刷新" Click="RefreshChatShell_OnClick" />
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="2" Classes="cardSoft" Padding="8">
+                        <Grid>
+                            <ScrollViewer x:Name="ChatMessagesScrollViewer" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="ChatMessagesHost" Spacing="10" />
+                            </ScrollViewer>
+                            <ScrollViewer x:Name="ChatSessionsScrollViewer" VerticalScrollBarVisibility="Auto" IsVisible="False">
+                                <StackPanel x:Name="ChatSessionsHost" Spacing="8" />
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Grid.Row="3" x:Name="ChatStatusText" Classes="mutedText" TextWrapping="Wrap" Text="加载项目后可用。" />
+
+                    <Grid Grid.Row="4" RowDefinitions="Auto,Auto" RowSpacing="10">
+                        <TextBox x:Name="ChatInputBox"
+                                 AcceptsReturn="True"
+                                 Height="96"
+                                 TextWrapping="Wrap"
+                                 Watermark="输入消息..."
+                                 KeyDown="ChatInputBox_OnKeyDown" />
+                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="ChatModeAskButton" Classes="chatModeButton" Content="Ask" Click="SwitchChatModeAsk_OnClick" />
+                                <Button x:Name="ChatModePlanButton" Classes="chatModeButton" Content="Plan" Click="SwitchChatModePlan_OnClick" />
+                                <Button x:Name="ChatModeAgentButton" Classes="chatModeButton" Content="Agent" Click="SwitchChatModeAgent_OnClick" />
+                            </StackPanel>
+                            <Button Grid.Column="1" x:Name="ChatStopButton" Content="停止" Click="StopChat_OnClick" IsVisible="False" />
+                            <Button Grid.Column="2" x:Name="ChatSendButton" Classes="primaryAction" Content="发送" Click="SendChatMessage_OnClick" />
+                        </Grid>
+                    </Grid>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

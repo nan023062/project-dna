@@ -105,7 +105,7 @@ internal static class ClientCliHandler
         var query = settings.Args.Count > 1 ? string.Join(' ', settings.Args.Skip(1)) : null;
         if (string.IsNullOrWhiteSpace(query))
         {
-            WriteError("用法: dna_client cli search <关键字>");
+            WriteError("用法: agentic-os cli search <关键字>");
             return 1;
         }
 
@@ -134,7 +134,7 @@ internal static class ClientCliHandler
         var question = settings.Args.Count > 1 ? string.Join(' ', settings.Args.Skip(1)) : null;
         if (string.IsNullOrWhiteSpace(question))
         {
-            WriteError("用法: dna_client cli recall <问题>");
+            WriteError("用法: agentic-os cli recall <问题>");
             return 1;
         }
 
@@ -218,7 +218,7 @@ internal static class ClientCliHandler
         Console.WriteLine();
         Console.WriteLine("Agentic OS Client CLI");
         Console.WriteLine();
-        Console.WriteLine($"用法: dna_client cli [--url {ClientRuntimeConstants.ApiBaseUrl}] <命令> [参数...]");
+        Console.WriteLine($"用法: agentic-os cli [--url {ClientRuntimeConstants.ApiBaseUrl}] <命令> [参数...]");
         Console.WriteLine();
         Console.WriteLine("命令:");
         Console.WriteLine("  status            查看本地运行时、当前项目和工作区状态");
@@ -238,7 +238,7 @@ internal static class ClientCliHandler
     private static int RunUnknown(string command, string baseUrl)
     {
         WriteError($"未知命令: {command}");
-        Console.WriteLine("  运行 `dna_client cli help` 查看可用命令。");
+        Console.WriteLine("  运行 `agentic-os cli help` 查看可用命令。");
         Console.WriteLine($"  当前默认地址: {baseUrl}");
         return 1;
     }

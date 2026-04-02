@@ -27,8 +27,6 @@ http://127.0.0.1:5052
 - 本地 CLI
 - Cursor / Codex / 其他 IDE Agent 的 MCP 接入
 
-仓库里可能仍暂时存在旧 `Server` 代码，但它**不是当前文档描述的主架构**，后续会被清理。
-
 ## 运行拓扑
 
 ```text
@@ -44,7 +42,7 @@ http://127.0.0.1:5052
          - 进程内嵌本地运行时 :5052
                 |
                 +--> 桌面 UI
-                +--> dna_client cli
+                +--> agentic-os cli
                 +--> Cursor / Codex / 其他 IDE Agent 通过 /mcp 接入
 ```
 
@@ -67,7 +65,7 @@ dotnet run --no-launch-profile --project src/Client
 发布产物：
 
 ```bash
-publish/client/dna_client.exe
+publish/agentic-os.exe
 ```
 
 ### 3. 准备项目目录
@@ -75,7 +73,7 @@ publish/client/dna_client.exe
 桌面 Client 需要加载一个包含下列文件的项目目录：
 
 ```text
-.project.dna/project.json
+.agentic-os/project.json
 ```
 
 最小示例：
@@ -107,7 +105,7 @@ publish/client/dna_client.exe
 
 ## 项目级状态目录
 
-当前 Client 把项目级状态存放在 `.project.dna/` 下：
+当前 Client 把项目级状态存放在 `.agentic-os/` 下：
 
 - `project.json`：项目身份信息
 - `llm.json`：Client 运行时大模型配置预留
@@ -138,12 +136,12 @@ publish/client/dna_client.exe
 当前桌面 Client 自带本地 CLI 入口：
 
 ```bash
-dna_client cli status
-dna_client cli topology
-dna_client cli search render
-dna_client cli recall "有哪些约束"
-dna_client cli memories
-dna_client cli tools
+agentic-os cli status
+agentic-os cli topology
+agentic-os cli search render
+agentic-os cli recall "有哪些约束"
+agentic-os cli memories
+agentic-os cli tools
 ```
 
 默认本地运行时地址：
@@ -190,7 +188,6 @@ http://127.0.0.1:5052
 - 本地运行时与桌面窗口共处同一进程
 - 桌面 UI、CLI、MCP 全部收敛到同一个本地 `:5052` 表面
 - 知识图谱正在持续拆分为 scene、layout、render、cache、LOD 等层
-- 仓库中的旧 Server 代码只视为过渡残留，不再作为当前产品文档的一部分
 
 详见：
 

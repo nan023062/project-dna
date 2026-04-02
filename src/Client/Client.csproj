@@ -3,14 +3,14 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <AssemblyName>dna_client</AssemblyName>
+    <AssemblyName>agentic-os</AssemblyName>
     <RootNamespace>Dna.Client</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>Desktop\app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-    <OutputPath>$(MSBuildThisFileDirectory)../../publish/client/</OutputPath>
-    <PublishDir>$(MSBuildThisFileDirectory)../../publish/client/</PublishDir>
+    <OutputPath>$(MSBuildThisFileDirectory)../../publish/</OutputPath>
+    <PublishDir>$(MSBuildThisFileDirectory)../../publish/</PublishDir>
     <IntermediateOutputPath>$(MSBuildThisFileDirectory)../../obj/client/</IntermediateOutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeToOutputPath>false</AppendRuntimeToOutputPath>
@@ -19,7 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Dna.Core\Dna.Core.csproj" />
     <ProjectReference Include="..\Dna.Knowledge\Dna.Knowledge.csproj" />
-    <ProjectReference Include="..\Dna.Web.Shared\Dna.Web.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

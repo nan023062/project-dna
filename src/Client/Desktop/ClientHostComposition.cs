@@ -1,9 +1,9 @@
 using Dna.Client.Interfaces.Api;
 using Dna.Client.Services;
+using Dna.Client.Services.AgentShell;
 using Dna.Client.Services.Tooling;
 using Dna.Core.Config;
 using Dna.Knowledge;
-using Dna.Web.Shared.AgentShell;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Server;

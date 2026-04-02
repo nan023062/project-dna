@@ -9,7 +9,7 @@ public sealed class DesktopProjectConfigTests
     public void Load_ShouldUseDirectoryBasedProjectConfig()
     {
         var projectRoot = CreateProjectRoot();
-        var metadataRoot = Path.Combine(projectRoot, ".project.dna");
+        var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
         File.WriteAllText(
             Path.Combine(metadataRoot, "project.json"),
@@ -35,7 +35,7 @@ public sealed class DesktopProjectConfigTests
     public void Load_ShouldMigrateLegacySingleFileConfigToDirectoryLayout()
     {
         var projectRoot = CreateProjectRoot();
-        var legacyPath = Path.Combine(projectRoot, ".project.dna");
+        var legacyPath = Path.Combine(projectRoot, ".agentic-os");
         File.WriteAllText(
             legacyPath,
             """
@@ -58,7 +58,7 @@ public sealed class DesktopProjectConfigTests
     public void EnsureLlmConfig_ShouldMaterializeProjectMetadataFile()
     {
         var projectRoot = CreateProjectRoot();
-        var metadataRoot = Path.Combine(projectRoot, ".project.dna");
+        var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
         File.WriteAllText(
             Path.Combine(metadataRoot, "project.json"),
@@ -82,7 +82,7 @@ public sealed class DesktopProjectConfigTests
     public void EnsureProjectScopedClientState_ShouldMaterializeWorkspaceAndAgentShellFromProjectSnapshots()
     {
         var projectRoot = CreateProjectRoot();
-        var metadataRoot = Path.Combine(projectRoot, ".project.dna");
+        var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
         File.WriteAllText(
             Path.Combine(metadataRoot, "project.json"),

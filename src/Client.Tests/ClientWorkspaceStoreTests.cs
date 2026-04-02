@@ -31,7 +31,7 @@ public sealed class ClientWorkspaceStoreTests : IDisposable
     [Fact]
     public void Store_ShouldUseProjectMetadataConfigPath_WhenMetadataRootIsProvided()
     {
-        var metadataRoot = Path.Combine(_workspaceRoot, ".project.dna");
+        var metadataRoot = Path.Combine(_workspaceRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
 
         var store = new ClientWorkspaceStore(new ClientRuntimeOptions

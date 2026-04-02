@@ -5,7 +5,7 @@ namespace Dna.Client.Services;
 public sealed class ClientProjectLlmConfigService(ClientRuntimeOptions runtimeOptions)
 {
     public string FilePath => string.IsNullOrWhiteSpace(runtimeOptions.MetadataRootPath)
-        ? Path.Combine(runtimeOptions.WorkspaceRoot, ".project.dna", "llm.json")
+        ? Path.Combine(runtimeOptions.WorkspaceRoot, ".agentic-os", "llm.json")
         : Path.Combine(Path.GetFullPath(runtimeOptions.MetadataRootPath), "llm.json");
 
     public RuntimeLlmConfigDocument Load()

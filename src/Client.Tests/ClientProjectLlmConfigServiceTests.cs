@@ -10,7 +10,7 @@ public sealed class ClientProjectLlmConfigServiceTests
     public void Load_ShouldCreateProjectScopedLlmConfigFile()
     {
         var workspaceRoot = CreateWorkspaceRoot();
-        Directory.CreateDirectory(Path.Combine(workspaceRoot, ".project.dna"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, ".agentic-os"));
 
         var service = new ClientProjectLlmConfigService(new ClientRuntimeOptions
         {
@@ -22,14 +22,14 @@ public sealed class ClientProjectLlmConfigServiceTests
 
         Assert.Empty(config.Providers);
         Assert.True(File.Exists(service.FilePath));
-        Assert.Equal(Path.Combine(workspaceRoot, ".project.dna", "llm.json"), service.FilePath);
+        Assert.Equal(Path.Combine(workspaceRoot, ".agentic-os", "llm.json"), service.FilePath);
     }
 
     [Fact]
     public void Save_ShouldPersistPurposesAndProviderBindings()
     {
         var workspaceRoot = CreateWorkspaceRoot();
-        Directory.CreateDirectory(Path.Combine(workspaceRoot, ".project.dna"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, ".agentic-os"));
 
         var service = new ClientProjectLlmConfigService(new ClientRuntimeOptions
         {

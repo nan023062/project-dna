@@ -5,7 +5,6 @@ Project DNA 作为 AI Agent 的项目认知引擎，通过标准的 MCP (Model C
 本目录包含了各种 IDE 和 AI 助手的客户端接入指南与自动化配置工具，帮助您快速将 Project DNA 的能力赋予您的开发环境。
 
 推荐部署拓扑：
-- `Server`：团队共享知识服务（默认 `5051`）
 - `Client`：开发者本地 MCP 宿主（默认 `5052`，IDE 连接这个端口）
 
 ## 支持的 IDE / 平台

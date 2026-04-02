@@ -7,7 +7,7 @@ namespace Dna.Client.Desktop;
 
 public sealed class DesktopProjectConfig
 {
-    private const string MetadataDirectoryName = ".project.dna";
+    private const string MetadataDirectoryName = ".agentic-os";
     private const string ProjectConfigFileName = "project.json";
     private const string LlmConfigFileName = "llm.json";
     private const string WorkspaceConfigFileName = "client-workspaces.json";
