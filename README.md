@@ -1,14 +1,14 @@
-# Project DNA
+# Agentic OS
 
 **The local project knowledge runtime for AI agents.**
 
-Project DNA gives agents project-level cognition: structure, dependencies, constraints, decisions, and lessons learned.
+Agentic OS gives agents project-level cognition: structure, dependencies, constraints, decisions, and lessons learned.
 
 [中文文档](README.zh-CN.md)
 
 ## Current Product Shape
 
-Project DNA is currently documented and supported as a **single desktop App**:
+Agentic OS is currently documented and supported as a **single desktop App**:
 
 - one process
 - one window
@@ -92,7 +92,7 @@ After the desktop App has loaded a project, point your IDE MCP config to:
 ```json
 {
   "mcpServers": {
-    "project-dna": {
+    "agentic-os": {
       "url": "http://localhost:5052/mcp"
     }
   }
@@ -187,8 +187,8 @@ The App also exposes `GET /api/app/mcp/tools` for UI and automation usage.
 
 See:
 
-- [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
-- [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
+- [docs/architecture/agentic-os-design.md](docs/architecture/agentic-os-design.md)
+- [docs/architecture/agentic-os-transport-auth-decision.md](docs/architecture/agentic-os-transport-auth-decision.md)
 - [docs/architecture/app-topology-upgrade-plan.md](docs/architecture/app-topology-upgrade-plan.md)
 
 ## Contributing

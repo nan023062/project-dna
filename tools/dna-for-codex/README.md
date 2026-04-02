@@ -1,6 +1,6 @@
-# Project DNA - Codex 接入指南
+# Agentic OS - Codex 接入指南
 
-Project DNA 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手具备项目级上下文与记忆能力。
+Agentic OS 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手具备项目级上下文与记忆能力。
 
 本指南会把 Codex 连接到 **本地 App MCP**（默认 `5052`）。
 
@@ -28,22 +28,22 @@ Project DNA 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手
 本目录提供了一套 Codex 工具，可一键生成 MCP 配置与提示模板。
 
 ### 1. 复制工具目录
-将 `tools/dna-for-codex` 复制到您项目的 `.codex/skills/project-dna` 目录下。
+将 `tools/dna-for-codex` 复制到您项目的 `.codex/skills/agentic-os` 目录下。
 
 ### 2. 修改配置文件
-打开 `.codex/skills/project-dna/config.json`，按您的 **App 地址** 修改：
+打开 `.codex/skills/agentic-os/config.json`，按您的 **App 地址** 修改：
 
 ```json
 {
   "app": {
     "serverIp": "127.0.0.1",
     "port": 5052,
-    "serverName": "project-dna",
+    "serverName": "agentic-os",
     "hook": {
       "enabled": true,
       "replaceExisting": true,
-      "promptFileName": "project-dna-mcp-hook.md",
-      "agentFileName": "project-dna-mcp-hooks.md"
+      "promptFileName": "agentic-os-mcp-hook.md",
+      "agentFileName": "agentic-os-mcp-hooks.md"
     }
   }
 }
@@ -53,12 +53,12 @@ Project DNA 通过 MCP (Model Context Protocol) 与 Codex 集成，让 AI 助手
 
 Windows (PowerShell)：
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\.codex\skills\project-dna\scripts\install-app.ps1
+powershell -ExecutionPolicy Bypass -File .\.codex\skills\agentic-os\scripts\install-app.ps1
 ```
 
 macOS / Linux (Bash)：
 ```bash
-bash .codex/skills/project-dna/scripts/install-app.sh
+bash .codex/skills/agentic-os/scripts/install-app.sh
 ```
 
 脚本会自动：
@@ -78,7 +78,7 @@ bash .codex/skills/project-dna/scripts/install-app.sh
 ```json
 {
   "mcpServers": {
-    "project-dna": {
+    "agentic-os": {
       "url": "http://127.0.0.1:5052/mcp"
     }
   }
@@ -89,7 +89,7 @@ bash .codex/skills/project-dna/scripts/install-app.sh
 
 ## 验证连接
 
-1. 重启 Codex 会话后，确认 MCP `project-dna` 已连接。
+1. 重启 Codex 会话后，确认 MCP `agentic-os` 已连接。
 2. 应能看到 `get_context`、`recall`、`remember` 等工具。
 3. 可额外检查 App 状态：
    ```bash

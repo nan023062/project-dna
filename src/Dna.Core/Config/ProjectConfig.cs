@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Dna.Core.Config;
 
 /// <summary>
-/// Project DNA 全局配置：项目路径管理 + 最近项目记忆
+/// Agentic OS 全局配置：项目路径管理 + 最近项目记忆
 /// 支持运行时切换项目、持久化最近打开的项目列表
 /// </summary>
 public class ProjectConfig

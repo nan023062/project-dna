@@ -1,8 +1,8 @@
-# Project DNA MCP Agent Hooks (Codex)
+# Agentic OS MCP Agent Hooks (Codex)
 
 Use this file as team default Codex prompt guidance.
 
-- MCP Server: project-dna
+- MCP Server: agentic-os
 - MCP Endpoint: {{MCP_ENDPOINT}}
 
 ## Mandatory Workflow

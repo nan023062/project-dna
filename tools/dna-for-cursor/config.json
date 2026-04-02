@@ -2,12 +2,12 @@
   "app": {
     "serverIp": "127.0.0.1",
     "port": 5052,
-    "serverName": "project-dna",
+    "serverName": "agentic-os",
     "hook": {
       "enabled": true,
       "replaceExisting": true,
-      "ruleFileName": "project-dna-mcp-hook.mdc",
-      "agentFileName": "project-dna-mcp-hooks.md"
+      "ruleFileName": "agentic-os-mcp-hook.mdc",
+      "agentFileName": "agentic-os-mcp-hooks.md"
     }
   }
 }

@@ -1,6 +1,6 @@
-# Project DNA MCP Hook (Codex)
+# Agentic OS MCP Hook (Codex)
 
-You are connected to Project DNA, an AI Agent Knowledge Engine.
+You are connected to Agentic OS, an AI Agent Knowledge Engine.
 Before making any codebase changes, use MCP tools to fetch context, and after changes, record decisions.
 
 ## Workflow

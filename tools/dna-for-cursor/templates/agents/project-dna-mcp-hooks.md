@@ -1,9 +1,9 @@
-# Project DNA MCP Agent Hooks
+# Agentic OS MCP Agent Hooks
 
-You are connected to Project DNA, an AI Agent Knowledge Engine.
+You are connected to Agentic OS, an AI Agent Knowledge Engine.
 Use this file as team default agent prompt guidance.
 
-- MCP Server: project-dna
+- MCP Server: agentic-os
 - MCP Endpoint: {{MCP_ENDPOINT}}
 
 ## Mandatory Workflow

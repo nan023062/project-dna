@@ -1,4 +1,4 @@
-# Contributing to Project DNA
+# Contributing to Agentic OS
 
 Thank you for your interest in contributing!
 

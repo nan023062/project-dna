@@ -1,8 +1,8 @@
-# Project DNA
+# Agentic OS
 
 **面向 AI Agent 的本地项目知识运行时。**
 
-Project DNA 让 Agent 具备项目级认知能力：理解结构、依赖、约束、设计决策与经验沉淀，而不只是修改当前文件。
+Agentic OS 让 Agent 具备项目级认知能力：理解结构、依赖、约束、设计决策与经验沉淀，而不只是修改当前文件。
 
 [English](README.md)
 
@@ -96,7 +96,7 @@ publish/agentic-os.exe
 ```json
 {
   "mcpServers": {
-    "project-dna": {
+    "agentic-os": {
       "url": "http://localhost:5052/mcp"
     }
   }
@@ -191,8 +191,8 @@ http://127.0.0.1:5052
 
 详见：
 
-- [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
-- [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
+- [docs/architecture/agentic-os-design.md](docs/architecture/agentic-os-design.md)
+- [docs/architecture/agentic-os-transport-auth-decision.md](docs/architecture/agentic-os-transport-auth-decision.md)
 - [docs/architecture/app-topology-upgrade-plan.md](docs/architecture/app-topology-upgrade-plan.md)
 
 ## 许可证

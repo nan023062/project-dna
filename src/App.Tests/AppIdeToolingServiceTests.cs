@@ -14,14 +14,14 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         Directory.CreateDirectory(_workspaceRoot);
         var tooling = CreateToolingService();
 
-        var report = tooling.InstallTarget("codex", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: true);
-        var status = tooling.GetStatus("codex", _workspaceRoot, "http://localhost:5052/mcp", "project-dna");
+        var report = tooling.InstallTarget("codex", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: true);
+        var status = tooling.GetStatus("codex", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os");
 
         Assert.Empty(report.Warnings);
         Assert.Equal(3, report.WrittenFiles.Count);
         Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "mcp.json")));
-        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "prompts", "project-dna-mcp-hook.md")));
-        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "agents", "project-dna-mcp-hooks.md")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "prompts", "agentic-os-mcp-hook.md")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "agents", "agentic-os-mcp-hooks.md")));
         Assert.True(status.McpConfigured);
         Assert.True(status.Installed);
     }
@@ -32,13 +32,13 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         Directory.CreateDirectory(_workspaceRoot);
         var tooling = CreateToolingService();
 
-        var firstReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: true);
+        var firstReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: true);
         var promptPath = firstReport.Paths.PromptFile;
         var agentPath = firstReport.Paths.AgentFile;
         File.WriteAllText(promptPath, "custom prompt");
         File.WriteAllText(agentPath, "custom agent");
 
-        var secondReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "project-dna", replaceExisting: false);
+        var secondReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: false);
 
         Assert.Contains(promptPath, secondReport.SkippedFiles);
         Assert.Contains(agentPath, secondReport.SkippedFiles);

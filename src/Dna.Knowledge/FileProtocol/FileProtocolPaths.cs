@@ -59,7 +59,7 @@ public static class FileProtocolPaths
 
     /// <summary>
     /// 从模块目录的绝对路径反推 UID。
-    /// 例如 /project/.agentic-os/knowledge/modules/ProjectDna/Program/DnaCore → ProjectDna/Program/DnaCore
+    /// 例如 /project/.agentic-os/knowledge/modules/AgenticOs/Program/DnaCore → AgenticOs/Program/DnaCore
     /// </summary>
     public static string? ExtractUidFromPath(string agenticOsPath, string moduleDir)
     {

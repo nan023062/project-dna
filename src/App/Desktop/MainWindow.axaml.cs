@@ -1296,7 +1296,7 @@ public partial class MainWindow : Window
 
         welcome.Children.Add(new TextBlock
         {
-            Text = "Project DNA AI 助手",
+            Text = "Agentic OS AI 助手",
             FontSize = 20,
             FontWeight = FontWeight.Bold
         });

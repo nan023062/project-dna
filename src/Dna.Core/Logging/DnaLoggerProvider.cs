@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace Dna.Core.Logging;
 
 /// <summary>
-/// Project DNA 统一日志 Provider：Console（带颜色 + emoji）+ File（纯文本按天轮转）。
+/// Agentic OS 统一日志 Provider：Console（带颜色 + emoji）+ File（纯文本按天轮转）。
 /// 通过 EventId.Name 区分业务领域（MCP / TOPO / MODULE …），自动匹配 emoji 和颜色。
 /// stdio 模式下输出到 stderr 且不带颜色，避免污染 MCP JSON-RPC 通道。
 /// </summary>

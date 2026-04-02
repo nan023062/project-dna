@@ -18,7 +18,7 @@ public static class AppToolingEndpoints
             var currentWorkspace = workspaces.GetCurrentWorkspace();
             var resolvedWorkspaceRoot = ResolveWorkspaceRoot(workspaces, workspaceRoot);
             var mcpEndpoint = ResolveMcpEndpoint(request);
-            const string serverName = "project-dna";
+            const string serverName = "agentic-os";
 
             var targets = new[]
             {
@@ -50,7 +50,7 @@ public static class AppToolingEndpoints
 
             var mcpEndpoint = ResolveMcpEndpoint(httpRequest);
             var serverName = string.IsNullOrWhiteSpace(request.ServerName)
-                ? "project-dna"
+                ? "agentic-os"
                 : request.ServerName.Trim();
             var replaceExisting = request.ReplaceExisting ?? true;
 

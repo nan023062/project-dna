@@ -1,11 +1,11 @@
 ---
-name: project-dna-codex
-description: Project DNA 的 Codex 桌面应用接入工具。用于“配置 Codex MCP”“安装 codex 工具”或“打开控制台”场景。
+name: agentic-os-codex
+description: Agentic OS 的 Codex 桌面应用接入工具。用于“配置 Codex MCP”“安装 codex 工具”或“打开控制台”场景。
 ---
 
-# 技能：Project DNA Codex 接入工具箱
+# 技能：Agentic OS Codex 接入工具箱
 
-这是 Project DNA 的 Codex 接入入口，负责将 Codex 连接到本地 App MCP。
+这是 Agentic OS 的 Codex 接入入口，负责将 Codex 连接到本地 App MCP。
 
 ## 触发时机
 
@@ -16,7 +16,7 @@ description: Project DNA 的 Codex 桌面应用接入工具。用于“配置 Co
 
 ## 统一配置源
 
-- 配置文件：`.codex/skills/project-dna/config.json`
+- 配置文件：`.codex/skills/agentic-os/config.json`
 - 必填字段：`app.serverIp`、`app.port`、`app.serverName`、`app.hook.*`
 
 ## 执行步骤
@@ -25,11 +25,11 @@ description: Project DNA 的 Codex 桌面应用接入工具。用于“配置 Co
 2. 运行安装脚本：
    - Windows：
      ```powershell
-     powershell -ExecutionPolicy Bypass -File .\.codex\skills\project-dna\scripts\install-app.ps1
+     powershell -ExecutionPolicy Bypass -File .\.codex\skills\agentic-os\scripts\install-app.ps1
      ```
    - macOS / Linux：
      ```bash
-     bash .codex/skills/project-dna/scripts/install-app.sh
+     bash .codex/skills/agentic-os/scripts/install-app.sh
      ```
 3. 验证生成结果：
    - `.codex/mcp.json`

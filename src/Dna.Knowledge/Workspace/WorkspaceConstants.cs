@@ -40,7 +40,7 @@ internal static class WorkspaceConstants
 
     public static class Persona
     {
-        public const string DefaultName = "Project DNA";
+        public const string DefaultName = "Agentic OS";
         public const string DefaultRoleId = "coder";
     }
 

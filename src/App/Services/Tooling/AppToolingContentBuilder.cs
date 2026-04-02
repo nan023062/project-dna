@@ -9,7 +9,7 @@ public sealed class AppToolingContentBuilder
 
     public string BuildAgentContent(string endpoint, string serverName, string target) =>
         $$"""
-        # Project DNA MCP Agent Hooks ({{(target == "cursor" ? "Cursor" : "Codex")}})
+        # Agentic OS MCP Agent Hooks ({{(target == "cursor" ? "Cursor" : "Codex")}})
 
         Use this file as team default agent prompt guidance.
 
@@ -28,14 +28,14 @@ public sealed class AppToolingContentBuilder
     private static string BuildCursorRuleContent(string endpoint) =>
         """
         ---
-        description: Project DNA MCP Hook gate
+        description: Agentic OS MCP Hook gate
         globs: ["**/*"]
         alwaysApply: true
         ---
 
-        # Project DNA MCP Hook
+        # Agentic OS MCP Hook
 
-        You are connected to Project DNA, an AI Agent Knowledge Engine.
+        You are connected to Agentic OS, an AI Agent Knowledge Engine.
         Before making any codebase changes, you MUST use the MCP tools to fetch context and after changes, you MUST record decisions.
 
         ## Workflow
@@ -61,9 +61,9 @@ public sealed class AppToolingContentBuilder
 
     private static string BuildCodexPromptContent(string endpoint) =>
         """
-        # Project DNA MCP Hook (Codex)
+        # Agentic OS MCP Hook (Codex)
 
-        You are connected to Project DNA, an AI Agent Knowledge Engine.
+        You are connected to Agentic OS, an AI Agent Knowledge Engine.
         Before making any codebase changes, use MCP tools to fetch context, and after changes, record decisions.
 
         ## Workflow

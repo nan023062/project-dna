@@ -1,12 +1,12 @@
 ---
-description: Project DNA MCP Hook gate
+description: Agentic OS MCP Hook gate
 globs: ["**/*"]
 alwaysApply: true
 ---
 
-# Project DNA MCP Hook
+# Agentic OS MCP Hook
 
-You are connected to Project DNA, an AI Agent Knowledge Engine.
+You are connected to Agentic OS, an AI Agent Knowledge Engine.
 Before making any codebase changes, you MUST use the MCP tools to fetch context and after changes, you MUST record decisions.
 
 ## Workflow

@@ -47,13 +47,13 @@ public sealed class DesktopProjectConfig
         TryMigrateLegacyConfig(metadataRootPath, configPath);
 
         if (!File.Exists(configPath))
-            throw new InvalidOperationException($"未找到 Project DNA 项目配置：{configPath}");
+            throw new InvalidOperationException($"未找到 Agentic OS 项目配置：{configPath}");
 
-        ProjectDnaConfig dto;
+        AgenticOsConfig dto;
         try
         {
             var json = File.ReadAllText(configPath);
-            dto = JsonSerializer.Deserialize<ProjectDnaConfig>(json, JsonOptions)
+            dto = JsonSerializer.Deserialize<AgenticOsConfig>(json, JsonOptions)
                   ?? throw new InvalidOperationException($"{ProjectConfigFileName} 内容为空。");
         }
         catch (JsonException ex)
@@ -275,7 +275,7 @@ public sealed class DesktopProjectConfig
         return false;
     }
 
-    private sealed class ProjectDnaConfig
+    private sealed class AgenticOsConfig
     {
         public string? ProjectName { get; init; }
         public string? ServerBaseUrl { get; init; }

@@ -32,16 +32,16 @@ public sealed class AppToolingTargetCatalog
             return new AppToolingTargetPaths
             {
                 McpFile = Path.Combine(workspaceRoot, ".cursor", "mcp.json"),
-                PromptFile = Path.Combine(workspaceRoot, ".cursor", "rules", "project-dna-mcp-hook.mdc"),
-                AgentFile = Path.Combine(workspaceRoot, ".cursor", "agents", "project-dna-mcp-hooks.md")
+                PromptFile = Path.Combine(workspaceRoot, ".cursor", "rules", "agentic-os-mcp-hook.mdc"),
+                AgentFile = Path.Combine(workspaceRoot, ".cursor", "agents", "agentic-os-mcp-hooks.md")
             };
         }
 
         return new AppToolingTargetPaths
         {
             McpFile = Path.Combine(workspaceRoot, ".codex", "mcp.json"),
-            PromptFile = Path.Combine(workspaceRoot, ".codex", "prompts", "project-dna-mcp-hook.md"),
-            AgentFile = Path.Combine(workspaceRoot, ".codex", "agents", "project-dna-mcp-hooks.md")
+            PromptFile = Path.Combine(workspaceRoot, ".codex", "prompts", "agentic-os-mcp-hook.md"),
+            AgentFile = Path.Combine(workspaceRoot, ".codex", "agents", "agentic-os-mcp-hooks.md")
         };
     }
 }

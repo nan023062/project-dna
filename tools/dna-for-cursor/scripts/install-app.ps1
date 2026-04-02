@@ -109,13 +109,13 @@ function New-RuleContent {
     param([string]$Endpoint)
 @"
 ---
-description: Project DNA MCP Hook gate
+description: Agentic OS MCP Hook gate
 globs: ["**/*"]
 ---
 
-# Project DNA MCP Hook
+# Agentic OS MCP Hook
 
-Use the Project DNA MCP workflow before editing files.
+Use the Agentic OS MCP workflow before editing files.
 
 1. Validate project identity first when identity tools are available.
 2. Before file edits, fetch task context via begin_task/get_context.
@@ -132,7 +132,7 @@ If MCP is unavailable, report it clearly and continue non-knowledge-tool work.
 function New-AgentContent {
     param([string]$Endpoint, [string]$ServerName)
 @"
-# Project DNA MCP Agent Hooks
+# Agentic OS MCP Agent Hooks
 
 Use this file as team default agent prompt guidance.
 
