@@ -19,7 +19,6 @@ public sealed class MemoryTools(DnaServerApi api)
         [Description("Memory type: Structural/Semantic/Episodic/Working/Procedural")] string type,
         [Description("Disciplines, comma separated.")] string disciplines,
         [Description("Node type: Project/Department/Technical/Team")] string? nodeType = null,
-        [Description("Legacy alias for node type.")] string? layer = null,
         [Description("Tags, comma separated.")] string? tags = null,
         [Description("Short summary.")] string? summary = null,
         [Description("Features, comma separated.")] string? features = null,
@@ -31,14 +30,15 @@ public sealed class MemoryTools(DnaServerApi api)
         {
             if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
                 return $"Error: invalid memory type '{type}'.";
-            if (!NodeTypeCompat.TryParse(nodeType ?? layer, out var parsedNodeType))
-                return $"Error: invalid node type '{nodeType ?? layer}'.";
+            var parsedNodeType = ParseNodeTypeOrDefault(nodeType);
+            if (parsedNodeType == null)
+                return $"Error: invalid node type '{nodeType}'.";
 
             var payload = new RememberRequest
             {
                 Content = content,
                 Type = memoryType,
-                NodeType = parsedNodeType,
+                NodeType = parsedNodeType.Value,
                 Source = MemorySource.Ai,
                 Summary = summary,
                 Disciplines = SplitCsv(disciplines),
@@ -66,7 +66,6 @@ public sealed class MemoryTools(DnaServerApi api)
         [Description("Node id filter.")] string? nodeId = null,
         [Description("Tags, comma separated.")] string? tags = null,
         [Description("Node types, comma separated: Project/Department/Technical/Team")] string? nodeTypes = null,
-        [Description("Legacy alias for node types.")] string? layers = null,
         [Description("Expand constraint chain.")] bool expandChain = true,
         [Description("Max results.")] int maxResults = 10)
     {
@@ -79,7 +78,7 @@ public sealed class MemoryTools(DnaServerApi api)
                 Features = SplitCsvOrNull(features),
                 NodeId = nodeId,
                 Tags = SplitCsvOrNull(tags),
-                NodeTypes = ParseNodeTypes(nodeTypes, layers),
+                NodeTypes = ParseNodeTypes(nodeTypes),
                 ExpandConstraintChain = expandChain,
                 MaxResults = Math.Clamp(maxResults, 1, 50)
             };
@@ -147,9 +146,10 @@ public sealed class MemoryTools(DnaServerApi api)
                     continue;
                 }
 
-                if (!NodeTypeCompat.TryParse(item.NodeType ?? item.Layer, out var parsedNodeType))
+                var parsedNodeType = ParseNodeTypeOrDefault(item.NodeType);
+                if (parsedNodeType == null)
                 {
-                    errors.Add($"[{i}] invalid nodeType/layer '{item.NodeType ?? item.Layer}'");
+                    errors.Add($"[{i}] invalid nodeType '{item.NodeType}'");
                     continue;
                 }
 
@@ -157,7 +157,7 @@ public sealed class MemoryTools(DnaServerApi api)
                 {
                     Content = item.Content,
                     Type = memoryType,
-                    NodeType = parsedNodeType,
+                    NodeType = parsedNodeType.Value,
                     Source = MemorySource.Ai,
                     Summary = item.Summary,
                     Disciplines = SplitCsv(item.Disciplines),
@@ -206,7 +206,6 @@ public sealed class MemoryTools(DnaServerApi api)
         [Description("New summary, optional.")] string? summary = null,
         [Description("New memory type, optional.")] string? type = null,
         [Description("New node type, optional.")] string? nodeType = null,
-        [Description("Legacy alias for node type.")] string? layer = null,
         [Description("Replacement tags, comma separated.")] string? tags = null,
         [Description("Replacement disciplines, comma separated.")] string? disciplines = null,
         [Description("New importance, optional.")] double? importance = null)
@@ -222,10 +221,12 @@ public sealed class MemoryTools(DnaServerApi api)
             if (!string.IsNullOrWhiteSpace(type) && !Enum.TryParse<MemoryType>(type, true, out typeValue))
                 return $"Error: invalid memory type '{type}'.";
 
-            if (!string.IsNullOrWhiteSpace(nodeType) || !string.IsNullOrWhiteSpace(layer))
+            if (!string.IsNullOrWhiteSpace(nodeType))
             {
-                if (!NodeTypeCompat.TryParse(nodeType ?? layer, out nodeTypeValue))
-                    return $"Error: invalid node type '{nodeType ?? layer}'.";
+                var parsedNodeType = ParseNodeTypeOrDefault(nodeType);
+                if (parsedNodeType == null)
+                    return $"Error: invalid node type '{nodeType}'.";
+                nodeTypeValue = parsedNodeType.Value;
             }
 
             var payload = new RememberRequest
@@ -269,7 +270,6 @@ public sealed class MemoryTools(DnaServerApi api)
     [McpServerTool, Description("Query memories by filters.")]
     public async Task<string> query_memories(
         [Description("Node types, comma separated.")] string? nodeTypes = null,
-        [Description("Legacy alias for node types.")] string? layers = null,
         [Description("Memory types, comma separated.")] string? types = null,
         [Description("Disciplines, comma separated.")] string? disciplines = null,
         [Description("Features, comma separated.")] string? features = null,
@@ -282,7 +282,6 @@ public sealed class MemoryTools(DnaServerApi api)
         {
             var parts = new List<string> { $"limit={Math.Clamp(limit, 1, 100)}" };
             if (!string.IsNullOrWhiteSpace(nodeTypes)) parts.Add($"nodeTypes={Uri.EscapeDataString(nodeTypes)}");
-            if (!string.IsNullOrWhiteSpace(layers)) parts.Add($"layers={Uri.EscapeDataString(layers)}");
             if (!string.IsNullOrWhiteSpace(types)) parts.Add($"types={Uri.EscapeDataString(types)}");
             if (!string.IsNullOrWhiteSpace(disciplines)) parts.Add($"disciplines={Uri.EscapeDataString(disciplines)}");
             if (!string.IsNullOrWhiteSpace(features)) parts.Add($"features={Uri.EscapeDataString(features)}");
@@ -326,48 +325,6 @@ public sealed class MemoryTools(DnaServerApi api)
         try
         {
             var result = await api.GetAsync("/api/memory/stats");
-            return JsonSerializer.Serialize(result, PrettyJson);
-        }
-        catch (Exception ex)
-        {
-            return $"Error: {ex.Message}";
-        }
-    }
-
-    [McpServerTool, Description("Legacy alias: rebuild the memory index.")]
-    public async Task<string> import_from_json([Description("Legacy flag, ignored.")] bool rewriteJson = false)
-    {
-        try
-        {
-            var result = await api.PostAsync($"/api/memory/index/rebuild?rewriteJson={rewriteJson.ToString().ToLowerInvariant()}", new { });
-            return JsonSerializer.Serialize(result, PrettyJson);
-        }
-        catch (Exception ex)
-        {
-            return $"Error: {ex.Message}";
-        }
-    }
-
-    [McpServerTool, Description("Legacy alias: sync the memory index.")]
-    public async Task<string> import_new_from_json()
-    {
-        try
-        {
-            var result = await api.PostAsync("/api/memory/index/sync", new { });
-            return JsonSerializer.Serialize(result, PrettyJson);
-        }
-        catch (Exception ex)
-        {
-            return $"Error: {ex.Message}";
-        }
-    }
-
-    [McpServerTool, Description("Legacy alias: export index data.")]
-    public async Task<string> export_to_json()
-    {
-        try
-        {
-            var result = await api.PostAsync("/api/memory/index/export", new { });
             return JsonSerializer.Serialize(result, PrettyJson);
         }
         catch (Exception ex)
@@ -423,11 +380,10 @@ public sealed class MemoryTools(DnaServerApi api)
         return list.Count > 0 ? list : null;
     }
 
-    private static List<NodeType>? ParseNodeTypes(string? nodeTypes, string? legacyLayers = null)
+    private static List<NodeType>? ParseNodeTypes(string? nodeTypes)
     {
         var merged = new List<string>();
         if (!string.IsNullOrWhiteSpace(nodeTypes)) merged.AddRange(SplitCsv(nodeTypes));
-        if (!string.IsNullOrWhiteSpace(legacyLayers)) merged.AddRange(SplitCsv(legacyLayers));
         if (merged.Count == 0) return null;
 
         return merged
@@ -510,12 +466,19 @@ public sealed class MemoryTools(DnaServerApi api)
         return NodeType.Technical;
     }
 
+    private static NodeType? ParseNodeTypeOrDefault(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return NodeType.Technical;
+
+        return NodeTypeCompat.TryParse(value, out var parsed) ? parsed : null;
+    }
+
     private sealed class BatchEntry
     {
         public string Content { get; set; } = "";
         public string Type { get; set; } = "";
         public string? NodeType { get; set; }
-        public string? Layer { get; set; }
         public string? Disciplines { get; set; }
         public string? Tags { get; set; }
         public string? Summary { get; set; }

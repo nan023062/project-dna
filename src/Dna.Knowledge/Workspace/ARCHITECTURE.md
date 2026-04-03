@@ -214,7 +214,7 @@ Dna.Core
 
 `Workspace` 当前已经提供这些面向上层的能力：
 
-- 基于 `projectRoot + ArchitectureManifest` 的工作区初始化
+- 基于 `projectRoot + WorkspaceTopologyContext` 的工作区初始化
 - 根目录快照查询
 - 任意目录快照查询
 - 按相对路径查询单个条目
@@ -241,7 +241,7 @@ Dna.Core
 - 基于 `WorkspaceDirectorySnapshot` 的目录快照构建
 - 基于 `WorkspaceFileNode` 的条目结构化表达
 - 面向异常场景的 best-effort 扫描
-- 基于 `ModulesManifest` 的模块归属识别
+- 基于 `WorkspaceTopologyContext.Modules` 的模块归属识别
 - 基于 `ManagedPaths` 的托管范围识别
 - `.agentic.meta` 的读取、归一化和描述投影
 - 在普通文件列表中隐藏 `.agentic.meta`
@@ -330,7 +330,7 @@ Dna.Core
 - `bin`
 - `obj`
 - 其他默认工具与构建目录
-- `ArchitectureManifest.ExcludeDirs` 中追加的目录
+- `WorkspaceTopologyContext.ExcludeDirs` 中追加的目录
 
 ### WorkspaceTreeCache
 

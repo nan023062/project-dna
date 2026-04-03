@@ -26,7 +26,7 @@ public sealed class WorkspaceEngineTests : IDisposable
         File.WriteAllText(Path.Combine(_workspaceRoot, "README.md"), "# test");
         File.WriteAllText(Path.Combine(_workspaceRoot, ".agentic-os", "project.json"), "{}");
 
-        var snapshot = _engine.GetRootSnapshot(_workspaceRoot, new ArchitectureManifest(), new ModulesManifest());
+        var snapshot = _engine.GetRootSnapshot(_workspaceRoot, new WorkspaceTopologyContext());
 
         Assert.True(snapshot.Exists);
         Assert.Equal(string.Empty, snapshot.RelativePath);
@@ -52,25 +52,17 @@ public sealed class WorkspaceEngineTests : IDisposable
         File.WriteAllText(Path.Combine(_workspaceRoot, "src", "App", "Program.cs"), "class Program {}");
         File.WriteAllText(Path.Combine(_workspaceRoot, "docs", "api", "contracts.md"), "contract");
 
-        var manifest = new ModulesManifest
+        var topology = CreateTopologyContext(new WorkspaceModuleRegistration
         {
-            Disciplines = new Dictionary<string, List<ModuleRegistration>>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["engineering"] =
-                [
-                    new ModuleRegistration
-                    {
-                        Id = "app-module",
-                        Name = "App",
-                        Path = "src/App",
-                        Layer = 2,
-                        ManagedPaths = ["docs/api"]
-                    }
-                ]
-            }
-        };
+            Id = "app-module",
+            Name = "App",
+            Discipline = "engineering",
+            Path = "src/App",
+            Layer = 2,
+            ManagedPaths = ["docs/api"]
+        });
 
-        var srcSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src", new ArchitectureManifest(), manifest);
+        var srcSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src", topology);
         var appModule = Assert.Single(srcSnapshot.Entries);
         Assert.Equal("App", appModule.Name);
         Assert.Equal(FileNodeStatus.Registered, appModule.Status);
@@ -79,14 +71,14 @@ public sealed class WorkspaceEngineTests : IDisposable
         Assert.Equal(WorkspaceOwnershipKind.ModuleRoot, appModule.Ownership?.Kind);
         Assert.True(appModule.Ownership?.IsExactMatch);
 
-        var docsSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "docs", new ArchitectureManifest(), manifest);
+        var docsSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "docs", topology);
         var managedScope = Assert.Single(docsSnapshot.Entries);
         Assert.Equal("api", managedScope.Name);
         Assert.Equal(FileNodeStatus.Managed, managedScope.Status);
         Assert.Equal(WorkspaceOwnershipKind.ManagedPath, managedScope.Ownership?.Kind);
         Assert.True(managedScope.Actions.CanEdit);
 
-        var moduleSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src/App", new ArchitectureManifest(), manifest);
+        var moduleSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src/App", topology);
         var trackedFile = Assert.Single(moduleSnapshot.Entries);
         Assert.Equal("Program.cs", trackedFile.Name);
         Assert.Equal(WorkspaceEntryKind.File, trackedFile.Kind);
@@ -94,7 +86,7 @@ public sealed class WorkspaceEngineTests : IDisposable
         Assert.Equal("app-module", trackedFile.Ownership?.ModuleId);
         Assert.Equal(WorkspaceOwnershipKind.ModuleRoot, trackedFile.Ownership?.Kind);
 
-        var rootSnapshot = _engine.GetRootSnapshot(_workspaceRoot, new ArchitectureManifest(), manifest);
+        var rootSnapshot = _engine.GetRootSnapshot(_workspaceRoot, topology);
         var docsDirectory = rootSnapshot.Entries.Single(entry => entry.Name == "docs");
         Assert.Equal(FileNodeStatus.Container, docsDirectory.Status);
     }
@@ -105,25 +97,17 @@ public sealed class WorkspaceEngineTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_workspaceRoot, "docs", "api"));
         File.WriteAllText(Path.Combine(_workspaceRoot, "docs", "api", "contracts.md"), "contract");
 
-        var manifest = new ModulesManifest
+        var topology = CreateTopologyContext(new WorkspaceModuleRegistration
         {
-            Disciplines = new Dictionary<string, List<ModuleRegistration>>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["engineering"] =
-                [
-                    new ModuleRegistration
-                    {
-                        Id = "workspace-module",
-                        Name = "Workspace",
-                        Path = "src/Workspace",
-                        Layer = 1,
-                        ManagedPaths = ["docs/api"]
-                    }
-                ]
-            }
-        };
+            Id = "workspace-module",
+            Name = "Workspace",
+            Discipline = "engineering",
+            Path = "src/Workspace",
+            Layer = 1,
+            ManagedPaths = ["docs/api"]
+        });
 
-        var file = _engine.TryGetEntry(_workspaceRoot, @"docs\api\contracts.md", new ArchitectureManifest(), manifest);
+        var file = _engine.TryGetEntry(_workspaceRoot, @"docs\api\contracts.md", topology);
 
         Assert.NotNull(file);
         Assert.Equal("docs/api/contracts.md", file!.Path);
@@ -132,7 +116,7 @@ public sealed class WorkspaceEngineTests : IDisposable
         Assert.Equal("Workspace", file.Ownership?.ModuleName);
         Assert.Equal(WorkspaceOwnershipKind.ManagedPath, file.Ownership?.Kind);
         Assert.False(file.Ownership?.IsExactMatch);
-        Assert.Null(_engine.TryGetEntry(_workspaceRoot, "missing/file.txt", new ArchitectureManifest(), manifest));
+        Assert.Null(_engine.TryGetEntry(_workspaceRoot, "missing/file.txt", topology));
     }
 
     [Fact]
@@ -172,8 +156,8 @@ public sealed class WorkspaceEngineTests : IDisposable
         loaded.Summary = "Desktop application workspace directory.";
         await _engine.WriteDirectoryMetadataAsync(_workspaceRoot, "src/App", loaded);
 
-        var manifest = new ModulesManifest();
-        var snapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src", new ArchitectureManifest(), manifest);
+        var topology = new WorkspaceTopologyContext();
+        var snapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src", topology);
         var appDirectory = Assert.Single(snapshot.Entries);
 
         Assert.Equal("App", appDirectory.Name);
@@ -183,7 +167,7 @@ public sealed class WorkspaceEngineTests : IDisposable
         Assert.Equal(created.StableGuid, appDirectory.Descriptor!.StableGuid);
         Assert.Equal("Desktop application workspace directory.", appDirectory.Descriptor.Summary);
 
-        var appSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src/App", new ArchitectureManifest(), manifest);
+        var appSnapshot = _engine.GetDirectorySnapshot(_workspaceRoot, "src/App", topology);
         Assert.DoesNotContain(appSnapshot.Entries, entry => string.Equals(entry.Name, ".agentic.meta", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -196,7 +180,7 @@ public sealed class WorkspaceEngineTests : IDisposable
         _engine.EnsureDirectory(_workspaceRoot, ".git/hooks");
         _engine.EnsureDirectory(_workspaceRoot, ".agentic-os/cache");
 
-        var result = await _engine.EnsureDirectoryMetadataTreeAsync(_workspaceRoot, new ArchitectureManifest());
+        var result = await _engine.EnsureDirectoryMetadataTreeAsync(_workspaceRoot, new WorkspaceTopologyContext());
 
         Assert.Equal(string.Empty, result.RootRelativePath);
         Assert.Equal(6, result.ProcessedDirectoryCount);
@@ -216,7 +200,7 @@ public sealed class WorkspaceEngineTests : IDisposable
     [Fact]
     public void Invalidate_ShouldPublishWorkspaceChangeEvent()
     {
-        _engine.Initialize(_workspaceRoot, new ArchitectureManifest());
+        _engine.Initialize(_workspaceRoot, new WorkspaceTopologyContext());
 
         WorkspaceChangeSet? received = null;
         _engine.Changed += OnChanged;
@@ -262,5 +246,13 @@ public sealed class WorkspaceEngineTests : IDisposable
         _engine.Dispose();
         if (Directory.Exists(_workspaceRoot))
             Directory.Delete(_workspaceRoot, recursive: true);
+    }
+
+    private static WorkspaceTopologyContext CreateTopologyContext(params WorkspaceModuleRegistration[] modules)
+    {
+        return new WorkspaceTopologyContext
+        {
+            Modules = modules.ToList()
+        };
     }
 }

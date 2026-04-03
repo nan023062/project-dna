@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Dna.App.Services;
 using Dna.Core.Config;
@@ -44,7 +42,6 @@ public sealed class DesktopProjectConfig
 
         var metadataRootPath = ResolveMetadataRootPath(normalizedRoot);
         var configPath = ResolveProjectConfigPath(normalizedRoot);
-        TryMigrateLegacyConfig(metadataRootPath, configPath);
 
         if (!File.Exists(configPath))
             throw new InvalidOperationException($"未找到 Agentic OS 项目配置：{configPath}");
@@ -103,9 +100,7 @@ public sealed class DesktopProjectConfig
 
         if (TryCopyFromCandidates(
                 WorkspaceConfigPath,
-                ResolveWorkspaceSnapshotPath(ProjectRoot),
-                ResolveLegacyProjectWorkspaceConfigPath(ProjectRoot),
-                ResolveLegacyGlobalWorkspaceConfigPath()))
+                ResolveWorkspaceSnapshotPath(ProjectRoot)))
         {
             return;
         }
@@ -130,8 +125,7 @@ public sealed class DesktopProjectConfig
 
         TryCopyFromCandidates(
             AgentShellStatePath,
-            ResolveAgentShellSnapshotPath(ProjectRoot),
-            ResolveLegacyGlobalAgentShellStatePath());
+            ResolveAgentShellSnapshotPath(ProjectRoot));
     }
 
     public static string ResolveMetadataRootPath(string projectRoot)
@@ -191,74 +185,8 @@ public sealed class DesktopProjectConfig
     private static string ResolveWorkspaceSnapshotPath(string projectRoot)
         => Path.Combine(ResolveMetadataRootPath(projectRoot), WorkspaceSnapshotFileName);
 
-    private static string ResolveLegacyProjectWorkspaceConfigPath(string projectRoot)
-    {
-        var profileRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dna",
-            "app-desktop",
-            "projects");
-
-        var projectId = ComputeStableId(projectRoot);
-        return Path.Combine(profileRoot, projectId, WorkspaceConfigFileName);
-    }
-
-    private static string ResolveLegacyGlobalWorkspaceConfigPath()
-        => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dna",
-            WorkspaceConfigFileName);
-
     private static string ResolveAgentShellSnapshotPath(string projectRoot)
         => Path.Combine(ResolveMetadataRootPath(projectRoot), AgentShellSnapshotFileName);
-
-    private static string ResolveLegacyGlobalAgentShellStatePath()
-        => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dna",
-            "app-agent-shell",
-            AgentShellStateFileName);
-
-    private static string ComputeStableId(string projectRoot)
-    {
-        var normalized = Path.GetFullPath(projectRoot).ToLowerInvariant();
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
-        return Convert.ToHexString(bytes[..8]).ToLowerInvariant();
-    }
-
-    private static void TryMigrateLegacyConfig(string metadataRootPath, string configPath)
-    {
-        if (Directory.Exists(metadataRootPath))
-            return;
-
-        var legacyFilePath = metadataRootPath;
-        if (!File.Exists(legacyFilePath))
-            return;
-
-        var legacyContent = File.ReadAllText(legacyFilePath);
-
-        try
-        {
-            File.Delete(legacyFilePath);
-            Directory.CreateDirectory(metadataRootPath);
-            File.WriteAllText(configPath, legacyContent);
-        }
-        catch
-        {
-            try
-            {
-                if (!File.Exists(legacyFilePath))
-                    File.WriteAllText(legacyFilePath, legacyContent);
-            }
-            catch
-            {
-                // best effort restore
-            }
-
-            throw new InvalidOperationException(
-                $"旧格式 {legacyFilePath} 迁移到 {configPath} 失败，请手动检查目录权限。");
-        }
-    }
 
     private static bool TryCopyFromCandidates(string targetPath, params string[] candidatePaths)
     {

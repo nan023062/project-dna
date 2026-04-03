@@ -50,10 +50,6 @@ public sealed class MemoryEngine : IMemoryEngine
         => _store.ReaderService.GetDisciplineSummary(disciplineId);
 
     public int MemoryCount() => _store.Count();
-
-    public (int imported, int skipped) RebuildIndex(bool rewriteJson = false) => _store.RebuildIndex(rewriteJson);
-    public (int added, int removed, int skipped) SyncFromJson() => _store.SyncFromJson();
-    public (int exported, int skipped) ExportToJson() => _store.ExportToJson();
     public int DecayStaleMemories() => _store.DecayStaleMemories();
 
     public void Initialize(string storePath) => _store.Initialize(storePath);

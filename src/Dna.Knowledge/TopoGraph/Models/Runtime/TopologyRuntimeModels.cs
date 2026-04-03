@@ -214,62 +214,6 @@ public class ModuleContext
     public bool IsBlocked => Level == ContextLevel.Unlinked;
 }
 
-public sealed class ModulesManifest
-{
-    public Dictionary<string, List<ModuleRegistration>> Disciplines { get; set; } = new();
-    public List<CrossWorkRegistration> CrossWorks { get; set; } = [];
-    public Dictionary<string, FeatureDefinition> Features { get; set; } = new();
-}
-
-public sealed class LayerDefinition
-{
-    public int Level { get; set; }
-    public string Name { get; set; } = string.Empty;
-}
-
-public sealed class ModuleRegistration
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Path { get; set; } = string.Empty;
-    public int Layer { get; set; }
-    public string? ParentModuleId { get; set; }
-    public List<string>? ManagedPaths { get; set; }
-    public bool IsCrossWorkModule { get; set; }
-    public List<CrossWorkParticipantRegistration> Participants { get; set; } = [];
-    public List<string> Dependencies { get; set; } = [];
-    public string? Maintainer { get; set; }
-    public string? Summary { get; set; }
-    public string? Boundary { get; set; }
-    public List<string>? PublicApi { get; set; }
-    public List<string>? Constraints { get; set; }
-    public Dictionary<string, string>? Metadata { get; set; }
-}
-
-public sealed class FeatureDefinition
-{
-    public List<string> Disciplines { get; set; } = [];
-    public List<string> Paths { get; set; } = [];
-}
-
-public sealed class CrossWorkRegistration
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public string? Feature { get; set; }
-    public List<CrossWorkParticipantRegistration> Participants { get; set; } = [];
-}
-
-public sealed class CrossWorkParticipantRegistration
-{
-    public string ModuleName { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
-    public string? ContractType { get; set; }
-    public string? Contract { get; set; }
-    public string? Deliverable { get; set; }
-}
-
 public sealed class ComputedManifest
 {
     public Dictionary<string, List<string>> ModuleDependencies { get; set; } = new(StringComparer.OrdinalIgnoreCase);

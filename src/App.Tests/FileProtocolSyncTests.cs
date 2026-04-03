@@ -1,0 +1,203 @@
+using Dna.Knowledge;
+using Dna.Knowledge.FileProtocol;
+using Dna.Knowledge.FileProtocol.Models;
+using Dna.Knowledge.TopoGraph;
+using Dna.Knowledge.TopoGraph.Internal.Builders;
+using Dna.Knowledge.TopoGraph.Models.Nodes;
+using Dna.Knowledge.Workspace.Models;
+using Dna.Memory.Models;
+using Dna.Memory.Store;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Xunit;
+
+namespace App.Tests;
+
+public sealed class FileProtocolSyncTests : IDisposable
+{
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"dna-file-sync-{Guid.NewGuid():N}");
+    private readonly string _agenticOsPath;
+    private readonly ServiceProvider _services;
+
+    public FileProtocolSyncTests()
+    {
+        _agenticOsPath = Path.Combine(_tempRoot, ".agentic-os");
+        Directory.CreateDirectory(_agenticOsPath);
+        _services = new ServiceCollection()
+            .AddLogging()
+            .AddHttpClient()
+            .BuildServiceProvider();
+    }
+
+    public void Dispose()
+    {
+        _services.Dispose();
+        SqliteConnection.ClearAllPools();
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                if (Directory.Exists(_tempRoot))
+                    Directory.Delete(_tempRoot, recursive: true);
+                break;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(100);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
+
+    [Fact]
+    public void MemoryStore_ShouldWriteLongTermMemoryIntoFileProtocol()
+    {
+        var topoStore = new StubTopoGraphStore();
+        using var memoryStore = new MemoryStore(_services);
+        memoryStore.Initialize(Path.Combine(_agenticOsPath, "memory"));
+        memoryStore.BuildInternals(
+            _services.GetRequiredService<IHttpClientFactory>(),
+            new Dna.Core.Config.ProjectConfig(),
+            _services.GetRequiredService<ILoggerFactory>(),
+            topoStore);
+
+        memoryStore.Insert(new MemoryEntry
+        {
+            Id = "01JTESTMEM0000000000000000",
+            Type = MemoryType.Structural,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "memory body",
+            Summary = "memory summary",
+            NodeId = "AgenticOs/Program/App",
+            Disciplines = ["engineering"],
+            Tags = ["#identity"],
+            Stage = MemoryStage.LongTerm,
+            Freshness = FreshnessStatus.Fresh,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var memoryPath = Path.Combine(_agenticOsPath, "memory", "decisions", "01JTESTMEM0000000000000000.md");
+        Assert.True(File.Exists(memoryPath));
+
+        memoryStore.UpdateFreshness("01JTESTMEM0000000000000000", FreshnessStatus.Archived);
+        Assert.False(File.Exists(memoryPath));
+    }
+
+    [Fact]
+    public void TopoGraphApplicationService_RegisterModule_ShouldWriteModuleFiles_AndPreserveTeamType()
+    {
+        SeedKnowledgeSpace(includeTeamModule: false);
+
+        var topoStore = new TopoGraphStore(_services);
+        var facade = new TopoGraphFacade(new FileBasedDefinitionStore(), new TopologyModelBuilder());
+        var service = new TopoGraphApplicationService(
+            topoStore,
+            facade,
+            contextProvider: null,
+            _services.GetRequiredService<ILoggerFactory>().CreateLogger<TopoGraphApplicationService>());
+
+        service.Initialize(Path.Combine(_agenticOsPath, "knowledge"));
+        service.RegisterModule("engineering", new TopologyModuleDefinition
+        {
+            Name = "App",
+            Path = "src/app",
+            Layer = 3,
+            Summary = "App shell"
+        });
+
+        var topology = service.BuildTopology();
+
+        var appNode = Assert.Single(topology.Nodes, node => node.Name == "App");
+        Assert.Equal(NodeType.Team, appNode.Type);
+        Assert.Equal("src/app", appNode.RelativePath);
+
+        var moduleJsonPath = Path.Combine(_agenticOsPath, "knowledge", "modules", "AgenticOs", "Program", "App", "module.json");
+        Assert.True(File.Exists(moduleJsonPath));
+    }
+
+    [Fact]
+    public void TopoGraphStore_UpsertNodeKnowledge_ShouldRefreshIdentityMarkdown()
+    {
+        SeedKnowledgeSpace(includeTeamModule: true);
+
+        var topoStore = new TopoGraphStore(_services);
+        topoStore.Initialize(Path.Combine(_agenticOsPath, "knowledge"));
+
+        topoStore.UpsertNodeKnowledge("AgenticOs/Program/App", new NodeKnowledge
+        {
+            Identity = "App runtime entrypoint.",
+            Lessons =
+            [
+                new LessonSummary
+                {
+                    Title = "Avoid direct routing",
+                    Resolution = "Prefer facade-backed endpoints"
+                }
+            ],
+            ActiveTasks = ["Move API to new facade"],
+            Facts = ["Reads .agentic-os directly"]
+        });
+
+        var identityPath = Path.Combine(_agenticOsPath, "knowledge", "modules", "AgenticOs", "Program", "App", "identity.md");
+        var content = File.ReadAllText(identityPath);
+
+        Assert.Contains("## Summary", content);
+        Assert.Contains("App runtime entrypoint.", content);
+        Assert.Contains("## Lessons", content);
+        Assert.Contains("Move API to new facade", content);
+    }
+
+    private void SeedKnowledgeSpace(bool includeTeamModule)
+    {
+        var fileStore = new KnowledgeFileStore();
+
+        fileStore.SaveModule(_agenticOsPath, new ModuleFile
+        {
+            Uid = "AgenticOs",
+            Name = "Agentic OS",
+            Type = TopologyNodeKind.Project
+        }, "## Summary\n\nProject.\n");
+
+        fileStore.SaveModule(_agenticOsPath, new ModuleFile
+        {
+            Uid = "AgenticOs/Program",
+            Name = "Program",
+            Type = TopologyNodeKind.Department,
+            Parent = "AgenticOs",
+            DisciplineCode = "engineering",
+            RoleId = "coder",
+            Layers = [new LayerDefinition { Level = 1, Name = "system" }, new LayerDefinition { Level = 3, Name = "application" }]
+        }, "## Summary\n\nEngineering department.\n");
+
+        if (!includeTeamModule)
+            return;
+
+        fileStore.SaveModule(_agenticOsPath, new ModuleFile
+        {
+            Uid = "AgenticOs/Program/App",
+            Name = "App",
+            Type = TopologyNodeKind.Team,
+            Parent = "AgenticOs/Program",
+            MainPath = "src/app",
+            Layer = 3,
+            BusinessObjective = "Run local app"
+        }, "## Summary\n\nApp module.\n");
+    }
+
+    private sealed class StubTopoGraphStore : ITopoGraphStore
+    {
+        public void Initialize(string storePath) { }
+        public void Reload() { }
+        public ComputedManifest GetComputedManifest() => new();
+        public Dictionary<string, NodeKnowledge> LoadNodeKnowledgeMap() => new(StringComparer.OrdinalIgnoreCase);
+        public void UpsertNodeKnowledge(string nodeId, NodeKnowledge knowledge) { }
+        public List<string> ResolveNodeIdCandidates(string? nodeId, bool strict = false) => string.IsNullOrWhiteSpace(nodeId) ? [] : [nodeId.Trim()];
+        public void UpdateComputedDependencies(string moduleName, List<string> computedDependencies) { }
+    }
+}

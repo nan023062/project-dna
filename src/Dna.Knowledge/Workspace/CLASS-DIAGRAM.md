@@ -1,7 +1,7 @@
 # Dna.Knowledge.Workspace 类图
 
 > 状态：目标重构类图
-> 最后更新：2026-04-02
+> 最后更新：2026-04-03
 > 适用范围：`src/Dna.Knowledge/Workspace`
 
 本文档只负责描述 `Workspace` 的目标类图，不展开整个知识域的架构背景。
@@ -33,14 +33,14 @@
 classDiagram
     class IWorkspaceEngine {
         <<interface>>
-        +Initialize(projectRoot, architecture)
-        +GetRootSnapshot(projectRoot, architecture, manifest)
-        +GetDirectorySnapshot(projectRoot, relativePath, architecture, manifest)
-        +TryGetEntry(projectRoot, relativePath, architecture, manifest)
+        +Initialize(projectRoot, topology)
+        +GetRootSnapshot(projectRoot, topology)
+        +GetDirectorySnapshot(projectRoot, relativePath, topology)
+        +TryGetEntry(projectRoot, relativePath, topology)
         +ReadTextAsync(projectRoot, relativePath)
         +WriteTextAsync(projectRoot, relativePath, content)
         +TryReadDirectoryMetadata(projectRoot, directoryRelativePath)
-        +EnsureDirectoryMetadataTreeAsync(projectRoot, architecture, relativePath)
+        +EnsureDirectoryMetadataTreeAsync(projectRoot, topology, relativePath)
         +Invalidate(relativePath)
         +InvalidateAll()
     }
@@ -52,7 +52,7 @@ classDiagram
     class WorkspaceTreeCache {
         -Dictionary~string,WorkspaceDirectorySnapshot~ _cache
         -FileSystemWatcher _watcher
-        +Initialize(projectRoot, architecture)
+        +Initialize(projectRoot, topology)
         +GetDirectorySnapshot(relativePath, scanDirectoryFn)
         +Invalidate(relativePath)
         +InvalidateAll()
@@ -60,7 +60,22 @@ classDiagram
 
     class WorkspaceScanner {
         <<static>>
-        +ScanDirectory(projectRoot, relativePath, architecture, manifest) WorkspaceDirectorySnapshot
+        +ScanDirectory(projectRoot, relativePath, topology) WorkspaceDirectorySnapshot
+    }
+
+    class WorkspaceTopologyContext {
+        +List~string~ ExcludeDirs
+        +List~WorkspaceModuleRegistration~ Modules
+    }
+
+    class WorkspaceModuleRegistration {
+        +string Id
+        +string Name
+        +string Discipline
+        +int Layer
+        +bool IsCrossWorkModule
+        +string Path
+        +List~string~ ManagedPaths
     }
 
     class WorkspacePath {
@@ -139,6 +154,7 @@ classDiagram
     WorkspaceEngine ..> WorkspaceScanner : delegates scan
     WorkspaceEngine ..> WorkspacePath : resolves safe path
     WorkspaceEngine ..> WorkspaceMetadataFile : reads/writes metadata
+    WorkspaceEngine ..> WorkspaceTopologyContext : consumes
 
     WorkspaceTreeCache *-- WorkspaceDirectorySnapshot : caches
     WorkspaceTreeCache --> WorkspaceChangeSet : publishes
@@ -147,6 +163,7 @@ classDiagram
     WorkspaceScanner --> WorkspaceFileNode : builds
     WorkspaceScanner ..> WorkspaceMetadataFile : reads descriptor
     WorkspaceScanner ..> WorkspacePath : normalizes path
+    WorkspaceScanner ..> WorkspaceTopologyContext : interprets
 
     WorkspaceDirectorySnapshot *-- WorkspaceFileNode : contains
     WorkspaceMetadataFile --> WorkspaceDirectoryMetadataDocument : persists

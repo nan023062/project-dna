@@ -26,12 +26,12 @@ public sealed class WorkspaceTreeCache : IDisposable
 
     public event EventHandler<WorkspaceChangeSet>? Changed;
 
-    public void Initialize(string projectRoot, ArchitectureManifest architecture)
+    public void Initialize(string projectRoot, WorkspaceTopologyContext topology)
     {
         lock (_lock)
         {
             var normalizedRoot = Path.GetFullPath(projectRoot);
-            var newExcludes = DefaultExcludes.BuildWithCustom(architecture.ExcludeDirs);
+            var newExcludes = DefaultExcludes.BuildWithCustom(topology.ExcludeDirs);
 
             if (string.Equals(_projectRoot, normalizedRoot, StringComparison.OrdinalIgnoreCase) &&
                 _excludes.SetEquals(newExcludes))

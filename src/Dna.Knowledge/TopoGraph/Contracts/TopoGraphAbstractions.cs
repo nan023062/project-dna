@@ -1,18 +1,11 @@
-using Dna.Knowledge.Workspace.Models;
-
 namespace Dna.Knowledge;
 
 internal static class TopoGraphConstants
 {
-    internal static class Services
-    {
-        public const string GraphEngine = "GraphEngine";
-    }
-
     internal static class Logging
     {
         public const string TopologySummary =
-            "[GraphEngine] Topology: {Nodes} nodes, {Relations} relations, {DependencyEdges} dependency edges, {CrossWorks} crossworks";
+            "[TopoGraph] Topology: {Nodes} nodes, {Relations} relations, {DependencyEdges} dependency edges, {CrossWorks} crossworks";
     }
 
     internal static class Relations
@@ -131,55 +124,9 @@ public interface ITopoGraphStore
 {
     void Initialize(string storePath);
     void Reload();
-
-    ArchitectureManifest GetArchitecture();
-    ModulesManifest GetModulesManifest();
     ComputedManifest GetComputedManifest();
     Dictionary<string, NodeKnowledge> LoadNodeKnowledgeMap();
     void UpsertNodeKnowledge(string nodeId, NodeKnowledge knowledge);
     List<string> ResolveNodeIdCandidates(string? nodeId, bool strict = false);
-
     void UpdateComputedDependencies(string moduleName, List<string> computedDependencies);
-
-    void RegisterModule(string discipline, ModuleRegistration module);
-    bool UnregisterModule(string name);
-    void SaveCrossWork(CrossWorkRegistration crossWork);
-    bool RemoveCrossWork(string crossWorkId);
-
-    void UpsertDiscipline(string disciplineId, string? displayName, string roleId, List<LayerDefinition> layers);
-    bool RemoveDiscipline(string disciplineId);
-    void ReplaceModulesManifest(ModulesManifest manifest);
-}
-
-public interface IGraphEngine
-{
-    TopologySnapshot BuildTopology();
-    TopologySnapshot GetTopology();
-    ExecutionPlan GetExecutionPlan(List<string> moduleNames);
-
-    KnowledgeNode? FindModule(string nameOrPath);
-    List<KnowledgeNode> GetAllModules();
-    List<KnowledgeNode> GetModulesByDiscipline(string disciplineId);
-    ModuleContext GetModuleContext(string targetModule, string? currentModule, List<string>? activeModules = null);
-    GovernanceReport ValidateArchitecture();
-
-    List<CrossWork> GetCrossWorks();
-    List<CrossWork> GetCrossWorksForModule(string moduleName);
-
-    void RegisterModule(string discipline, ModuleRegistration module);
-    bool UnregisterModule(string name);
-
-    void SaveCrossWork(CrossWorkRegistration crossWork);
-    bool RemoveCrossWork(string crossWorkId);
-
-    void UpsertDiscipline(string disciplineId, string? displayName, string roleId, List<LayerDefinition> layers);
-    bool RemoveDiscipline(string disciplineId);
-    string? GetDisciplineRoleId(string moduleName);
-
-    ArchitectureManifest GetArchitecture();
-    ModulesManifest GetModulesManifest();
-    void ReplaceModulesManifest(ModulesManifest manifest);
-    void ReloadManifests();
-
-    void Initialize(string storePath);
 }

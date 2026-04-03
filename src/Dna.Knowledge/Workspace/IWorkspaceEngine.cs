@@ -1,4 +1,3 @@
-using Dna.Knowledge;
 using Dna.Knowledge.Workspace.Models;
 using System.Text;
 
@@ -8,38 +7,33 @@ public interface IWorkspaceEngine
 {
     event EventHandler<WorkspaceChangeSet>? Changed;
 
-    void Initialize(string projectRoot, ArchitectureManifest architecture);
+    void Initialize(string projectRoot, WorkspaceTopologyContext topology);
 
     string ResolveFullPath(string projectRoot, string relativePath);
     string ResolveMetadataFilePath(string projectRoot, string directoryRelativePath);
 
     WorkspaceDirectorySnapshot GetRootSnapshot(
         string projectRoot,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest);
+        WorkspaceTopologyContext topology);
 
     WorkspaceDirectorySnapshot GetDirectorySnapshot(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest);
+        WorkspaceTopologyContext topology);
 
     WorkspaceFileNode? TryGetEntry(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest);
+        WorkspaceTopologyContext topology);
 
     List<WorkspaceFileNode> GetRoots(
         string projectRoot,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest);
+        WorkspaceTopologyContext topology);
 
     List<WorkspaceFileNode> GetChildren(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest);
+        WorkspaceTopologyContext topology);
 
     Task<string> ReadTextAsync(
         string projectRoot,
@@ -82,7 +76,7 @@ public interface IWorkspaceEngine
 
     Task<WorkspaceMetadataSyncResult> EnsureDirectoryMetadataTreeAsync(
         string projectRoot,
-        ArchitectureManifest architecture,
+        WorkspaceTopologyContext topology,
         string relativePath = "",
         CancellationToken cancellationToken = default);
 

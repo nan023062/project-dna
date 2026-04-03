@@ -14,13 +14,19 @@ internal class MemoryMaintainer
 {
     private readonly MemoryStore _memoryStore;
     private readonly ITopoGraphStore _topoGraphStore;
+    private readonly ITopoGraphApplicationService _topology;
     private readonly ILogger<MemoryMaintainer> _logger;
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    public MemoryMaintainer(MemoryStore memoryStore, ITopoGraphStore topoGraphStore, ILogger<MemoryMaintainer> logger)
+    public MemoryMaintainer(
+        MemoryStore memoryStore,
+        ITopoGraphStore topoGraphStore,
+        ITopoGraphApplicationService topology,
+        ILogger<MemoryMaintainer> logger)
     {
         _memoryStore = memoryStore;
         _topoGraphStore = topoGraphStore;
+        _topology = topology;
         _logger = logger;
     }
 
@@ -213,20 +219,15 @@ internal class MemoryMaintainer
     private GovernanceTargetNode? ResolveNode(string nodeIdOrName)
     {
         var candidates = _topoGraphStore.ResolveNodeIdCandidates(nodeIdOrName, strict: true);
-        var manifest = _topoGraphStore.GetModulesManifest();
+        var modules = _topology.GetManagementSnapshot().Modules;
 
         foreach (var candidate in candidates)
         {
-            foreach (var (discipline, modules) in manifest.Disciplines)
-            {
-                var match = modules.FirstOrDefault(module =>
-                    string.Equals(module.Id, candidate, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(module.Name, candidate, StringComparison.OrdinalIgnoreCase));
-                if (match == null)
-                    continue;
-
-                return ToGovernanceTarget(match, discipline);
-            }
+            var match = modules.FirstOrDefault(module =>
+                string.Equals(module.Id, candidate, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module.Name, candidate, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                return ToGovernanceTarget(match);
         }
 
         return null;
@@ -234,23 +235,24 @@ internal class MemoryMaintainer
 
     private IEnumerable<GovernanceTargetNode> GetGovernanceTargets()
     {
-        var manifest = _topoGraphStore.GetModulesManifest();
-        foreach (var (discipline, modules) in manifest.Disciplines)
-        {
-            foreach (var module in modules)
-                yield return ToGovernanceTarget(module, discipline);
-        }
+        return _topology.GetManagementSnapshot().Modules.Select(ToGovernanceTarget);
     }
 
-    private static GovernanceTargetNode ToGovernanceTarget(ModuleRegistration module, string discipline)
+    private static GovernanceTargetNode ToGovernanceTarget(TopologyModuleDefinition module)
     {
+        var nodeType = module.IsCrossWorkModule
+            ? NodeType.Team
+            : module.Layer >= 3
+                ? NodeType.Team
+                : NodeType.Technical;
+
         return new GovernanceTargetNode(
             module.Id,
             module.Name,
-            module.IsCrossWorkModule ? NodeType.Team : NodeType.Technical,
-            discipline,
+            nodeType,
+            module.Discipline,
             module.Summary,
-            null);
+            module.Boundary);
     }
 
     private static IdentityPayload BuildIdentityPayload(GovernanceTargetNode node, List<MemoryEntry> source)

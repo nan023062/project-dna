@@ -3,14 +3,12 @@ using Dna.Knowledge.FileProtocol.Models;
 using Dna.Knowledge.TopoGraph.Models.Nodes;
 using Dna.Knowledge.TopoGraph.Models.Registrations;
 using Dna.Knowledge.TopoGraph.Models.Snapshots;
-using Dna.Knowledge.TopoGraph.Models.ValueObjects;
+using TopologyKnowledgeSummaryModel = Dna.Knowledge.TopoGraph.Models.ValueObjects.TopologyKnowledgeSummary;
+using TopologyModuleContractModel = Dna.Knowledge.TopoGraph.Models.ValueObjects.ModuleContract;
+using TopologyModulePathBindingModel = Dna.Knowledge.TopoGraph.Models.ValueObjects.ModulePathBinding;
 
 namespace Dna.Knowledge.FileProtocol;
 
-/// <summary>
-/// Knowledge 层文件协议的读写能力。
-/// 负责 .agentic-os/knowledge/modules/ 下 module.json + identity.md + dependencies.json 的加载与保存。
-/// </summary>
 public sealed class KnowledgeFileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -26,9 +24,6 @@ public sealed class KnowledgeFileStore
         PropertyNameCaseInsensitive = true
     };
 
-    // ============== 读取 ==============
-
-    /// <summary>扫描 knowledge/modules/ 下所有模块，返回模块文件列表</summary>
     public List<ModuleFile> LoadModules(string agenticOsPath)
     {
         var modulesRoot = FileProtocolPaths.GetModulesRoot(agenticOsPath);
@@ -36,11 +31,10 @@ public sealed class KnowledgeFileStore
             return [];
 
         var results = new List<ModuleFile>();
-        ScanModulesRecursive(modulesRoot, agenticOsPath, results);
+        ScanModulesRecursive(modulesRoot, results);
         return results;
     }
 
-    /// <summary>读取单个模块的 module.json</summary>
     public ModuleFile? LoadModule(string agenticOsPath, string uid)
     {
         var filePath = FileProtocolPaths.GetModuleFilePath(agenticOsPath, uid);
@@ -51,14 +45,12 @@ public sealed class KnowledgeFileStore
         return JsonSerializer.Deserialize<ModuleFile>(json, ReadOptions);
     }
 
-    /// <summary>读取模块的 identity.md 内容</summary>
     public string? LoadIdentity(string agenticOsPath, string uid)
     {
         var filePath = FileProtocolPaths.GetIdentityFilePath(agenticOsPath, uid);
         return File.Exists(filePath) ? File.ReadAllText(filePath) : null;
     }
 
-    /// <summary>读取模块的 dependencies.json</summary>
     public List<DependencyEntry> LoadDependencies(string agenticOsPath, string uid)
     {
         var filePath = FileProtocolPaths.GetDependenciesFilePath(agenticOsPath, uid);
@@ -69,10 +61,6 @@ public sealed class KnowledgeFileStore
         return JsonSerializer.Deserialize<List<DependencyEntry>>(json, ReadOptions) ?? [];
     }
 
-    /// <summary>
-    /// 从 .agentic-os/knowledge/ 加载所有模块并转换为 TopologyModelDefinition，
-    /// 可直接传递给 TopologyModelBuilder.Build() 构建对象图。
-    /// </summary>
     public TopologyModelDefinition LoadAsDefinition(string agenticOsPath)
     {
         var modules = LoadModules(agenticOsPath);
@@ -81,24 +69,24 @@ public sealed class KnowledgeFileStore
         var technicals = new List<TechnicalNodeRegistration>();
         var teams = new List<TeamNodeRegistration>();
 
-        foreach (var m in modules)
+        foreach (var module in modules)
         {
-            var identity = LoadIdentity(agenticOsPath, m.Uid);
-            var deps = LoadDependencies(agenticOsPath, m.Uid);
+            var identity = LoadIdentity(agenticOsPath, module.Uid);
+            var deps = LoadDependencies(agenticOsPath, module.Uid);
 
-            switch (m.Type)
+            switch (module.Type)
             {
                 case TopologyNodeKind.Project:
-                    project = ToProjectRegistration(m, identity);
+                    project = ToProjectRegistration(module, identity);
                     break;
                 case TopologyNodeKind.Department:
-                    departments.Add(ToDepartmentRegistration(m, identity));
+                    departments.Add(ToDepartmentRegistration(module, identity));
                     break;
                 case TopologyNodeKind.Technical:
-                    technicals.Add(ToTechnicalRegistration(m, identity, deps));
+                    technicals.Add(ToTechnicalRegistration(module, identity, deps));
                     break;
                 case TopologyNodeKind.Team:
-                    teams.Add(ToTeamRegistration(m, identity, deps));
+                    teams.Add(ToTeamRegistration(module, identity, deps));
                     break;
             }
         }
@@ -112,48 +100,45 @@ public sealed class KnowledgeFileStore
         };
     }
 
-    // ============== 写入 ==============
-
-    /// <summary>保存单个模块的三个文件</summary>
-    public void SaveModule(string agenticOsPath, ModuleFile module,
-        string? identityMarkdown = null, List<DependencyEntry>? dependencies = null)
+    public void SaveModule(string agenticOsPath, ModuleFile module, string? identityMarkdown = null, List<DependencyEntry>? dependencies = null)
     {
         var moduleDir = FileProtocolPaths.GetModuleDir(agenticOsPath, module.Uid);
         Directory.CreateDirectory(moduleDir);
+        var identityPath = Path.Combine(moduleDir, FileProtocolPaths.IdentityFileName);
+        var dependenciesPath = Path.Combine(moduleDir, FileProtocolPaths.DependenciesFileName);
 
-        // module.json
         SortArrays(module);
         var json = JsonSerializer.Serialize(module, JsonOptions);
         File.WriteAllText(Path.Combine(moduleDir, FileProtocolPaths.ModuleFileName), json + "\n");
 
-        // identity.md
         if (identityMarkdown != null)
-            File.WriteAllText(Path.Combine(moduleDir, FileProtocolPaths.IdentityFileName), identityMarkdown);
+            File.WriteAllText(identityPath, identityMarkdown);
+        else if (File.Exists(identityPath))
+            File.Delete(identityPath);
 
-        // dependencies.json
         if (dependencies is { Count: > 0 })
         {
             var sorted = dependencies.OrderBy(d => d.Target, StringComparer.Ordinal).ToList();
             var depsJson = JsonSerializer.Serialize(sorted, JsonOptions);
-            File.WriteAllText(Path.Combine(moduleDir, FileProtocolPaths.DependenciesFileName), depsJson + "\n");
+            File.WriteAllText(dependenciesPath, depsJson + "\n");
+        }
+        else if (File.Exists(dependenciesPath))
+        {
+            File.Delete(dependenciesPath);
         }
     }
 
-    /// <summary>从 TopologyModelSnapshot 导出所有模块到文件协议</summary>
     public void SaveFromSnapshot(string agenticOsPath, TopologyModelSnapshot snapshot)
     {
         foreach (var node in snapshot.Nodes)
         {
             var module = ToModuleFile(node);
             var deps = GetDependenciesFromSnapshot(snapshot, node.Id);
-            var identity = node.Knowledge.Identity;
-            SaveModule(agenticOsPath, module, identity, deps);
+            SaveModule(agenticOsPath, module, node.Knowledge.Identity, deps);
         }
     }
 
-    // ============== 私有方法 ==============
-
-    private void ScanModulesRecursive(string dir, string agenticOsPath, List<ModuleFile> results)
+    private static void ScanModulesRecursive(string dir, List<ModuleFile> results)
     {
         var moduleJsonPath = Path.Combine(dir, FileProtocolPaths.ModuleFileName);
         if (File.Exists(moduleJsonPath))
@@ -165,75 +150,99 @@ public sealed class KnowledgeFileStore
         }
 
         foreach (var subDir in Directory.GetDirectories(dir))
-            ScanModulesRecursive(subDir, agenticOsPath, results);
+            ScanModulesRecursive(subDir, results);
     }
 
-    private static void SortArrays(ModuleFile m)
+    private static void SortArrays(ModuleFile module)
     {
-        m.Keywords?.Sort(StringComparer.Ordinal);
-        m.ManagedPaths?.Sort(StringComparer.Ordinal);
-        m.CapabilityTags?.Sort(StringComparer.Ordinal);
-        m.Deliverables?.Sort(StringComparer.Ordinal);
+        module.Keywords?.Sort(StringComparer.Ordinal);
+        module.ExcludeDirs?.Sort(StringComparer.Ordinal);
+        module.ManagedPaths?.Sort(StringComparer.Ordinal);
+        module.CapabilityTags?.Sort(StringComparer.Ordinal);
+        module.PublicApi?.Sort(StringComparer.Ordinal);
+        module.Constraints?.Sort(StringComparer.Ordinal);
+        module.Deliverables?.Sort(StringComparer.Ordinal);
+        module.CollaborationIds?.Sort(StringComparer.Ordinal);
     }
 
-    // --- 文件模型 → 注册模型转换 ---
+    private static ProjectNodeRegistration ToProjectRegistration(ModuleFile module, string? identity)
+        => new()
+        {
+            Id = module.Uid,
+            Name = module.Name,
+            Summary = ExtractSummary(identity),
+            Vision = module.Vision,
+            Steward = module.Steward,
+            ExcludeDirs = NormalizePaths(module.ExcludeDirs),
+            Metadata = CopyMetadata(module.Metadata),
+            Knowledge = new TopologyKnowledgeSummaryModel { Identity = identity }
+        };
 
-    private static ProjectNodeRegistration ToProjectRegistration(ModuleFile m, string? identity) => new()
-    {
-        Id = m.Uid,
-        Name = m.Name,
-        Summary = ExtractSummary(identity),
-        Vision = m.Vision,
-        Steward = m.Steward,
-        Knowledge = new TopologyKnowledgeSummary { Identity = identity }
-    };
+    private static DepartmentNodeRegistration ToDepartmentRegistration(ModuleFile module, string? identity)
+        => new()
+        {
+            Id = module.Uid,
+            Name = module.Name,
+            ParentId = module.Parent,
+            Summary = ExtractSummary(identity),
+            DisciplineCode = module.DisciplineCode ?? string.Empty,
+            Scope = module.Scope,
+            RoleId = string.IsNullOrWhiteSpace(module.RoleId) ? "coder" : module.RoleId.Trim(),
+            Layers = module.Layers ?? [],
+            Metadata = CopyMetadata(module.Metadata),
+            Knowledge = new TopologyKnowledgeSummaryModel { Identity = identity }
+        };
 
-    private static DepartmentNodeRegistration ToDepartmentRegistration(ModuleFile m, string? identity) => new()
-    {
-        Id = m.Uid,
-        Name = m.Name,
-        ParentId = m.Parent,
-        Summary = ExtractSummary(identity),
-        DisciplineCode = m.DisciplineCode ?? string.Empty,
-        Scope = m.Scope,
-        Knowledge = new TopologyKnowledgeSummary { Identity = identity }
-    };
+    private static TechnicalNodeRegistration ToTechnicalRegistration(ModuleFile module, string? identity, List<DependencyEntry> dependencies)
+        => new()
+        {
+            Id = module.Uid,
+            Name = module.Name,
+            ParentId = module.Parent,
+            Summary = ExtractSummary(identity),
+            Maintainer = module.Maintainer,
+            Layer = Math.Max(module.Layer ?? 0, 0),
+            IsCrossWorkModule = module.IsCrossWorkModule == true,
+            Participants = ToParticipants(module.Participants),
+            Metadata = CopyMetadata(module.Metadata),
+            PathBinding = new TopologyModulePathBindingModel
+            {
+                MainPath = NormalizePath(module.MainPath),
+                ManagedPaths = NormalizePaths(module.ManagedPaths)
+            },
+            DeclaredDependencies = dependencies.Select(item => item.Target).ToList(),
+            CapabilityTags = module.CapabilityTags ?? [],
+            Contract = MergeContract(module, ExtractContract(identity)),
+            Knowledge = new TopologyKnowledgeSummaryModel { Identity = identity }
+        };
 
-    private static TechnicalNodeRegistration ToTechnicalRegistration(
-        ModuleFile m, string? identity, List<DependencyEntry> deps) => new()
-    {
-        Id = m.Uid,
-        Name = m.Name,
-        ParentId = m.Parent,
-        Summary = ExtractSummary(identity),
-        Maintainer = m.Maintainer,
-        PathBinding = new ModulePathBinding { ManagedPaths = m.ManagedPaths ?? [] },
-        DeclaredDependencies = deps.Select(d => d.Target).ToList(),
-        CapabilityTags = m.CapabilityTags ?? [],
-        Contract = ExtractContract(identity),
-        Knowledge = new TopologyKnowledgeSummary { Identity = identity }
-    };
-
-    private static TeamNodeRegistration ToTeamRegistration(
-        ModuleFile m, string? identity, List<DependencyEntry> deps) => new()
-    {
-        Id = m.Uid,
-        Name = m.Name,
-        ParentId = m.Parent,
-        Summary = ExtractSummary(identity),
-        Maintainer = m.Maintainer,
-        PathBinding = new ModulePathBinding { ManagedPaths = m.ManagedPaths ?? [] },
-        TechnicalDependencies = deps.Select(d => d.Target).ToList(),
-        BusinessObjective = m.BusinessObjective,
-        Deliverables = m.Deliverables ?? [],
-        Knowledge = new TopologyKnowledgeSummary { Identity = identity }
-    };
-
-    // --- 拓扑节点 → 文件模型转换 ---
+    private static TeamNodeRegistration ToTeamRegistration(ModuleFile module, string? identity, List<DependencyEntry> dependencies)
+        => new()
+        {
+            Id = module.Uid,
+            Name = module.Name,
+            ParentId = module.Parent,
+            Summary = ExtractSummary(identity),
+            Maintainer = module.Maintainer,
+            Layer = Math.Max(module.Layer ?? 0, 0),
+            IsCrossWorkModule = module.IsCrossWorkModule == true,
+            Participants = ToParticipants(module.Participants),
+            Metadata = CopyMetadata(module.Metadata),
+            PathBinding = new TopologyModulePathBindingModel
+            {
+                MainPath = NormalizePath(module.MainPath),
+                ManagedPaths = NormalizePaths(module.ManagedPaths)
+            },
+            TechnicalDependencies = dependencies.Select(item => item.Target).ToList(),
+            BusinessObjective = module.BusinessObjective,
+            Deliverables = module.Deliverables ?? [],
+            CollaborationIds = module.CollaborationIds ?? [],
+            Knowledge = new TopologyKnowledgeSummaryModel { Identity = identity }
+        };
 
     private static ModuleFile ToModuleFile(TopologyNode node)
     {
-        var m = new ModuleFile
+        var file = new ModuleFile
         {
             Uid = node.Id,
             Name = node.Name,
@@ -243,46 +252,62 @@ public sealed class KnowledgeFileStore
 
         switch (node)
         {
-            case ProjectNode p:
-                m.Vision = p.Vision;
-                m.Steward = p.Steward;
+            case ProjectNode project:
+                file.Vision = project.Vision;
+                file.Steward = project.Steward;
+                file.ExcludeDirs = project.ExcludeDirs.Count > 0 ? project.ExcludeDirs : null;
+                file.Metadata = project.Metadata.Count > 0 ? project.Metadata : null;
                 break;
-            case DepartmentNode d:
-                m.DisciplineCode = d.DisciplineCode;
-                m.Scope = d.Scope;
+            case DepartmentNode department:
+                file.DisciplineCode = department.DisciplineCode;
+                file.Scope = department.Scope;
+                file.RoleId = department.RoleId;
+                file.Layers = department.Layers.Count > 0 ? department.Layers : null;
+                file.Metadata = department.Metadata.Count > 0 ? department.Metadata : null;
                 break;
-            case TechnicalNode t:
-                m.Maintainer = t.Maintainer;
-                m.ManagedPaths = t.PathBinding.ManagedPaths.Count > 0 ? t.PathBinding.ManagedPaths : null;
-                m.CapabilityTags = t.CapabilityTags.Count > 0 ? t.CapabilityTags : null;
-                m.Keywords = null;
+            case TechnicalNode technical:
+                file.Maintainer = technical.Maintainer;
+                file.MainPath = NormalizePath(technical.PathBinding.MainPath);
+                file.ManagedPaths = technical.PathBinding.ManagedPaths.Count > 0 ? technical.PathBinding.ManagedPaths : null;
+                file.Layer = technical.Layer;
+                file.IsCrossWorkModule = technical.IsCrossWorkModule ? true : null;
+                file.Participants = ToParticipantFiles(technical.Participants);
+                file.Metadata = technical.Metadata.Count > 0 ? technical.Metadata : null;
+                file.CapabilityTags = technical.CapabilityTags.Count > 0 ? technical.CapabilityTags : null;
+                file.Boundary = technical.Contract.Boundary;
+                file.PublicApi = technical.Contract.PublicApi.Count > 0 ? technical.Contract.PublicApi : null;
+                file.Constraints = technical.Contract.Constraints.Count > 0 ? technical.Contract.Constraints : null;
                 break;
-            case TeamNode tm:
-                m.Maintainer = tm.Maintainer;
-                m.ManagedPaths = tm.PathBinding.ManagedPaths.Count > 0 ? tm.PathBinding.ManagedPaths : null;
-                m.BusinessObjective = tm.BusinessObjective;
-                m.Deliverables = tm.Deliverables.Count > 0 ? tm.Deliverables : null;
+            case TeamNode team:
+                file.Maintainer = team.Maintainer;
+                file.MainPath = NormalizePath(team.PathBinding.MainPath);
+                file.ManagedPaths = team.PathBinding.ManagedPaths.Count > 0 ? team.PathBinding.ManagedPaths : null;
+                file.Layer = team.Layer;
+                file.IsCrossWorkModule = team.IsCrossWorkModule ? true : null;
+                file.Participants = ToParticipantFiles(team.Participants);
+                file.Metadata = team.Metadata.Count > 0 ? team.Metadata : null;
+                file.BusinessObjective = team.BusinessObjective;
+                file.Deliverables = team.Deliverables.Count > 0 ? team.Deliverables : null;
+                file.CollaborationIds = team.CollaborationIds.Count > 0 ? team.CollaborationIds : null;
                 break;
         }
 
-        return m;
+        return file;
     }
 
-    private static List<DependencyEntry> GetDependenciesFromSnapshot(
-        TopologyModelSnapshot snapshot, string nodeId)
+    private static List<DependencyEntry> GetDependenciesFromSnapshot(TopologyModelSnapshot snapshot, string nodeId)
     {
         return snapshot.Dependencies
-            .Where(r => r.FromId == nodeId)
-            .Select(r => new DependencyEntry
+            .Where(relation => relation.FromId == nodeId)
+            .Select(relation => new DependencyEntry
             {
-                Target = r.ToId,
+                Target = relation.ToId,
                 Type = "Association"
             })
-            .OrderBy(d => d.Target, StringComparer.Ordinal)
+            .OrderBy(item => item.Target, StringComparer.Ordinal)
             .ToList();
     }
 
-    /// <summary>从 identity.md 中提取 ## Summary 段落内容</summary>
     private static string? ExtractSummary(string? identity)
     {
         if (string.IsNullOrWhiteSpace(identity))
@@ -311,37 +336,151 @@ public sealed class KnowledgeFileStore
         return result.Length > 0 ? result : null;
     }
 
-    /// <summary>从 identity.md 中提取 ## Contract 段落内容</summary>
-    private static ModuleContract ExtractContract(string? identity)
+    private static TopologyModuleContractModel ExtractContract(string? identity)
     {
         if (string.IsNullOrWhiteSpace(identity))
-            return new ModuleContract();
+            return new TopologyModuleContractModel();
 
         var lines = identity.Split('\n');
         var inContract = false;
+        var inConstraints = false;
         var contractLines = new List<string>();
+        var constraintLines = new List<string>();
+        string? boundary = null;
 
         foreach (var line in lines)
         {
             if (line.StartsWith("## Contract", StringComparison.OrdinalIgnoreCase))
             {
                 inContract = true;
+                inConstraints = false;
                 continue;
             }
 
-            if (inContract && line.StartsWith("## ", StringComparison.Ordinal))
-                break;
+            if (line.StartsWith("## Constraints", StringComparison.OrdinalIgnoreCase))
+            {
+                inContract = false;
+                inConstraints = true;
+                continue;
+            }
+
+            if ((inContract || inConstraints) && line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                inContract = false;
+                inConstraints = false;
+                continue;
+            }
 
             if (inContract)
-                contractLines.Add(line);
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("Boundary:", StringComparison.OrdinalIgnoreCase))
+                    boundary = trimmed["Boundary:".Length..].Trim();
+                else
+                    contractLines.Add(line);
+            }
+            else if (inConstraints)
+            {
+                constraintLines.Add(line);
+            }
         }
 
-        var apiLines = contractLines
-            .Where(l => l.TrimStart().StartsWith("- ", StringComparison.Ordinal))
-            .Select(l => l.TrimStart()[2..].Trim())
-            .Where(l => l.Length > 0)
-            .ToList();
+        return new TopologyModuleContractModel
+        {
+            Boundary = boundary,
+            PublicApi = ParseBulletLines(contractLines),
+            Constraints = ParseBulletLines(constraintLines)
+        };
+    }
 
-        return new ModuleContract { PublicApi = apiLines };
+    private static TopologyModuleContractModel MergeContract(ModuleFile module, TopologyModuleContractModel fallback)
+    {
+        return new TopologyModuleContractModel
+        {
+            Boundary = string.IsNullOrWhiteSpace(module.Boundary) ? fallback.Boundary : module.Boundary,
+            PublicApi = module.PublicApi is { Count: > 0 } ? module.PublicApi : fallback.PublicApi,
+            Constraints = module.Constraints is { Count: > 0 } ? module.Constraints : fallback.Constraints
+        };
+    }
+
+    private static List<string> ParseBulletLines(IEnumerable<string> lines)
+    {
+        return lines
+            .Where(line => line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
+            .Select(line => line.TrimStart()[2..].Trim())
+            .Where(line => line.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static Dictionary<string, string> CopyMetadata(Dictionary<string, string>? metadata)
+    {
+        return metadata is { Count: > 0 }
+            ? new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static List<TopologyCrossWorkParticipantDefinition> ToParticipants(List<CrossWorkParticipantFile>? participants)
+    {
+        if (participants is not { Count: > 0 })
+            return [];
+
+        return participants
+            .Where(item => !string.IsNullOrWhiteSpace(item.ModuleName))
+            .Select(item => new TopologyCrossWorkParticipantDefinition
+            {
+                ModuleName = item.ModuleName,
+                Role = item.Role,
+                ContractType = item.ContractType,
+                Contract = item.Contract,
+                Deliverable = item.Deliverable
+            })
+            .ToList();
+    }
+
+    private static List<CrossWorkParticipantFile>? ToParticipantFiles(List<TopologyCrossWorkParticipantDefinition> participants)
+    {
+        if (participants.Count == 0)
+            return null;
+
+        return participants
+            .Where(item => !string.IsNullOrWhiteSpace(item.ModuleName))
+            .Select(item => new CrossWorkParticipantFile
+            {
+                ModuleName = item.ModuleName,
+                Role = item.Role,
+                ContractType = item.ContractType,
+                Contract = item.Contract,
+                Deliverable = item.Deliverable
+            })
+            .ToList();
+    }
+
+    private static string? NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return null;
+
+        var normalized = path.Replace('\\', '/').Trim().Trim('/');
+        return normalized.Length == 0 ? null : normalized;
+    }
+
+    private static List<string> NormalizePaths(List<string>? paths)
+    {
+        if (paths is not { Count: > 0 })
+            return [];
+
+        var normalized = new List<string>();
+        foreach (var path in paths)
+        {
+            var value = NormalizePath(path);
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            if (!normalized.Contains(value, StringComparer.OrdinalIgnoreCase))
+                normalized.Add(value);
+        }
+
+        return normalized;
     }
 }

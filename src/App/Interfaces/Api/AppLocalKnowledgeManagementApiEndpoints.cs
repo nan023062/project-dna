@@ -28,9 +28,9 @@ public static class AppLocalKnowledgeManagementApiEndpoints
     {
         var api = app.MapGroup("/api/graph");
 
-        api.MapGet("/identity", ([FromServices] IGraphEngine graph) =>
+        api.MapGet("/identity", ([FromServices] ITopoGraphApplicationService topology) =>
         {
-            var topo = graph.GetTopology();
+            var topo = topology.GetTopology();
             return Results.Json(new
             {
                 moduleCount = topo.Nodes.Count,
@@ -39,16 +39,16 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             }, JsonOpts);
         });
 
-        api.MapGet("/search", ([FromQuery] string q, [FromQuery] int maxResults, [FromServices] IGraphEngine graph) =>
+        api.MapGet("/search", ([FromQuery] string q, [FromQuery] int maxResults, [FromServices] ITopoGraphApplicationService topology) =>
         {
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
                 return Results.Json(new { error = "query must be at least 2 characters." }, statusCode: 400);
 
-            graph.BuildTopology();
+            topology.BuildTopology();
             var query = q.Trim().ToLowerInvariant();
             var limit = Math.Clamp(maxResults > 0 ? maxResults : 8, 1, 20);
 
-            var results = graph.GetAllModules()
+            var results = topology.GetAllModules()
                 .Select(m => new { Module = m, Score = ScoreModule(m, query) })
                 .Where(x => x.Score > 0)
                 .OrderByDescending(x => x.Score)
@@ -68,18 +68,18 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             return Results.Json(new { query = q, count = results.Count, results }, JsonOpts);
         });
 
-        api.MapGet("/context", ([FromQuery] string target, [FromQuery] string? current, [FromQuery] string? activeModules, [FromServices] IGraphEngine graph) =>
+        api.MapGet("/context", ([FromQuery] string target, [FromQuery] string? current, [FromQuery] string? activeModules, [FromServices] ITopoGraphApplicationService topology) =>
         {
             if (string.IsNullOrWhiteSpace(target))
                 return Results.Json(new { error = "target is required." }, statusCode: 400);
 
-            graph.BuildTopology();
+            topology.BuildTopology();
             var active = string.IsNullOrWhiteSpace(activeModules)
                 ? null
                 : activeModules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             var currentModule = string.IsNullOrWhiteSpace(current) ? target : current;
-            var context = graph.GetModuleContext(target, currentModule, active);
-            var crossWorks = graph.GetCrossWorksForModule(target);
+            var context = topology.GetModuleContext(target, currentModule, active);
+            var crossWorks = topology.GetCrossWorksForModule(target);
 
             return Results.Json(new
             {
@@ -101,9 +101,9 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             }, JsonOpts);
         });
 
-        api.MapPost("/begin-task", ([FromBody] BeginTaskRequest request, [FromServices] IGraphEngine graph) =>
+        api.MapPost("/begin-task", ([FromBody] BeginTaskRequest request, [FromServices] ITopoGraphApplicationService topology) =>
         {
-            var topo = graph.BuildTopology();
+            var topo = topology.BuildTopology();
 
             if (request.ModuleNames == null || request.ModuleNames.Count == 0)
             {
@@ -131,12 +131,12 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             var current = request.ModuleNames[0];
             var contexts = request.ModuleNames.Select(name =>
             {
-                var context = graph.GetModuleContext(name, current, request.ModuleNames);
+                var context = topology.GetModuleContext(name, current, request.ModuleNames);
                 return new { module = name, context };
             }).ToList();
 
             var crossWorks = request.ModuleNames
-                .SelectMany(graph.GetCrossWorksForModule)
+                .SelectMany(topology.GetCrossWorksForModule)
                 .DistinctBy(cw => cw.Name)
                 .Select(cw => new
                 {
@@ -216,30 +216,32 @@ public static class AppLocalKnowledgeManagementApiEndpoints
     {
         var group = app.MapGroup("/api/modules");
 
-        group.MapGet("/manifest", ([FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapGet("/manifest", ([FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            var arch = graph.GetArchitecture();
-            var manifest = graph.GetModulesManifest();
-            var merged = arch.Disciplines.ToDictionary(
-                kv => kv.Key,
-                kv => new
+            EnsureReady(topology, config);
+            var snapshot = topology.GetManagementSnapshot();
+            var merged = snapshot.Disciplines.ToDictionary(
+                item => item.Id,
+                item => new
                 {
-                    displayName = kv.Value.DisplayName ?? kv.Key,
-                    layers = kv.Value.Layers,
-                    modules = manifest.Disciplines.GetValueOrDefault(kv.Key, [])
+                    displayName = item.DisplayName,
+                    roleId = item.RoleId,
+                    layers = item.Layers,
+                    modules = snapshot.Modules
+                        .Where(module => string.Equals(module.Discipline, item.Id, StringComparison.OrdinalIgnoreCase))
+                        .ToList()
                 });
             return Results.Ok(new
             {
                 disciplines = merged,
-                crossWorks = manifest.CrossWorks,
-                features = manifest.Features
+                crossWorks = snapshot.CrossWorks,
+                features = new Dictionary<string, object>()
             });
         });
 
-        group.MapPost("/", ([FromBody] UpsertModuleRequest request, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapPost("/", ([FromBody] UpsertModuleRequest request, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
+            EnsureReady(topology, config);
             if (string.IsNullOrWhiteSpace(request.Discipline))
                 return Results.BadRequest(new { error = "discipline is required." });
             if (request.Module is null)
@@ -250,19 +252,19 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             var discipline = request.Discipline.Trim();
             if (request.Module.IsCrossWorkModule)
             {
-                var (computedDiscipline, computedLayer) = ComputeCwOwnership(request.Module.Participants, graph.GetModulesManifest());
+                var (computedDiscipline, computedLayer) = ComputeCwOwnership(request.Module.Participants, topology.GetManagementSnapshot().Modules);
                 discipline = computedDiscipline;
                 request.Module.Layer = computedLayer;
             }
             else
             {
-                graph.UpsertDiscipline(discipline, discipline, "coder", []);
+                topology.UpsertDiscipline(discipline, discipline, "coder", []);
             }
 
             try
             {
-                graph.RegisterModule(discipline, request.Module);
-                graph.BuildTopology();
+                topology.RegisterModule(discipline, request.Module);
+                topology.BuildTopology();
                 return Results.Ok(new { message = "Module saved." });
             }
             catch (InvalidOperationException ex)
@@ -271,34 +273,34 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             }
         });
 
-        group.MapDelete("/{moduleName}", (string moduleName, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapDelete("/{moduleName}", (string moduleName, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            var ok = graph.UnregisterModule(moduleName);
+            EnsureReady(topology, config);
+            var ok = topology.UnregisterModule(moduleName);
             if (!ok) return Results.NotFound(new { error = $"Module not found: {moduleName}" });
-            graph.BuildTopology();
+            topology.BuildTopology();
             return Results.Ok(new { message = $"Module removed: {moduleName}" });
         });
 
-        group.MapGet("/disciplines", ([FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapGet("/disciplines", ([FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            var arch = graph.GetArchitecture();
-            var manifest = graph.GetModulesManifest();
-            var result = arch.Disciplines.Select(kv => new
+            EnsureReady(topology, config);
+            var snapshot = topology.GetManagementSnapshot();
+            var result = snapshot.Disciplines.Select(item => new
             {
-                id = kv.Key,
-                displayName = kv.Value.DisplayName ?? kv.Key,
-                roleId = kv.Value.RoleId,
-                layers = kv.Value.Layers,
-                moduleCount = manifest.Disciplines.GetValueOrDefault(kv.Key, []).Count
+                id = item.Id,
+                displayName = item.DisplayName,
+                roleId = item.RoleId,
+                layers = item.Layers,
+                moduleCount = snapshot.Modules.Count(module =>
+                    string.Equals(module.Discipline, item.Id, StringComparison.OrdinalIgnoreCase))
             }).OrderBy(d => d.id);
             return Results.Ok(result);
         });
 
-        group.MapPost("/disciplines", ([FromBody] UpsertDisciplineRequest request, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapPost("/disciplines", ([FromBody] UpsertDisciplineRequest request, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
+            EnsureReady(topology, config);
             var id = request.Id?.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(id))
                 return Results.BadRequest(new { error = "discipline id is required." });
@@ -309,32 +311,33 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             if (levels.Distinct().Count() != levels.Count)
                 return Results.BadRequest(new { error = "layer levels must be unique." });
 
-            graph.UpsertDiscipline(id, request.DisplayName, request.RoleId ?? "coder", request.Layers);
+            topology.UpsertDiscipline(id, request.DisplayName, request.RoleId ?? "coder", request.Layers);
             return Results.Ok(new { message = $"Discipline '{id}' saved.", id });
         });
 
-        group.MapDelete("/disciplines/{disciplineId}", (string disciplineId, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapDelete("/disciplines/{disciplineId}", (string disciplineId, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            var manifest = graph.GetModulesManifest();
-            var moduleCount = manifest.Disciplines.GetValueOrDefault(disciplineId, []).Count;
+            EnsureReady(topology, config);
+            var snapshot = topology.GetManagementSnapshot();
+            var moduleCount = snapshot.Modules.Count(module =>
+                string.Equals(module.Discipline, disciplineId, StringComparison.OrdinalIgnoreCase));
             if (moduleCount > 0)
                 return Results.BadRequest(new { error = $"Discipline '{disciplineId}' still owns {moduleCount} modules." });
 
-            var ok = graph.RemoveDiscipline(disciplineId);
+            var ok = topology.RemoveDiscipline(disciplineId);
             if (!ok) return Results.NotFound(new { error = $"Discipline not found: {disciplineId}" });
             return Results.Ok(new { message = $"Discipline removed: {disciplineId}" });
         });
 
-        group.MapGet("/crossworks", ([FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapGet("/crossworks", ([FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            return Results.Ok(graph.GetModulesManifest().CrossWorks);
+            EnsureReady(topology, config);
+            return Results.Ok(topology.GetManagementSnapshot().CrossWorks);
         });
 
-        group.MapPost("/crossworks", ([FromBody] CrossWorkRegistration request, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapPost("/crossworks", ([FromBody] TopologyCrossWorkDefinition request, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
+            EnsureReady(topology, config);
             if (string.IsNullOrWhiteSpace(request.Name))
                 return Results.BadRequest(new { error = "crosswork.name is required." });
 
@@ -343,17 +346,17 @@ public static class AppLocalKnowledgeManagementApiEndpoints
                 .Where(p => !string.IsNullOrWhiteSpace(p.ModuleName))
                 .ToList();
 
-            graph.SaveCrossWork(request);
-            graph.BuildTopology();
+            topology.SaveCrossWork(request);
+            topology.BuildTopology();
             return Results.Ok(new { message = "CrossWork saved.", id = request.Id });
         });
 
-        group.MapDelete("/crossworks/{id}", (string id, [FromServices] IGraphEngine graph, [FromServices] ProjectConfig config) =>
+        group.MapDelete("/crossworks/{id}", (string id, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
-            EnsureReady(graph, config);
-            var ok = graph.RemoveCrossWork(id);
+            EnsureReady(topology, config);
+            var ok = topology.RemoveCrossWork(id);
             if (!ok) return Results.NotFound(new { error = $"CrossWork not found: {id}" });
-            graph.BuildTopology();
+            topology.BuildTopology();
             return Results.Ok(new { message = $"CrossWork removed: {id}" });
         });
     }
@@ -369,7 +372,9 @@ public static class AppLocalKnowledgeManagementApiEndpoints
         return score;
     }
 
-    private static (string discipline, int layer) ComputeCwOwnership(List<CrossWorkParticipantRegistration> participants, ModulesManifest manifest)
+    private static (string discipline, int layer) ComputeCwOwnership(
+        List<TopologyCrossWorkParticipantDefinition> participants,
+        IEnumerable<TopologyModuleDefinition> modules)
     {
         if (participants is not { Count: > 0 })
             return ("root", 0);
@@ -378,25 +383,22 @@ public static class AppLocalKnowledgeManagementApiEndpoints
         var disciplines = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var maxLayer = 0;
 
-        foreach (var (discipline, modules) in manifest.Disciplines)
+        foreach (var module in modules)
         {
-            foreach (var module in modules)
-            {
-                if (!participantNames.Contains(module.Name)) continue;
-                disciplines.Add(discipline);
-                if (module.Layer > maxLayer) maxLayer = module.Layer;
-            }
+            if (!participantNames.Contains(module.Name)) continue;
+            disciplines.Add(module.Discipline);
+            if (module.Layer > maxLayer) maxLayer = module.Layer;
         }
 
         return disciplines.Count == 1 ? (disciplines.First(), maxLayer) : ("root", 0);
     }
 
-    private static void EnsureReady(IGraphEngine graph, ProjectConfig config)
+    private static void EnsureReady(ITopoGraphApplicationService topology, ProjectConfig config)
     {
         if (!config.HasProject)
             throw new InvalidOperationException("Project is not configured.");
 
-        graph.BuildTopology();
+        topology.BuildTopology();
     }
 }
 
@@ -419,7 +421,7 @@ public sealed class CondenseAllRequest
 public sealed class UpsertModuleRequest
 {
     public string Discipline { get; set; } = string.Empty;
-    public ModuleRegistration? Module { get; set; }
+    public TopologyModuleDefinition? Module { get; set; }
 }
 
 public sealed class UpsertDisciplineRequest

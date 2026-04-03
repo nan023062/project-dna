@@ -10,7 +10,7 @@ public static class AppLocalRuntimeApiEndpoints
     public static void MapAppLocalRuntimeApiEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapGet("/api/status", (
-            [FromServices] IGraphEngine graph,
+            [FromServices] ITopoGraphApplicationService topology,
             [FromServices] IMemoryEngine memory,
             [FromServices] ProjectConfig config,
             [FromServices] AppProjectLlmConfigService llm,
@@ -19,7 +19,7 @@ public static class AppLocalRuntimeApiEndpoints
             var moduleCount = 0;
             try
             {
-                moduleCount = graph.BuildTopology().Nodes.Count;
+                moduleCount = topology.BuildTopology().Nodes.Count;
             }
             catch
             {

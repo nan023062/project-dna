@@ -303,7 +303,7 @@ public sealed class KnowledgeTools(DnaServerApi api)
             var payload = new
             {
                 discipline,
-                module = new ModuleRegistration
+                module = new TopologyModuleDefinition
                 {
                     Id = name.Trim(),
                     Name = name,
@@ -354,7 +354,7 @@ public sealed class KnowledgeTools(DnaServerApi api)
     {
         try
         {
-            var parts = JsonSerializer.Deserialize<List<CrossWorkParticipantRegistration>>(participants);
+            var parts = JsonSerializer.Deserialize<List<TopologyCrossWorkParticipantDefinition>>(participants);
             if (parts is not { Count: > 0 }) return "错误：participants 至少包含一个参与者。";
 
             var payload = new
@@ -414,7 +414,7 @@ public sealed class KnowledgeTools(DnaServerApi api)
             var payload = new
             {
                 discipline,
-                module = new ModuleRegistration
+                module = new TopologyModuleDefinition
                 {
                     Id = id.Trim(),
                     Name = name,

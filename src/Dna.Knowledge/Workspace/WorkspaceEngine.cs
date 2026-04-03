@@ -1,4 +1,3 @@
-using Dna.Knowledge;
 using Dna.Knowledge.Workspace.Models;
 using System.Text;
 
@@ -15,9 +14,9 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
         remove => treeCache.Changed -= value;
     }
 
-    public void Initialize(string projectRoot, ArchitectureManifest architecture)
+    public void Initialize(string projectRoot, WorkspaceTopologyContext topology)
     {
-        treeCache.Initialize(projectRoot, architecture);
+        treeCache.Initialize(projectRoot, topology);
     }
 
     public string ResolveFullPath(string projectRoot, string relativePath)
@@ -32,48 +31,44 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
 
     public WorkspaceDirectorySnapshot GetRootSnapshot(
         string projectRoot,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
-        return GetDirectorySnapshot(projectRoot, string.Empty, architecture, manifest);
+        return GetDirectorySnapshot(projectRoot, string.Empty, topology);
     }
 
     public WorkspaceDirectorySnapshot GetDirectorySnapshot(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
-        Initialize(projectRoot, architecture);
+        Initialize(projectRoot, topology);
         var normalizedPath = WorkspacePath.NormalizeRelativePath(relativePath);
 
         return treeCache.GetDirectorySnapshot(
             normalizedPath,
-            (root, path) => WorkspaceScanner.ScanDirectory(root, path, architecture, manifest));
+            (root, path) => WorkspaceScanner.ScanDirectory(root, path, topology));
     }
 
     public WorkspaceFileNode? TryGetEntry(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
         var normalizedPath = WorkspacePath.NormalizeRelativePath(relativePath);
         if (normalizedPath.Length == 0)
             return null;
 
         var parentPath = WorkspacePath.GetParentPath(normalizedPath);
-        var snapshot = GetDirectorySnapshot(projectRoot, parentPath, architecture, manifest);
+        var snapshot = GetDirectorySnapshot(projectRoot, parentPath, topology);
         return snapshot.Entries.FirstOrDefault(entry =>
             string.Equals(entry.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));
     }
 
     public List<WorkspaceFileNode> GetRoots(
         string projectRoot,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
-        return GetRootSnapshot(projectRoot, architecture, manifest).Entries
+        return GetRootSnapshot(projectRoot, topology).Entries
             .Select(static entry => entry.Clone())
             .ToList();
     }
@@ -81,10 +76,9 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
     public List<WorkspaceFileNode> GetChildren(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
-        return GetDirectorySnapshot(projectRoot, relativePath, architecture, manifest).Entries
+        return GetDirectorySnapshot(projectRoot, relativePath, topology).Entries
             .Select(static entry => entry.Clone())
             .ToList();
     }
@@ -164,7 +158,7 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
 
     public async Task<WorkspaceMetadataSyncResult> EnsureDirectoryMetadataTreeAsync(
         string projectRoot,
-        ArchitectureManifest architecture,
+        WorkspaceTopologyContext topology,
         string relativePath = "",
         CancellationToken cancellationToken = default)
     {
@@ -173,7 +167,7 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
         if (!Directory.Exists(startFullPath))
             throw new DirectoryNotFoundException(WorkspaceConstants.Diagnostics.DirectoryDoesNotExistPrefix + normalizedRootPath);
 
-        var excludes = DefaultExcludes.BuildWithCustom(architecture.ExcludeDirs);
+        var excludes = DefaultExcludes.BuildWithCustom(topology.ExcludeDirs);
         var processedDirectoryCount = 0;
         var createdMetadataCount = 0;
 

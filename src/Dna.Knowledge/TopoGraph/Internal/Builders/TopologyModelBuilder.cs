@@ -74,6 +74,7 @@ public sealed class TopologyModelBuilder
             Vision = registration.Vision,
             WorkspaceRoot = registration.WorkspaceRoot,
             Steward = registration.Steward,
+            ExcludeDirs = registration.ExcludeDirs.ToList(),
             Knowledge = registration.Knowledge,
             Metadata = registration.Metadata
         };
@@ -90,6 +91,8 @@ public sealed class TopologyModelBuilder
             DisciplineCode = registration.DisciplineCode,
             Scope = registration.Scope,
             Owner = registration.Owner,
+            RoleId = registration.RoleId,
+            Layers = registration.Layers.ToList(),
             Knowledge = registration.Knowledge,
             Metadata = registration.Metadata
         };
@@ -105,6 +108,9 @@ public sealed class TopologyModelBuilder
             ParentId = registration.ParentId,
             PathBinding = registration.PathBinding,
             Maintainer = registration.Maintainer,
+            Layer = registration.Layer,
+            IsCrossWorkModule = registration.IsCrossWorkModule,
+            Participants = registration.Participants.ToList(),
             Contract = registration.Contract,
             DeclaredDependencies = registration.DeclaredDependencies.ToList(),
             ComputedDependencies = registration.ComputedDependencies.ToList(),
@@ -124,6 +130,9 @@ public sealed class TopologyModelBuilder
             ParentId = registration.ParentId,
             PathBinding = registration.PathBinding,
             Maintainer = registration.Maintainer,
+            Layer = registration.Layer,
+            IsCrossWorkModule = registration.IsCrossWorkModule,
+            Participants = registration.Participants.ToList(),
             BusinessObjective = registration.BusinessObjective,
             TechnicalDependencies = registration.TechnicalDependencies.ToList(),
             Deliverables = registration.Deliverables.ToList(),

@@ -1,4 +1,3 @@
-using Dna.Knowledge;
 using Dna.Knowledge.Workspace.Models;
 
 namespace Dna.Knowledge.Workspace;
@@ -11,13 +10,12 @@ public static class WorkspaceScanner
     public static WorkspaceDirectorySnapshot ScanDirectory(
         string projectRoot,
         string relativePath,
-        ArchitectureManifest architecture,
-        ModulesManifest manifest)
+        WorkspaceTopologyContext topology)
     {
         var normalizedPath = WorkspacePath.NormalizeRelativePath(relativePath);
         var fullPath = WorkspacePath.Combine(projectRoot, normalizedPath);
-        var context = BuildContext(projectRoot, manifest);
-        var excludes = DefaultExcludes.BuildWithCustom(architecture.ExcludeDirs);
+        var context = BuildContext(projectRoot, topology);
+        var excludes = DefaultExcludes.BuildWithCustom(topology.ExcludeDirs);
 
         if (!Directory.Exists(fullPath))
         {
@@ -423,7 +421,7 @@ public static class WorkspaceScanner
 
     private sealed record ScopeRegistration(
         string Discipline,
-        ModuleRegistration Module,
+        WorkspaceModuleRegistration Module,
         string ScopePath,
         WorkspaceOwnershipKind Kind);
 
@@ -431,7 +429,7 @@ public static class WorkspaceScanner
     {
         public string ProjectRoot { get; init; } = string.Empty;
 
-        public Dictionary<string, (string discipline, ModuleRegistration module)> ModulesByPath { get; } =
+        public Dictionary<string, (string discipline, WorkspaceModuleRegistration module)> ModulesByPath { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
         public List<ScopeRegistration> OwnedScopes { get; } = [];
@@ -439,22 +437,19 @@ public static class WorkspaceScanner
         public HashSet<string> ContainerPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static ScanContext BuildContext(string projectRoot, ModulesManifest manifest)
+    private static ScanContext BuildContext(string projectRoot, WorkspaceTopologyContext topology)
     {
         var context = new ScanContext
         {
             ProjectRoot = Path.GetFullPath(projectRoot)
         };
 
-        foreach (var (discipline, modules) in manifest.Disciplines)
+        foreach (var module in topology.Modules)
         {
-            foreach (var module in modules)
-            {
-                RegisterScope(context, discipline, module, module.Path, WorkspaceOwnershipKind.ModuleRoot, isModulePath: true);
+            RegisterScope(context, module.Discipline, module, module.Path, WorkspaceOwnershipKind.ModuleRoot, isModulePath: true);
 
-                foreach (var managedPath in module.ManagedPaths ?? [])
-                    RegisterScope(context, discipline, module, managedPath, WorkspaceOwnershipKind.ManagedPath, isModulePath: false);
-            }
+            foreach (var managedPath in module.ManagedPaths)
+                RegisterScope(context, module.Discipline, module, managedPath, WorkspaceOwnershipKind.ManagedPath, isModulePath: false);
         }
 
         context.OwnedScopes.Sort(static (left, right) =>
@@ -472,7 +467,7 @@ public static class WorkspaceScanner
     private static void RegisterScope(
         ScanContext context,
         string discipline,
-        ModuleRegistration module,
+        WorkspaceModuleRegistration module,
         string? rawPath,
         WorkspaceOwnershipKind kind,
         bool isModulePath)
@@ -521,7 +516,7 @@ public static class WorkspaceScanner
 
     private static int? GuessSiblingLayer(
         string path,
-        Dictionary<string, (string discipline, ModuleRegistration module)> modulesByPath)
+        Dictionary<string, (string discipline, WorkspaceModuleRegistration module)> modulesByPath)
     {
         var parentPath = WorkspacePath.GetParentPath(path);
 

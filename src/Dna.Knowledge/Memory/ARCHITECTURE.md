@@ -415,56 +415,33 @@ TopoGraph 中按模块沉淀的知识
 
 ## 当前实现与目标架构的差异
 
-当前实现里，最主要的问题不是检索算法，而是职责混装：
+Memory 模块的大方向已经完成一轮收口，最重的职责混装已经拆开：
 
-### 1. `MemoryStore` 过胖
+- 拓扑定义与模块管理已迁回 `TopoGraph`
+- 模块知识文件已迁回 `.agentic-os/knowledge/modules`
+- 记忆文件已统一落到 `.agentic-os/memory`
+- `MemoryStore` 当前只保留记忆持久化、检索索引与文件同步相关职责
 
-它现在同时承担了：
+剩余差异主要集中在两点：
 
-- 记忆 SQLite 存储
-- 向量与 FTS 相关底层能力
-- 旧 TopoGraph 模块清单存储
-- 旧图谱快照存储
-- 节点知识汇总存储
+### 1. `MemoryStore` 仍承担部分模块内部装配
 
-这违反了单一职责。
+当前 `MemoryStore` 仍通过 `BuildInternals(...)` 挂接内部协作者。
+这说明模块装配边界已经比重构前清晰很多，但仍可以继续下沉到更显式的模块装配层。
 
-### 2. 图谱定义、模块知识与记忆定义混在一起
+### 2. `MemoryEntry` 仍偏向存储实体
 
-当前 `MemoryStore` 中的这些内容应从核心记忆存储中移出：
-
-- `ArchitectureManifest`
-- `ModulesManifest`
-- `ComputedManifest`
-- `graph_modules`
-- `graph_disciplines`
-- `graph_crossworks`
-- `graph_features`
-- 节点级知识快照
-
-这些都属于 `TopoGraph` 的定义域，而不是 `Memory` 的定义域。
-
-### 3. `BuildInternals(...)` 暴露出过多装配细节
-
-当前 `MemoryStore` 同时承担了存储与内部服务构建职责。
-
-长期看应收敛为：
-
-- `MemoryEngine` 作为门面
-- `MemoryStore` 作为仓库
-- 其他服务作为内部协作者
-
-而不是继续把整个模块组装逻辑塞在存储层里。
+虽然职责边界已经理顺，但 `MemoryEntry` 仍承载较多内容、坐标和生命周期字段。
+后续可以继续沿“内容 + 坐标 + 生命周期”的方向收敛内部模型。
 
 ## 当前重构建议
 
 后续 `Memory` 重构建议按以下顺序推进：
 
-1. 先把 `MemoryStore` 中的图谱定义与模块知识存储彻底迁出到 `TopoGraph`
-2. 保留 `MemoryStore` 只负责记忆表、索引表和记忆查询
-3. 如确有需要，为 `TopoGraph` 提供一个单独的只读记忆上下文适配器，而不是继续让整个 `MemoryStore` 承担图谱适配职责
-4. 逐步把 `MemoryEntry` 从大平铺对象收敛为“内容 + 坐标 + 生命周期”结构
-5. 在治理层引入显式的“短期记忆 -> 长期记忆 -> 模块知识”升级流程，而不是把升级逻辑塞回 `Memory`
+1. 继续收敛 `BuildInternals(...)`，把模块装配从仓库实现中进一步抽离。
+2. 保持 `MemoryStore` 只负责记忆表、索引表、查询和文件同步。
+3. 逐步把 `MemoryEntry` 从大平铺对象收敛为“内容 + 坐标 + 生命周期”结构。
+4. 保持治理层负责“短期记忆 -> 长期记忆 -> 模块知识”升级流程，而不是把升级逻辑塞回 `Memory`。
 
 ## 当前架构结论
 

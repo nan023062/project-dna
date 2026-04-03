@@ -36,7 +36,7 @@ public static class AppLocalMemoryApiEndpoints
         });
 
         group.MapGet("/query", (
-            string? nodeTypes, string? layers, string? disciplines, string? features,
+            string? nodeTypes, string? disciplines, string? features,
             string? types, string? tags, string? nodeId, string? freshness,
             int? limit, int? offset,
             [FromServices] IMemoryEngine memory,
@@ -45,7 +45,7 @@ public static class AppLocalMemoryApiEndpoints
             EnsureReady(memory, config);
             var filter = new MemoryFilter
             {
-                NodeTypes = ParseNodeTypeList(nodeTypes, layers),
+                NodeTypes = ParseNodeTypeList(nodeTypes),
                 Disciplines = SplitOrNull(disciplines),
                 Features = SplitOrNull(features),
                 Types = ParseEnumList<MemoryType>(types),
@@ -139,44 +139,6 @@ public static class AppLocalMemoryApiEndpoints
             var archived = governance.ArchiveStaleMemories(TimeSpan.FromDays(30));
             return Results.Ok(new { message = $"Archived {archived} stale memories.", archivedCount = archived });
         });
-
-        group.MapPost("/index/rebuild", (bool? rewriteJson, [FromServices] IMemoryEngine memory, [FromServices] ProjectConfig config) =>
-        {
-            EnsureReady(memory, config);
-            var (imported, skipped) = memory.RebuildIndex(rewriteJson ?? false);
-            return Results.Ok(new
-            {
-                message = $"Rebuilt search index: indexed {imported}, skipped {skipped}.",
-                indexed = imported,
-                skipped,
-                rewriteJson = rewriteJson ?? false
-            });
-        });
-
-        group.MapPost("/index/sync", ([FromServices] IMemoryEngine memory, [FromServices] ProjectConfig config) =>
-        {
-            EnsureReady(memory, config);
-            var (added, removed, skipped) = memory.SyncFromJson();
-            return Results.Ok(new
-            {
-                message = $"Synced search index: added {added}, removed {removed}, skipped {skipped}.",
-                indexed = added,
-                removed,
-                skipped
-            });
-        });
-
-        group.MapPost("/index/export", ([FromServices] IMemoryEngine memory, [FromServices] ProjectConfig config) =>
-        {
-            EnsureReady(memory, config);
-            var (exported, skipped) = memory.ExportToJson();
-            return Results.Ok(new
-            {
-                message = "Current storage is database-first; JSON export is kept for compatibility.",
-                exported,
-                skipped
-            });
-        });
     }
 
     private static List<string>? SplitOrNull(string? csv) =>
@@ -193,13 +155,11 @@ public static class AppLocalMemoryApiEndpoints
                 .Select(v => v!.Value)
                 .ToList();
 
-    private static List<NodeType>? ParseNodeTypeList(string? nodeTypes, string? legacyLayers = null)
+    private static List<NodeType>? ParseNodeTypeList(string? nodeTypes)
     {
         var merged = new List<string>();
         if (!string.IsNullOrWhiteSpace(nodeTypes))
             merged.AddRange(nodeTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        if (!string.IsNullOrWhiteSpace(legacyLayers))
-            merged.AddRange(legacyLayers.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         if (merged.Count == 0) return null;
 
         var parsed = merged

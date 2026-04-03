@@ -34,29 +34,6 @@ public sealed class DesktopProjectConfigTests
     }
 
     [Fact]
-    public void Load_ShouldMigrateLegacySingleFileConfigToDirectoryLayout()
-    {
-        var projectRoot = CreateProjectRoot();
-        var legacyPath = Path.Combine(projectRoot, ".agentic-os");
-        File.WriteAllText(
-            legacyPath,
-            """
-            {
-              "projectName": "legacy-project",
-              "serverBaseUrl": "http://localhost:5051"
-            }
-            """);
-
-        var config = DesktopProjectConfig.Load(projectRoot);
-
-        Assert.False(File.Exists(legacyPath));
-        Assert.True(Directory.Exists(config.MetadataRootPath));
-        Assert.True(File.Exists(config.ConfigPath));
-        Assert.Equal("legacy-project", config.ProjectName);
-        Assert.Equal("http://127.0.0.1:5052", config.ServerBaseUrl);
-    }
-
-    [Fact]
     public void EnsureLlmConfig_ShouldMaterializeProjectMetadataFile()
     {
         var projectRoot = CreateProjectRoot();

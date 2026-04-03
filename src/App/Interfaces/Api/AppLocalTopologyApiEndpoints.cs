@@ -23,11 +23,11 @@ public static class AppLocalTopologyApiEndpoints
     {
         var api = app.MapGroup("/api");
 
-        api.MapGet("/topology", ([FromServices] IGraphEngine graph, [FromServices] AppRuntimeOptions runtime) =>
+        api.MapGet("/topology", ([FromServices] ITopoGraphApplicationService topology, [FromServices] AppRuntimeOptions runtime) =>
         {
-            var topo = graph.BuildTopology();
-            var arch = graph.GetArchitecture();
-            var disciplineNames = BuildDisciplineDisplayNames(arch, topo.Nodes);
+            var topo = topology.BuildTopology();
+            var management = topology.GetManagementSnapshot();
+            var disciplineNames = BuildDisciplineDisplayNames(management, topo.Nodes);
 
             var moduleDtos = topo.Nodes
                 .Select(n => ToModuleDto(n, topo.Nodes, disciplineNames))
@@ -47,7 +47,7 @@ public static class AppLocalTopologyApiEndpoints
                 modulesByNodeId,
                 "collaboration");
             var relationEdges = dependencyEdges.Concat(containmentEdges).Concat(collaborationEdges).ToList();
-            var disciplineDtos = BuildDisciplineDtos(arch, disciplineNames, moduleDtos, topo.CrossWorks);
+            var disciplineDtos = BuildDisciplineDtos(management, disciplineNames, moduleDtos, topo.CrossWorks);
             var crossWorkDtos = BuildCrossWorkDtos(topo.CrossWorks, moduleDtos);
             var teamCount = moduleDtos.Count(IsTeam);
             var groupCount = moduleDtos.Count - teamCount;
@@ -78,13 +78,13 @@ public static class AppLocalTopologyApiEndpoints
             });
         });
 
-        api.MapGet("/plan", ([FromQuery] string modules, [FromServices] IGraphEngine graph) =>
+        api.MapGet("/plan", ([FromQuery] string modules, [FromServices] ITopoGraphApplicationService topology) =>
         {
-            graph.BuildTopology();
+            topology.BuildTopology();
             var names = modules
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
-            var plan = graph.GetExecutionPlan(names);
+            var plan = topology.GetExecutionPlan(names);
             return Results.Json(new
             {
                 plan.OrderedModules,
@@ -94,10 +94,10 @@ public static class AppLocalTopologyApiEndpoints
             }, JsonOpts);
         });
 
-        api.MapPost("/reload", ([FromServices] IGraphEngine graph) =>
+        api.MapPost("/reload", ([FromServices] ITopoGraphApplicationService topology) =>
         {
-            graph.ReloadManifests();
-            var topo = graph.BuildTopology();
+            topology.ReloadManifests();
+            var topo = topology.BuildTopology();
             return Results.Json(new
             {
                 success = true,
@@ -288,7 +288,7 @@ public static class AppLocalTopologyApiEndpoints
     }
 
     private static List<DisciplineDto> BuildDisciplineDtos(
-        ArchitectureManifest arch,
+        TopologyManagementSnapshot management,
         Dictionary<string, string> disciplineNames,
         List<ModuleDto> modules,
         List<CrossWork> crossWorks)
@@ -303,7 +303,8 @@ public static class AppLocalTopologyApiEndpoints
         var list = new List<DisciplineDto>();
         foreach (var id in knownIds.OrderBy(v => v, StringComparer.OrdinalIgnoreCase))
         {
-            arch.Disciplines.TryGetValue(id, out var def);
+            var def = management.Disciplines.FirstOrDefault(item =>
+                string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase));
             var moduleNames = groups
                 .Where(m => string.Equals(m.Discipline, id, StringComparison.OrdinalIgnoreCase))
                 .Select(m => m.Name)
@@ -329,13 +330,15 @@ public static class AppLocalTopologyApiEndpoints
         return list;
     }
 
-    private static Dictionary<string, string> BuildDisciplineDisplayNames(ArchitectureManifest arch, List<KnowledgeNode> nodes)
+    private static Dictionary<string, string> BuildDisciplineDisplayNames(TopologyManagementSnapshot management, List<KnowledgeNode> nodes)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (id, def) in arch.Disciplines)
+        foreach (var discipline in management.Disciplines)
         {
-            if (string.IsNullOrWhiteSpace(id)) continue;
-            map[id] = string.IsNullOrWhiteSpace(def.DisplayName) ? id : def.DisplayName.Trim();
+            if (string.IsNullOrWhiteSpace(discipline.Id)) continue;
+            map[discipline.Id] = string.IsNullOrWhiteSpace(discipline.DisplayName)
+                ? discipline.Id
+                : discipline.DisplayName.Trim();
         }
 
         foreach (var node in nodes)
@@ -361,6 +364,7 @@ public static class AppLocalTopologyApiEndpoints
             {
                 NodeType.Project => "Project",
                 NodeType.Department => "Department",
+                NodeType.Team => "Team",
                 _ => "Technical"
             };
 

@@ -1,6 +1,5 @@
 using Dna.Core.Config;
 using Dna.Knowledge;
-using Dna.Knowledge.Governance;
 using Dna.Knowledge.Workspace.Models;
 using Dna.Memory.Models;
 using Dna.Memory.Store;
@@ -38,7 +37,7 @@ public sealed class GovernanceRefactorTests
 
         Assert.Equal(1, decayed);
         Assert.Equal(FreshnessStatus.Aging, harness.MemoryStore.GetById("mem-fresh-1")?.Freshness);
-        Assert.False(harness.GraphEngine.TopologyRequested);
+        Assert.False(harness.TopologyService.TopologyRequested);
     }
 
     [Fact]
@@ -79,11 +78,11 @@ public sealed class GovernanceRefactorTests
 
         Assert.Equal(1, conflicts);
         Assert.Contains("#conflict", harness.MemoryStore.GetById("mem-id-1")?.Tags ?? []);
-        Assert.False(harness.GraphEngine.TopologyRequested);
+        Assert.False(harness.TopologyService.TopologyRequested);
     }
 
     [Fact]
-    public async Task CondenseNodeKnowledge_ShouldResolveNodeFromTopoGraphStoreWithoutGraphTopology()
+    public async Task CondenseNodeKnowledge_ShouldResolveNodeFromTopoGraphManagementSnapshot()
     {
         using var harness = GovernanceTestHarness.Create();
 
@@ -124,7 +123,19 @@ public sealed class GovernanceRefactorTests
         Assert.Equal("Core", result.NodeName);
         Assert.NotNull(result.NewIdentityMemoryId);
         Assert.True(harness.TopoStore.KnowledgeByNodeId.ContainsKey("tech-core"));
-        Assert.False(harness.GraphEngine.TopologyRequested);
+        Assert.False(harness.TopologyService.TopologyRequested);
+    }
+
+    [Fact]
+    public void ValidateArchitecture_ShouldDelegateToTopologyApplicationService()
+    {
+        using var harness = GovernanceTestHarness.Create();
+
+        var report = harness.Engine.ValidateArchitecture();
+
+        Assert.True(harness.TopologyService.TopologyRequested);
+        Assert.True(harness.TopologyService.ValidationRequested);
+        Assert.NotNull(report);
     }
 
     private sealed class GovernanceTestHarness : IDisposable
@@ -134,7 +145,7 @@ public sealed class GovernanceRefactorTests
 
         public MemoryStore MemoryStore { get; }
         public FakeTopoGraphStore TopoStore { get; }
-        public ThrowingGraphEngine GraphEngine { get; }
+        public ThrowingTopologyApplicationService TopologyService { get; }
         public GovernanceEngine Engine { get; }
 
         private GovernanceTestHarness(
@@ -142,14 +153,14 @@ public sealed class GovernanceRefactorTests
             ServiceProvider services,
             MemoryStore memoryStore,
             FakeTopoGraphStore topoStore,
-            ThrowingGraphEngine graphEngine,
+            ThrowingTopologyApplicationService topologyService,
             GovernanceEngine engine)
         {
             _storePath = storePath;
             _services = services;
             MemoryStore = memoryStore;
             TopoStore = topoStore;
-            GraphEngine = graphEngine;
+            TopologyService = topologyService;
             Engine = engine;
         }
 
@@ -160,25 +171,21 @@ public sealed class GovernanceRefactorTests
                 .AddHttpClient()
                 .BuildServiceProvider();
 
-            var topoStore = new FakeTopoGraphStore(
-                new ModulesManifest
+            var modules =
+                new List<TopologyModuleDefinition>
                 {
-                    Disciplines = new Dictionary<string, List<ModuleRegistration>>(StringComparer.OrdinalIgnoreCase)
+                    new()
                     {
-                        ["engineering"] =
-                        [
-                            new ModuleRegistration
-                            {
-                                Id = "tech-core",
-                                Name = "Core",
-                                Path = "src/core",
-                                Layer = 1,
-                                Summary = "Core module"
-                            }
-                        ]
+                        Id = "tech-core",
+                        Name = "Core",
+                        Discipline = "engineering",
+                        Path = "src/core",
+                        Layer = 1,
+                        Summary = "Core module"
                     }
-                },
-                new ComputedManifest());
+                };
+
+            var topoStore = new FakeTopoGraphStore(modules, new ComputedManifest());
 
             var storePath = Path.Combine(Path.GetTempPath(), "dna-governance-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(storePath);
@@ -191,10 +198,10 @@ public sealed class GovernanceRefactorTests
                 services.GetRequiredService<ILoggerFactory>(),
                 topoStore);
 
-            var graphEngine = new ThrowingGraphEngine();
-            var governance = new GovernanceEngine(memoryStore, topoStore, graphEngine, NullLoggerFactory.Instance);
+            var topologyService = new ThrowingTopologyApplicationService(modules);
+            var governance = new GovernanceEngine(memoryStore, topoStore, topologyService, NullLoggerFactory.Instance);
 
-            return new GovernanceTestHarness(storePath, services, memoryStore, topoStore, graphEngine, governance);
+            return new GovernanceTestHarness(storePath, services, memoryStore, topoStore, topologyService, governance);
         }
 
         public void Dispose()
@@ -225,23 +232,19 @@ public sealed class GovernanceRefactorTests
                     Thread.Sleep(100);
                 }
             }
-
-            // Best effort cleanup for temp SQLite files on Windows; a delayed handle
-            // release should not make the behavioral regression test fail.
         }
     }
 
     private sealed class FakeTopoGraphStore : ITopoGraphStore
     {
-        private readonly ArchitectureManifest _architecture = new();
+        private readonly List<TopologyModuleDefinition> _modules;
 
-        public FakeTopoGraphStore(ModulesManifest manifest, ComputedManifest computed)
+        public FakeTopoGraphStore(List<TopologyModuleDefinition> modules, ComputedManifest computed)
         {
-            Manifest = manifest;
+            _modules = modules;
             Computed = computed;
         }
 
-        public ModulesManifest Manifest { get; private set; }
         public ComputedManifest Computed { get; private set; }
         public Dictionary<string, NodeKnowledge> KnowledgeByNodeId { get; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -252,10 +255,6 @@ public sealed class GovernanceRefactorTests
         public void Reload()
         {
         }
-
-        public ArchitectureManifest GetArchitecture() => _architecture;
-
-        public ModulesManifest GetModulesManifest() => Manifest;
 
         public ComputedManifest GetComputedManifest() => Computed;
 
@@ -272,14 +271,11 @@ public sealed class GovernanceRefactorTests
                 return [];
 
             var input = nodeId.Trim();
-            foreach (var modules in Manifest.Disciplines.Values)
-            {
-                var match = modules.FirstOrDefault(module =>
-                    string.Equals(module.Id, input, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(module.Name, input, StringComparison.OrdinalIgnoreCase));
-                if (match != null)
-                    return [match.Id, match.Name];
-            }
+            var match = _modules.FirstOrDefault(module =>
+                string.Equals(module.Id, input, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module.Name, input, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                return [match.Id, match.Name];
 
             if (strict)
                 throw new InvalidOperationException($"missing node: {input}");
@@ -291,65 +287,56 @@ public sealed class GovernanceRefactorTests
         {
             Computed.ModuleDependencies[moduleName] = computedDependencies;
         }
-
-        public void RegisterModule(string discipline, ModuleRegistration module)
-            => throw new NotSupportedException();
-
-        public bool UnregisterModule(string name)
-            => throw new NotSupportedException();
-
-        public void SaveCrossWork(CrossWorkRegistration crossWork)
-            => throw new NotSupportedException();
-
-        public bool RemoveCrossWork(string crossWorkId)
-            => throw new NotSupportedException();
-
-        public void UpsertDiscipline(string disciplineId, string? displayName, string roleId, List<LayerDefinition> layers)
-            => throw new NotSupportedException();
-
-        public bool RemoveDiscipline(string disciplineId)
-            => throw new NotSupportedException();
-
-        public void ReplaceModulesManifest(ModulesManifest manifest)
-        {
-            Manifest = manifest;
-        }
     }
 
-    private sealed class ThrowingGraphEngine : IGraphEngine
+    private sealed class ThrowingTopologyApplicationService : ITopoGraphApplicationService
     {
+        private readonly List<TopologyModuleDefinition> _modules;
+
+        public ThrowingTopologyApplicationService(List<TopologyModuleDefinition> modules)
+        {
+            _modules = modules;
+        }
+
         public bool TopologyRequested { get; private set; }
+        public bool ValidationRequested { get; private set; }
 
         public TopologySnapshot BuildTopology()
         {
             TopologyRequested = true;
-            throw new NotSupportedException("legacy topology should not be requested");
+            return new TopologySnapshot();
         }
 
-        public TopologySnapshot GetTopology()
-        {
-            TopologyRequested = true;
-            throw new NotSupportedException("legacy topology should not be requested");
-        }
+        public TopologySnapshot GetTopology() => new();
+
+        public TopologyManagementSnapshot GetManagementSnapshot()
+            => new()
+            {
+                Modules = _modules
+            };
 
         public ExecutionPlan GetExecutionPlan(List<string> moduleNames) => throw new NotSupportedException();
         public KnowledgeNode? FindModule(string nameOrPath) => throw new NotSupportedException();
         public List<KnowledgeNode> GetAllModules() => throw new NotSupportedException();
         public List<KnowledgeNode> GetModulesByDiscipline(string disciplineId) => throw new NotSupportedException();
         public ModuleContext GetModuleContext(string targetModule, string? currentModule, List<string>? activeModules = null) => throw new NotSupportedException();
-        public GovernanceReport ValidateArchitecture() => new();
+
+        public GovernanceReport ValidateArchitecture()
+        {
+            ValidationRequested = true;
+            return new GovernanceReport();
+        }
+
         public List<CrossWork> GetCrossWorks() => throw new NotSupportedException();
         public List<CrossWork> GetCrossWorksForModule(string moduleName) => throw new NotSupportedException();
-        public void RegisterModule(string discipline, ModuleRegistration module) => throw new NotSupportedException();
+        public void RegisterModule(string discipline, TopologyModuleDefinition module) => throw new NotSupportedException();
         public bool UnregisterModule(string name) => throw new NotSupportedException();
-        public void SaveCrossWork(CrossWorkRegistration crossWork) => throw new NotSupportedException();
+        public void SaveCrossWork(TopologyCrossWorkDefinition crossWork) => throw new NotSupportedException();
         public bool RemoveCrossWork(string crossWorkId) => throw new NotSupportedException();
         public void UpsertDiscipline(string disciplineId, string? displayName, string roleId, List<LayerDefinition> layers) => throw new NotSupportedException();
         public bool RemoveDiscipline(string disciplineId) => throw new NotSupportedException();
         public string? GetDisciplineRoleId(string moduleName) => throw new NotSupportedException();
-        public ArchitectureManifest GetArchitecture() => throw new NotSupportedException();
-        public ModulesManifest GetModulesManifest() => throw new NotSupportedException();
-        public void ReplaceModulesManifest(ModulesManifest manifest) => throw new NotSupportedException();
+        public WorkspaceTopologyContext GetWorkspaceContext() => throw new NotSupportedException();
         public void ReloadManifests() => throw new NotSupportedException();
         public void Initialize(string storePath) => throw new NotSupportedException();
     }

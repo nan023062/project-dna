@@ -11,8 +11,7 @@ namespace Dna.App.Services;
 public sealed class AppLocalRuntimeInitializer(
     AppRuntimeOptions options,
     ProjectConfig projectConfig,
-    ITopoGraphStore topoGraphStore,
-    IGraphEngine graph,
+    ITopoGraphApplicationService topology,
     IMemoryEngine memory,
     IWorkspaceEngine workspace,
     ITopoGraphFacade topoGraphFacade,
@@ -28,22 +27,20 @@ public sealed class AppLocalRuntimeInitializer(
         var storage = AppProjectStoragePaths.Prepare(projectConfig.MetadataRootPath, logger);
 
         // 旧系统初始化（包含文件协议回退）
-        topoGraphStore.Initialize(storage.KnowledgeRootPath);
-        graph.Initialize(storage.KnowledgeRootPath);
+        topology.Initialize(storage.KnowledgeRootPath);
         memory.Initialize(storage.MemoryRootPath);
-
-        var architecture = topoGraphStore.GetArchitecture();
-        workspace.Initialize(options.WorkspaceRoot, architecture);
-        var metadataSync = await workspace.EnsureDirectoryMetadataTreeAsync(
-            options.WorkspaceRoot,
-            architecture,
-            cancellationToken: cancellationToken);
-
-        graph.BuildTopology();
-
-        // 新系统初始化：从 .agentic-os/ 文件加载 TopoGraphFacade
         InitializeFileProtocol(storage.MetadataRootPath);
 
+        var workspaceTopology = topology.GetWorkspaceContext();
+        workspace.Initialize(options.WorkspaceRoot, workspaceTopology);
+        var metadataSync = await workspace.EnsureDirectoryMetadataTreeAsync(
+            options.WorkspaceRoot,
+            workspaceTopology,
+            cancellationToken: cancellationToken);
+
+        topology.BuildTopology();
+
+        // 新系统初始化：从 .agentic-os/ 文件加载 TopoGraphFacade
         logger.LogInformation(
             "App local runtime initialized: project={ProjectName}, root={ProjectRoot}, metadata={MetadataRoot}, memory={MemoryRoot}, knowledge={KnowledgeRoot}, metadataFiles={MetadataCount}, migratedMemoryFiles={MigratedMemoryFiles}, migratedKnowledgeFiles={MigratedKnowledgeFiles}, api={ApiBaseUrl}",
             options.ProjectName,

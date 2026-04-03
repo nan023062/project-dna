@@ -9,21 +9,25 @@ namespace Dna.Knowledge;
 /// </summary>
 public sealed class GovernanceEngine : IGovernanceEngine
 {
-    private readonly IGraphEngine _graphEngine;
+    private readonly ITopoGraphApplicationService _topology;
     private readonly FreshnessChecker _freshnessChecker;
     private readonly MemoryMaintainer _memoryMaintainer;
 
-    public GovernanceEngine(MemoryStore memoryStore, ITopoGraphStore topoGraphStore, IGraphEngine graphEngine, ILoggerFactory loggerFactory)
+    public GovernanceEngine(
+        MemoryStore memoryStore,
+        ITopoGraphStore topoGraphStore,
+        ITopoGraphApplicationService topology,
+        ILoggerFactory loggerFactory)
     {
-        _graphEngine = graphEngine;
+        _topology = topology;
         _freshnessChecker = new FreshnessChecker(memoryStore, loggerFactory.CreateLogger<FreshnessChecker>());
-        _memoryMaintainer = new MemoryMaintainer(memoryStore, topoGraphStore, loggerFactory.CreateLogger<MemoryMaintainer>());
+        _memoryMaintainer = new MemoryMaintainer(memoryStore, topoGraphStore, topology, loggerFactory.CreateLogger<MemoryMaintainer>());
     }
 
     public GovernanceReport ValidateArchitecture()
     {
-        _graphEngine.BuildTopology();
-        return _graphEngine.ValidateArchitecture();
+        _topology.BuildTopology();
+        return _topology.ValidateArchitecture();
     }
 
     public int CheckFreshness() => _freshnessChecker.CheckAll();

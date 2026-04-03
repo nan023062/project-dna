@@ -46,22 +46,6 @@ public partial class MemoryStore : IDisposable
         Directory.CreateDirectory(_memoryDir);
 
         var dbPath = Path.Combine(_memoryDir, "memory.db");
-        var legacyRootIndexDbPath = Path.Combine(_memoryDir, "index.db");
-        var legacyNestedMemoryDirIndexDbPath = Path.Combine(_memoryDir, "memory", "index.db");
-
-        if (!File.Exists(dbPath))
-        {
-            if (File.Exists(legacyRootIndexDbPath))
-            {
-                MoveSqliteDbWithSidecars(legacyRootIndexDbPath, dbPath);
-                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyRootIndexDbPath, dbPath);
-            }
-            else if (File.Exists(legacyNestedMemoryDirIndexDbPath))
-            {
-                MoveSqliteDbWithSidecars(legacyNestedMemoryDirIndexDbPath, dbPath);
-                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyNestedMemoryDirIndexDbPath, dbPath);
-            }
-        }
 
         _db?.Dispose();
         _db = new SqliteConnection($"Data Source={dbPath}");
@@ -82,21 +66,6 @@ public partial class MemoryStore : IDisposable
 
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
             dbPath, storePath, Count());
-    }
-
-    private static void MoveSqliteDbWithSidecars(string fromDbPath, string toDbPath)
-    {
-        File.Move(fromDbPath, toDbPath, overwrite: true);
-
-        var fromWal = fromDbPath + "-wal";
-        var fromShm = fromDbPath + "-shm";
-        var toWal = toDbPath + "-wal";
-        var toShm = toDbPath + "-shm";
-
-        if (File.Exists(fromWal))
-            File.Move(fromWal, toWal, overwrite: true);
-        if (File.Exists(fromShm))
-            File.Move(fromShm, toShm, overwrite: true);
     }
 
     private void EnsureSchema()
@@ -182,7 +151,6 @@ public partial class MemoryStore : IDisposable
         ftsCmd.ExecuteNonQuery();
 
         MigrateSchemaIfNeeded();
-        MigrateLegacyLayerValuesToNodeType();
     }
 
     private void MigrateSchemaIfNeeded()
@@ -213,33 +181,6 @@ public partial class MemoryStore : IDisposable
         }
     }
 
-    private void MigrateLegacyLayerValuesToNodeType()
-    {
-        using var cmd = _db!.CreateCommand();
-        cmd.CommandText = """
-            UPDATE memory_entries
-            SET layer = CASE LOWER(layer)
-                WHEN 'projectvision' THEN 'Project'
-                WHEN 'disciplinestandard' THEN 'Department'
-                WHEN 'crossdiscipline' THEN 'Team'
-                WHEN 'featuresystem' THEN 'Technical'
-                WHEN 'implementation' THEN 'Team'
-                WHEN 'root' THEN 'Project'
-                WHEN 'module' THEN 'Technical'
-                WHEN 'group' THEN 'Technical'
-                WHEN 'crosswork' THEN 'Team'
-                ELSE layer
-            END
-            WHERE LOWER(layer) IN (
-                'projectvision','disciplinestandard','crossdiscipline','featuresystem','implementation',
-                'root','module','crosswork'
-            )
-            """;
-        var migrated = cmd.ExecuteNonQuery();
-        if (migrated > 0)
-            _logger.LogInformation("记忆层级字段已迁移到 NodeType 语义，共 {Count} 条", migrated);
-    }
-
     // ═══════════════════════════════════════════
     //  索引维护（纯 DB）
     // ═══════════════════════════════════════════
@@ -247,7 +188,7 @@ public partial class MemoryStore : IDisposable
     /// <summary>
     /// 重建搜索索引：重建 FTS 文本索引（不触碰业务数据）。
     /// </summary>
-    public (int imported, int skipped) RebuildIndex(bool rewriteJson = false)
+    public int RebuildIndex()
     {
         if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
 
@@ -273,26 +214,7 @@ public partial class MemoryStore : IDisposable
 
         transaction.Commit();
         _logger.LogInformation("已重建 memory_fts 索引：{Count} 条", indexed);
-        return (indexed, 0);
-    }
-
-    /// <summary>
-    /// 兼容旧接口：JSON 增量同步已废弃，改为重建搜索索引。
-    /// </summary>
-    public (int added, int removed, int skipped) SyncFromJson()
-    {
-        var (indexed, _) = RebuildIndex();
-        return (indexed, 0, 0);
-    }
-
-    /// <summary>
-    /// 兼容旧接口：JSON 导出已废弃（当前为纯 DB 存储）。
-    /// </summary>
-    public (int exported, int skipped) ExportToJson()
-    {
-        var total = Count();
-        _logger.LogInformation("ExportToJson 已废弃：当前为纯 DB 存储，entries={Count}", total);
-        return (0, total);
+        return indexed;
     }
 
     private List<string> QueryMultiValues(string table, string column, string memoryId)
@@ -334,6 +256,7 @@ public partial class MemoryStore : IDisposable
     public MemoryEntry Insert(MemoryEntry entry)
     {
         InsertIntoSqlite(entry);
+        SyncEntryToFileProtocol(entry);
         return entry;
     }
 
@@ -342,6 +265,7 @@ public partial class MemoryStore : IDisposable
     {
         DeleteFromSqlite(entry.Id);
         InsertIntoSqlite(entry);
+        SyncEntryToFileProtocol(entry);
         return entry;
     }
 
@@ -354,6 +278,7 @@ public partial class MemoryStore : IDisposable
         if (Convert.ToInt32(check.ExecuteScalar()) == 0) return false;
 
         DeleteFromSqlite(id);
+        DeleteEntryFileFromProtocol(id);
         return true;
     }
 
@@ -364,6 +289,10 @@ public partial class MemoryStore : IDisposable
         foreach (var entry in entries)
             InsertIntoSqlite(entry);
         transaction.Commit();
+
+        foreach (var entry in entries)
+            SyncEntryToFileProtocol(entry);
+
         return entries;
     }
 
@@ -375,6 +304,12 @@ public partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@freshness", freshness.ToString());
         cmd.ExecuteNonQuery();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
+        else
+            DeleteEntryFileFromProtocol(id);
     }
 
     public void UpdateTags(string id, List<string> tags)
@@ -418,6 +353,10 @@ public partial class MemoryStore : IDisposable
         }
 
         transaction.Commit();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
     }
 
     /// <summary>扫描并自动降级过期的记忆</summary>
@@ -464,6 +403,14 @@ public partial class MemoryStore : IDisposable
             }
             
             transaction.Commit();
+
+            foreach (var id in idsToDecay)
+            {
+                var entry = GetById(id);
+                if (entry != null)
+                    SyncEntryToFileProtocol(entry);
+            }
+
             return idsToDecay.Count;
         }
         catch
@@ -486,6 +433,10 @@ public partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@now", now.ToString("O"));
         cmd.ExecuteNonQuery();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
     }
 
     /// <summary>更新向量</summary>

@@ -12,11 +12,11 @@ public static class AppStatusEndpoints
             [FromServices] AppRuntimeOptions options,
             [FromServices] AppWorkspaceStore workspaces,
             [FromServices] AppProjectLlmConfigService llm,
-            [FromServices] IGraphEngine graph,
+            [FromServices] ITopoGraphApplicationService topologyService,
             [FromServices] IMemoryEngine memory) =>
         {
             var currentWorkspace = workspaces.GetCurrentWorkspace();
-            var topology = graph.GetTopology();
+            var topology = topologyService.GetTopology();
             var stats = memory.GetMemoryStats();
 
             return Results.Ok(new

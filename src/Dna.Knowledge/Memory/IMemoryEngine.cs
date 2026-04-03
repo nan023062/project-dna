@@ -17,10 +17,6 @@ public interface IMemoryEngine
     FeatureKnowledgeSummary GetFeatureSummary(string featureId);
     DisciplineKnowledgeSummary GetDisciplineSummary(string disciplineId);
     int MemoryCount();
-
-    (int imported, int skipped) RebuildIndex(bool rewriteJson = false);
-    (int added, int removed, int skipped) SyncFromJson();
-    (int exported, int skipped) ExportToJson();
     int DecayStaleMemories();
 
     void Initialize(string storePath);

@@ -25,20 +25,33 @@ public static class KnowledgeGraphExtensions
         services.AddSingleton<TopoGraphStore>(sp => sp.GetRequiredService<DnaServiceHolder>().TopoGraphStore);
         services.AddSingleton<ITopoGraphStore>(sp => sp.GetRequiredService<TopoGraphStore>());
         services.AddSingleton<ITopoGraphContextProvider>(sp => new MemoryTopoGraphContextProvider(sp.GetRequiredService<MemoryStore>()));
+        services.AddSingleton<FileBasedDefinitionStore>();
+        services.AddSingleton<ITopoGraphDefinitionStore>(sp => sp.GetRequiredService<FileBasedDefinitionStore>());
+        services.AddSingleton<TopologyModelBuilder>();
+        services.AddSingleton<ITopoGraphFacade>(sp =>
+        {
+            var definitionStore = sp.GetRequiredService<ITopoGraphDefinitionStore>();
+            var builder = sp.GetRequiredService<TopologyModelBuilder>();
+            return new TopoGraphFacade(definitionStore, builder);
+        });
 
-        services.AddSingleton<GraphEngine>(sp =>
+        services.AddSingleton<TopoGraphApplicationService>(sp =>
         {
             var store = sp.GetRequiredService<ITopoGraphStore>();
+            var facade = sp.GetRequiredService<ITopoGraphFacade>();
             var contextProvider = sp.GetRequiredService<ITopoGraphContextProvider>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            var engine = new GraphEngine(store, contextProvider, loggerFactory.CreateLogger<GraphEngine>());
+            var service = new TopoGraphApplicationService(
+                store,
+                facade,
+                contextProvider,
+                loggerFactory.CreateLogger<TopoGraphApplicationService>());
             var adapter = sp.GetService<IProjectAdapter>();
             if (adapter != null)
-                engine.SetAdapter(adapter);
-            return engine;
+                service.SetAdapter(adapter);
+            return service;
         });
-        services.AddSingleton<IGraphEngine>(sp => sp.GetRequiredService<GraphEngine>());
-
+        services.AddSingleton<ITopoGraphApplicationService>(sp => sp.GetRequiredService<TopoGraphApplicationService>());
         services.AddSingleton<IMemoryEngine>(sp =>
         {
             var store = sp.GetRequiredService<MemoryStore>();
@@ -50,22 +63,12 @@ public static class KnowledgeGraphExtensions
         {
             var memoryStore = sp.GetRequiredService<MemoryStore>();
             var topoGraphStore = sp.GetRequiredService<ITopoGraphStore>();
-            var graph = sp.GetRequiredService<IGraphEngine>();
+            var topology = sp.GetRequiredService<ITopoGraphApplicationService>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new GovernanceEngine(memoryStore, topoGraphStore, graph, loggerFactory);
+            return new GovernanceEngine(memoryStore, topoGraphStore, topology, loggerFactory);
         });
 
         // 新系统：文件协议 → TopoGraphFacade
-        services.AddSingleton<FileBasedDefinitionStore>();
-        services.AddSingleton<ITopoGraphDefinitionStore>(sp => sp.GetRequiredService<FileBasedDefinitionStore>());
-        services.AddSingleton<TopologyModelBuilder>();
-        services.AddSingleton<ITopoGraphFacade>(sp =>
-        {
-            var definitionStore = sp.GetRequiredService<ITopoGraphDefinitionStore>();
-            var builder = sp.GetRequiredService<TopologyModelBuilder>();
-            return new TopoGraphFacade(definitionStore, builder);
-        });
-
         return services;
     }
 }
