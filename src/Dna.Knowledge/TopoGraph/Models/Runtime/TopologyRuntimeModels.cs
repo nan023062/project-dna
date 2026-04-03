@@ -189,6 +189,153 @@ public class NodeKnowledge
     public List<string> MemoryIds { get; set; } = [];
 }
 
+public sealed class TopologyModuleKnowledgeView
+{
+    public string NodeId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public NodeType Type { get; init; } = NodeType.Technical;
+    public string? Discipline { get; init; }
+    public string? ParentId { get; init; }
+    public int Layer { get; init; }
+    public string? RelativePath { get; init; }
+    public List<string> ManagedPaths { get; init; } = [];
+    public string? Maintainer { get; init; }
+    public string? Summary { get; init; }
+    public string? Boundary { get; init; }
+    public List<string> PublicApi { get; init; } = [];
+    public List<string> Constraints { get; init; } = [];
+    public List<string> DeclaredDependencies { get; init; } = [];
+    public List<string> ComputedDependencies { get; init; } = [];
+    public bool IsCrossWorkModule { get; init; }
+    public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public NodeKnowledge Knowledge { get; init; } = new();
+}
+
+public sealed class TopologyModuleKnowledgeUpsertCommand
+{
+    public string NodeIdOrName { get; set; } = string.Empty;
+    public NodeKnowledge Knowledge { get; set; } = new();
+}
+
+public sealed class TopologyModuleRelationsView
+{
+    public string NodeId { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public List<TopologyModuleRelationView> Outgoing { get; init; } = [];
+    public List<TopologyModuleRelationView> Incoming { get; init; } = [];
+}
+
+public sealed class TopologyWorkbenchSnapshot
+{
+    public TopologyWorkbenchProjectView Project { get; init; } = new();
+    public List<TopologyWorkbenchModuleView> Modules { get; init; } = [];
+    public List<TopologyWorkbenchRelationEdgeView> Edges { get; init; } = [];
+    public List<TopologyWorkbenchRelationEdgeView> RelationEdges { get; init; } = [];
+    public List<TopologyWorkbenchRelationEdgeView> ContainmentEdges { get; init; } = [];
+    public List<TopologyWorkbenchRelationEdgeView> CollaborationEdges { get; init; } = [];
+    public List<TopologyWorkbenchCrossWorkView> CrossWorks { get; init; } = [];
+    public List<TopologyWorkbenchDisciplineView> Disciplines { get; init; } = [];
+    public Dictionary<string, List<string>> DepMap { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, List<string>> RdepMap { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+    public string Summary { get; init; } = string.Empty;
+    public DateTime ScannedAt { get; init; } = DateTime.UtcNow;
+}
+
+public sealed class TopologyWorkbenchProjectView
+{
+    public string Id { get; init; } = "project";
+    public string Name { get; init; } = "Project";
+    public string Type { get; init; } = "Project";
+    public string TypeName { get; init; } = "Project";
+    public string TypeLabel { get; init; } = "Project";
+    public string FileAuthority { get; init; } = "govern";
+    public string? Summary { get; init; }
+    public List<string> ManagedPathScopes { get; init; } = [];
+}
+
+public sealed class TopologyWorkbenchModuleView
+{
+    public string Name { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string NodeId { get; init; } = string.Empty;
+    public string? RelativePath { get; init; }
+    public int Layer { get; init; }
+    public string Discipline { get; init; } = "root";
+    public string DisciplineDisplayName { get; init; } = "root";
+    public string Type { get; init; } = "Technical";
+    public string TypeName { get; init; } = "Technical";
+    public string TypeLabel { get; init; } = "Technical";
+    public string? Summary { get; init; }
+    public List<string> Keywords { get; init; } = [];
+    public List<string> Dependencies { get; init; } = [];
+    public List<string> ComputedDependencies { get; init; } = [];
+    public string? Maintainer { get; init; }
+    public string? Boundary { get; init; }
+    public string? Contract { get; init; }
+    public List<string> PublicApi { get; init; } = [];
+    public List<string> Constraints { get; init; } = [];
+    public List<string> Workflow { get; init; } = [];
+    public List<string> Rules { get; init; } = [];
+    public List<string> Prohibitions { get; init; } = [];
+    public string FileAuthority { get; init; } = "govern";
+    public List<string> ManagedPathScopes { get; init; } = [];
+    public Dictionary<string, string>? Metadata { get; init; }
+    public string? ParentId { get; init; }
+    public string? ParentModuleId { get; init; }
+    public List<string> ChildIds { get; init; } = [];
+    public bool IsCrossWorkModule { get; init; }
+    public bool CanEdit { get; init; }
+}
+
+public sealed class TopologyWorkbenchRelationEdgeView
+{
+    public string From { get; init; } = string.Empty;
+    public string To { get; init; } = string.Empty;
+    public string Relation { get; init; } = "dependency";
+    public string? Kind { get; init; }
+    public bool IsComputed { get; init; }
+}
+
+public sealed class TopologyWorkbenchCrossWorkView
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public string? Description { get; init; }
+    public string? Feature { get; init; }
+    public List<TopologyWorkbenchCrossWorkParticipantView> Participants { get; init; } = [];
+}
+
+public sealed class TopologyWorkbenchCrossWorkParticipantView
+{
+    public string ModuleName { get; init; } = string.Empty;
+    public string? ModuleId { get; init; }
+    public string Role { get; init; } = string.Empty;
+    public string? Contract { get; init; }
+    public string? ContractType { get; init; }
+    public string? Deliverable { get; init; }
+}
+
+public sealed class TopologyWorkbenchDisciplineView
+{
+    public string Id { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+    public string? RoleId { get; init; }
+    public int ModuleCount { get; init; }
+    public List<string> Modules { get; init; } = [];
+    public int CrossWorkCount { get; init; }
+}
+
+public sealed class TopologyModuleRelationView
+{
+    public string FromId { get; init; } = string.Empty;
+    public string FromName { get; init; } = string.Empty;
+    public string ToId { get; init; } = string.Empty;
+    public string ToName { get; init; } = string.Empty;
+    public TopologyRelationType Type { get; init; } = TopologyRelationType.Dependency;
+    public bool IsComputed { get; init; }
+    public string? Label { get; init; }
+}
+
 public class LessonSummary
 {
     public string Title { get; set; } = string.Empty;

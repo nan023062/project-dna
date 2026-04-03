@@ -6,7 +6,12 @@ public interface ITopoGraphApplicationService
 {
     TopologySnapshot BuildTopology();
     TopologySnapshot GetTopology();
+    TopologyWorkbenchSnapshot GetWorkbenchSnapshot();
     TopologyManagementSnapshot GetManagementSnapshot();
+    TopologyModuleKnowledgeView? GetModuleKnowledge(string nodeIdOrName);
+    IReadOnlyList<TopologyModuleKnowledgeView> ListModuleKnowledge();
+    TopologyModuleKnowledgeView SaveModuleKnowledge(TopologyModuleKnowledgeUpsertCommand command);
+    TopologyModuleRelationsView? GetModuleRelations(string nodeIdOrName);
     ExecutionPlan GetExecutionPlan(List<string> moduleNames);
     KnowledgeNode? FindModule(string nameOrPath);
     List<KnowledgeNode> GetAllModules();

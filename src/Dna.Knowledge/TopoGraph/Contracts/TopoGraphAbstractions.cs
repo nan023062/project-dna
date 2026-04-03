@@ -8,9 +8,45 @@ internal static class TopoGraphConstants
             "[TopoGraph] Topology: {Nodes} nodes, {Relations} relations, {DependencyEdges} dependency edges, {CrossWorks} crossworks";
     }
 
+    internal static class Storage
+    {
+        public const string GraphDbFileName = "graph.db";
+        public const string ComputedDependenciesTable = "graph_computed_dependencies";
+
+        internal static class KnowledgeDocument
+        {
+            public const string SecondLevelHeadingPrefix = "## ";
+            public const string SummaryHeading = "Summary";
+            public const string LessonsHeading = "Lessons";
+            public const string ActiveTasksHeading = "Active Tasks";
+            public const string FactsHeading = "Facts";
+            public const string GovernanceHeading = "Governance";
+            public const string BulletPrefix = "- ";
+            public const string IdentityMemoryPrefix = "- Identity Memory:";
+            public const string UpgradeTrailPrefix = "- Upgrade Trail:";
+            public const string SourceCountPrefix = "- Source Count:";
+            public const string ReferencedMemoriesPrefix = "- Referenced Memories:";
+            public const string LessonResolutionSeparator = " - ";
+            public const string EmptySummaryFallback = "No summary yet.";
+            public const string TruncatedListPrefix = "...";
+            public const int ReferencedMemoryPreviewLimit = 20;
+        }
+    }
     internal static class Relations
     {
         public const string ContainmentLabel = "composition";
+    }
+
+    internal static class Workbench
+    {
+        public const string ProjectNodeId = "project";
+        public const string DepartmentNodePrefix = "__dept__:";
+        public const string RootDisciplineId = "root";
+        public const string GovernAuthority = "govern";
+        public const string ExecuteAuthority = "execute";
+        public const string DependencyRelation = "dependency";
+        public const string ContainmentRelation = "containment";
+        public const string CollaborationRelation = "collaboration";
     }
 
     internal static class Metadata
@@ -130,3 +166,4 @@ public interface ITopoGraphStore
     List<string> ResolveNodeIdCandidates(string? nodeId, bool strict = false);
     void UpdateComputedDependencies(string moduleName, List<string> computedDependencies);
 }
+

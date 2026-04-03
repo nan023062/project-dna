@@ -15,6 +15,7 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
 
     private IProjectAdapter? _adapter;
     private TopologySnapshot _topology = new();
+    private bool _topologyBuilt;
 
     public TopoGraphApplicationService(
         ITopoGraphStore store,
@@ -34,37 +35,7 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
     {
         lock (_lock)
         {
-            _facade.Rebuild();
-            _store.Reload();
-            _topology = BuildCompatibilityTopology();
-
-            if (_adapter != null)
-            {
-                var hasComputedUpdates = false;
-                foreach (var node in _topology.Nodes.Where(node => node.Type is NodeType.Technical or NodeType.Team))
-                {
-                    var computed = _adapter.ComputeDependencies(node, _topology.Nodes);
-                    if (computed.Count == 0)
-                        continue;
-
-                    _store.UpdateComputedDependencies(node.Name, computed);
-                    hasComputedUpdates = true;
-                }
-
-                if (hasComputedUpdates)
-                {
-                    _store.Reload();
-                    _topology = BuildCompatibilityTopology();
-                }
-            }
-
-            _logger.LogInformation(
-                TopoGraphConstants.Logging.TopologySummary,
-                _topology.Nodes.Count,
-                _topology.Relations.Count,
-                _topology.Edges.Count,
-                _topology.CrossWorks.Count);
-
+            _topology = BuildTopologyLocked();
             return _topology;
         }
     }
@@ -72,7 +43,10 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
     public TopologySnapshot GetTopology()
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return _topology;
+        }
     }
 
     public TopologyManagementSnapshot GetManagementSnapshot()
@@ -81,33 +55,107 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
             return BuildManagementSnapshot(_facade.GetSnapshot());
     }
 
+    public TopologyModuleKnowledgeView? GetModuleKnowledge(string nodeIdOrName)
+    {
+        lock (_lock)
+        {
+            var node = FindModuleCore(nodeIdOrName);
+            return node == null ? null : ToModuleKnowledgeView(node);
+        }
+    }
+
+    public IReadOnlyList<TopologyModuleKnowledgeView> ListModuleKnowledge()
+    {
+        lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
+            return _topology.Nodes
+                .OrderBy(node => node.Discipline ?? "root", StringComparer.OrdinalIgnoreCase)
+                .ThenBy(node => node.Layer)
+                .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(ToModuleKnowledgeView)
+                .ToList();
+        }
+    }
+
+    public TopologyModuleKnowledgeView SaveModuleKnowledge(TopologyModuleKnowledgeUpsertCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+
+        lock (_lock)
+        {
+            var node = FindModuleCore(command.NodeIdOrName)
+                ?? throw new InvalidOperationException(string.Format(TopoGraphConstants.Context.MissingModuleTemplate, command.NodeIdOrName));
+
+            var updatedKnowledge = CloneNodeKnowledge(command.Knowledge);
+            _store.UpsertNodeKnowledge(node.Id, updatedKnowledge);
+            InvalidateTopologyCacheLocked();
+            EnsureTopologyReadyLocked();
+
+            var refreshed = FindModuleCore(node.Id)
+                ?? throw new InvalidOperationException(string.Format(TopoGraphConstants.Context.MissingModuleTemplate, node.Id));
+
+            return ToModuleKnowledgeView(refreshed);
+        }
+    }
+
+    public TopologyModuleRelationsView? GetModuleRelations(string nodeIdOrName)
+    {
+        lock (_lock)
+        {
+            var node = FindModuleCore(nodeIdOrName);
+            if (node == null)
+                return null;
+
+            var nodeNames = _topology.Nodes.ToDictionary(item => item.Id, item => item.Name, StringComparer.OrdinalIgnoreCase);
+            var outgoing = _topology.Relations
+                .Where(relation => string.Equals(relation.FromId, node.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(relation => ToModuleRelationView(relation, nodeNames))
+                .ToList();
+            var incoming = _topology.Relations
+                .Where(relation => string.Equals(relation.ToId, node.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(relation => ToModuleRelationView(relation, nodeNames))
+                .ToList();
+
+            return new TopologyModuleRelationsView
+            {
+                NodeId = node.Id,
+                Name = node.Name,
+                Outgoing = outgoing,
+                Incoming = incoming
+            };
+        }
+    }
+
     public ExecutionPlan GetExecutionPlan(List<string> moduleNames)
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return TopologyBuilder.GetExecutionPlan(_topology, moduleNames);
+        }
     }
 
     public KnowledgeNode? FindModule(string nameOrPath)
     {
         lock (_lock)
-        {
-            return _topology.Nodes.FirstOrDefault(node =>
-                string.Equals(node.Name, nameOrPath, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(node.RelativePath, NormalizePath(nameOrPath), StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(node.Id, nameOrPath, StringComparison.OrdinalIgnoreCase));
-        }
+            return FindModuleCore(nameOrPath);
     }
 
     public List<KnowledgeNode> GetAllModules()
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return _topology.Nodes;
+        }
     }
 
     public List<KnowledgeNode> GetModulesByDiscipline(string disciplineId)
     {
         lock (_lock)
         {
+            EnsureTopologyReadyLocked();
             return _topology.Nodes
                 .Where(node => string.Equals(node.Discipline, disciplineId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -117,25 +165,35 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
     public ModuleContext GetModuleContext(string targetModule, string? currentModule, List<string>? activeModules = null)
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return ContextFilter.BuildContext(targetModule, currentModule, _topology, _contextProvider, _adapter, activeModules);
+        }
     }
 
     public GovernanceReport ValidateArchitecture()
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return GovernanceAnalyzer.Analyze(_topology, _adapter);
+        }
     }
 
     public List<CrossWork> GetCrossWorks()
     {
         lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
             return _topology.CrossWorks;
+        }
     }
 
     public List<CrossWork> GetCrossWorksForModule(string moduleName)
     {
         lock (_lock)
         {
+            EnsureTopologyReadyLocked();
             return _topology.CrossWorks
                 .Where(crossWork => crossWork.Participants.Any(participant =>
                     string.Equals(participant.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase)))
@@ -183,8 +241,7 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
     {
         lock (_lock)
         {
-            var node = _topology.Nodes.FirstOrDefault(item =>
-                string.Equals(item.Name, moduleName, StringComparison.OrdinalIgnoreCase));
+            var node = FindModuleCore(moduleName);
             if (node?.Discipline == null)
                 return null;
 
@@ -223,6 +280,7 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
         {
             _facade.Rebuild();
             _store.Reload();
+            InvalidateTopologyCacheLocked();
         }
     }
 
@@ -230,5 +288,68 @@ public sealed partial class TopoGraphApplicationService : ITopoGraphApplicationS
     {
         _store.Initialize(storePath);
         _facade.Initialize(storePath);
+
+        lock (_lock)
+            InvalidateTopologyCacheLocked();
+    }
+
+    private TopologySnapshot BuildTopologyLocked()
+    {
+        _facade.Rebuild();
+        _store.Reload();
+        var topology = BuildCompatibilityTopology();
+
+        if (_adapter != null)
+        {
+            var hasComputedUpdates = false;
+            foreach (var node in topology.Nodes.Where(node => node.Type is NodeType.Technical or NodeType.Team))
+            {
+                var computed = _adapter.ComputeDependencies(node, topology.Nodes);
+                if (computed.Count == 0)
+                    continue;
+
+                _store.UpdateComputedDependencies(node.Name, computed);
+                hasComputedUpdates = true;
+            }
+
+            if (hasComputedUpdates)
+            {
+                _store.Reload();
+                topology = BuildCompatibilityTopology();
+            }
+        }
+
+        _logger.LogInformation(
+            TopoGraphConstants.Logging.TopologySummary,
+            topology.Nodes.Count,
+            topology.Relations.Count,
+            topology.Edges.Count,
+            topology.CrossWorks.Count);
+
+        _topologyBuilt = true;
+        return topology;
+    }
+
+    private void EnsureTopologyReadyLocked()
+    {
+        if (_topologyBuilt)
+            return;
+
+        _topology = BuildTopologyLocked();
+    }
+
+    private void InvalidateTopologyCacheLocked()
+    {
+        _topology = new TopologySnapshot();
+        _topologyBuilt = false;
+    }
+
+    private KnowledgeNode? FindModuleCore(string nameOrPath)
+    {
+        EnsureTopologyReadyLocked();
+        return _topology.Nodes.FirstOrDefault(node =>
+            string.Equals(node.Name, nameOrPath, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(node.RelativePath, NormalizePath(nameOrPath), StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(node.Id, nameOrPath, StringComparison.OrdinalIgnoreCase));
     }
 }

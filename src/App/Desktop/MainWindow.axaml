@@ -246,7 +246,27 @@
                                             </StackPanel>
                                         </Border>
                                         <TextBlock Classes="cardTitle" Text="当前视图节点" />
-                                        <ListBox x:Name="TopologyListBox" MaxHeight="260" SelectionChanged="TopologyListBox_OnSelectionChanged" />
+                                        <Border Classes="cardSoft" Padding="14">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock Classes="sectionTitle" Text="Module Knowledge" />
+                                                <TextBlock x:Name="TopologyKnowledgeHintText" Classes="mutedText" TextWrapping="Wrap" Text="Select a real module to view or edit its identity, lessons, active tasks, and facts." />
+                                                <TextBlock x:Name="TopologyKnowledgeParallelHintText" Classes="tertiaryText" TextWrapping="Wrap" Text="Manual save and MCP/CLI writes share the same knowledge persistence path." />
+                                                <TextBlock Classes="formLabel" Text="Identity" />
+                                                <TextBox x:Name="TopologyKnowledgeIdentityBox" AcceptsReturn="True" Height="88" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Lessons" />
+                                                <TextBox x:Name="TopologyKnowledgeLessonsBox" AcceptsReturn="True" Height="72" TextWrapping="Wrap" Watermark="One line per item: title | resolution" />
+                                                <TextBlock Classes="formLabel" Text="Active Tasks" />
+                                                <TextBox x:Name="TopologyKnowledgeActiveTasksBox" AcceptsReturn="True" Height="72" TextWrapping="Wrap" />
+                                                <TextBlock Classes="formLabel" Text="Facts" />
+                                                <TextBox x:Name="TopologyKnowledgeFactsBox" AcceptsReturn="True" Height="72" TextWrapping="Wrap" />
+                                                <WrapPanel Orientation="Horizontal">
+                                                    <Button Classes="primaryAction" x:Name="TopologySaveKnowledgeButton" Content="Save Knowledge" Click="SaveTopologyKnowledge_OnClick" Margin="0,0,8,0" />
+                                                    <Button x:Name="TopologyReloadKnowledgeButton" Content="Reload Latest" Click="RefreshTopologyKnowledge_OnClick" Margin="0,0,8,0" />
+                                                    <Button x:Name="TopologyResetKnowledgeButton" Content="Reset Form" Click="ResetTopologyKnowledgeEditor_OnClick" />
+                                                </WrapPanel>
+                                                <TextBlock x:Name="TopologyKnowledgeStatusText" Classes="mutedText" TextWrapping="Wrap" Text="Module knowledge editor is ready." />
+                                            </StackPanel>
+                                        </Border>                                        <ListBox x:Name="TopologyListBox" MaxHeight="260" SelectionChanged="TopologyListBox_OnSelectionChanged" />
                                         <TextBlock Classes="cardTitle" Text="关联关系" />
                                         <ListBox x:Name="TopologyRelationListBox" MaxHeight="260" />
                                     </StackPanel>

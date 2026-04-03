@@ -1800,6 +1800,8 @@ public partial class MainWindow : Window
             TopologyDetailSummary.Text = "单击左侧节点查看详情，双击节点进入子视图；双击中心节点返回上一级。";
             TopologyRelationListBox.ItemsSource = Array.Empty<string>();
             ResetTopologyEditor();
+            ResetTopologyKnowledgeEditor();
+            CancelTopologyDetailRequests();
             return;
         }
 
@@ -1827,37 +1829,7 @@ public partial class MainWindow : Window
 
         TopologyDetailSummary.Text = summary;
 
-        var visibleEdges = TopologyGraph.VisibleEdges;
-        var outgoing = visibleEdges
-            .Where(e =>
-                string.Equals(e.From, nodeId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        var incoming = visibleEdges
-            .Where(e =>
-                string.Equals(e.To, nodeId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        var lines = new List<string> { $"当前视图内：出边 {outgoing.Count} | 入边 {incoming.Count}" };
-
-        if (outgoing.Count == 0 && incoming.Count == 0)
-        {
-            lines.Add("当前视图内暂无关联关系。");
-        }
-        else
-        {
-            lines.Add(string.Empty);
-            lines.AddRange(outgoing
-                .OrderBy(e => ResolveTopologyRelationLabel(e), StringComparer.OrdinalIgnoreCase)
-                .ThenBy(e => ResolveNodeLabel(e.To), StringComparer.OrdinalIgnoreCase)
-                .Select(e => $"OUT [{ResolveTopologyRelationLabel(e)}] -> {ResolveNodeLabel(e.To)}"));
-
-            lines.AddRange(incoming
-                .OrderBy(e => ResolveTopologyRelationLabel(e), StringComparer.OrdinalIgnoreCase)
-                .ThenBy(e => ResolveNodeLabel(e.From), StringComparer.OrdinalIgnoreCase)
-                .Select(e => $"IN  [{ResolveTopologyRelationLabel(e)}] <- {ResolveNodeLabel(e.From)}"));
-        }
-
-        TopologyRelationListBox.ItemsSource = lines;
+        BeginTopologyDetailLoad(node);
         PopulateTopologyEditor(node);
     }
 

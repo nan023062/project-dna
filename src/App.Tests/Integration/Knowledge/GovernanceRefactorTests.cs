@@ -372,6 +372,7 @@ public sealed class GovernanceRefactorTests
         }
 
         public TopologySnapshot GetTopology() => new();
+        public TopologyWorkbenchSnapshot GetWorkbenchSnapshot() => new();
 
         public TopologyManagementSnapshot GetManagementSnapshot()
             => new()
@@ -379,6 +380,10 @@ public sealed class GovernanceRefactorTests
                 Modules = _modules
             };
 
+        public TopologyModuleKnowledgeView? GetModuleKnowledge(string nodeIdOrName) => throw new NotSupportedException();
+        public IReadOnlyList<TopologyModuleKnowledgeView> ListModuleKnowledge() => throw new NotSupportedException();
+        public TopologyModuleKnowledgeView SaveModuleKnowledge(TopologyModuleKnowledgeUpsertCommand command) => throw new NotSupportedException();
+        public TopologyModuleRelationsView? GetModuleRelations(string nodeIdOrName) => throw new NotSupportedException();
         public ExecutionPlan GetExecutionPlan(List<string> moduleNames) => throw new NotSupportedException();
         public KnowledgeNode? FindModule(string nameOrPath) => throw new NotSupportedException();
         public List<KnowledgeNode> GetAllModules() => throw new NotSupportedException();

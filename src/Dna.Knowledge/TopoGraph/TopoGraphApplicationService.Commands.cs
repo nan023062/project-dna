@@ -96,6 +96,7 @@ public sealed partial class TopoGraphApplicationService
 
         _facade.ReplaceDefinition(definition);
         _store.Reload();
+        InvalidateTopologyCacheLocked();
     }
 
     private void SaveCrossWorkCore(TopologyCrossWorkDefinition crossWork)
@@ -125,6 +126,7 @@ public sealed partial class TopoGraphApplicationService
 
         _facade.ReplaceDefinition(definition);
         _store.Reload();
+        InvalidateTopologyCacheLocked();
         return true;
     }
 
@@ -141,6 +143,7 @@ public sealed partial class TopoGraphApplicationService
         definition.TeamNodes.RemoveAll(item => string.Equals(item.Id, target.Id, StringComparison.OrdinalIgnoreCase));
         _facade.ReplaceDefinition(definition);
         _store.Reload();
+        InvalidateTopologyCacheLocked();
         return true;
     }
 
@@ -157,6 +160,7 @@ public sealed partial class TopoGraphApplicationService
 
         _facade.ReplaceDefinition(definition);
         _store.Reload();
+        InvalidateTopologyCacheLocked();
     }
 
     private bool RemoveDisciplineCore(string disciplineId)
@@ -169,6 +173,7 @@ public sealed partial class TopoGraphApplicationService
 
         _facade.ReplaceDefinition(definition);
         _store.Reload();
+        InvalidateTopologyCacheLocked();
         return true;
     }
 

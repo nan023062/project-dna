@@ -287,6 +287,50 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             });
         });
 
+        group.MapGet("/knowledge", ([FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
+        {
+            EnsureReady(topology, config);
+            return Results.Json(topology.ListModuleKnowledge(), JsonOpts);
+        });
+
+        group.MapGet("/{moduleName}/knowledge", (string moduleName, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
+        {
+            EnsureReady(topology, config);
+            var knowledge = topology.GetModuleKnowledge(moduleName);
+            return knowledge == null
+                ? Results.NotFound(new { error = $"Module not found: {moduleName}" })
+                : Results.Json(knowledge, JsonOpts);
+        });
+
+        group.MapPut("/{moduleName}/knowledge", (string moduleName, [FromBody] UpsertModuleKnowledgeRequest request, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
+        {
+            EnsureReady(topology, config);
+
+            try
+            {
+                var saved = topology.SaveModuleKnowledge(new TopologyModuleKnowledgeUpsertCommand
+                {
+                    NodeIdOrName = moduleName,
+                    Knowledge = request.ToKnowledge()
+                });
+
+                return Results.Json(saved, JsonOpts);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        });
+
+        group.MapGet("/{moduleName}/relations", (string moduleName, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
+        {
+            EnsureReady(topology, config);
+            var relations = topology.GetModuleRelations(moduleName);
+            return relations == null
+                ? Results.NotFound(new { error = $"Module not found: {moduleName}" })
+                : Results.Json(relations, JsonOpts);
+        });
+
         group.MapPost("/", ([FromBody] UpsertModuleRequest request, [FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
         {
             EnsureReady(topology, config);
@@ -470,6 +514,33 @@ public sealed class EvolveKnowledgeRequest
 public sealed class CondenseAllRequest
 {
     public int? MaxSourceMemories { get; set; }
+}
+
+public sealed class UpsertModuleKnowledgeRequest
+{
+    public string? Identity { get; set; }
+    public List<LessonSummary> Lessons { get; set; } = [];
+    public List<string> ActiveTasks { get; set; } = [];
+    public List<string> Facts { get; set; } = [];
+    public int TotalMemoryCount { get; set; }
+    public string? IdentityMemoryId { get; set; }
+    public string? UpgradeTrailMemoryId { get; set; }
+    public List<string> MemoryIds { get; set; } = [];
+
+    public NodeKnowledge ToKnowledge()
+    {
+        return new NodeKnowledge
+        {
+            Identity = Identity,
+            Lessons = Lessons ?? [],
+            ActiveTasks = ActiveTasks ?? [],
+            Facts = Facts ?? [],
+            TotalMemoryCount = TotalMemoryCount,
+            IdentityMemoryId = IdentityMemoryId,
+            UpgradeTrailMemoryId = UpgradeTrailMemoryId,
+            MemoryIds = MemoryIds ?? []
+        };
+    }
 }
 
 public sealed class UpsertModuleRequest

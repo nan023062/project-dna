@@ -55,7 +55,7 @@ public sealed class FileProtocolSyncTests : IDisposable
     }
 
     [Fact]
-    public void MemoryStore_ShouldWriteLongTermMemoryIntoFileProtocol()
+    public void MemoryStore_ShouldRouteMemoryByStage_AndArchiveFiles()
     {
         var topoStore = new StubTopoGraphStore();
         using var memoryStore = new MemoryStore(_services);
@@ -82,25 +82,6 @@ public sealed class FileProtocolSyncTests : IDisposable
             CreatedAt = DateTime.UtcNow
         });
 
-        var memoryPath = Path.Combine(_agenticOsPath, "memory", "decisions", "01JTESTMEM0000000000000000.md");
-        Assert.True(File.Exists(memoryPath));
-
-        memoryStore.UpdateFreshness("01JTESTMEM0000000000000000", FreshnessStatus.Archived);
-        Assert.False(File.Exists(memoryPath));
-    }
-
-    [Fact]
-    public void MemoryStore_ShouldWriteShortTermMemoryIntoSessionFileProtocol()
-    {
-        var topoStore = new StubTopoGraphStore();
-        using var memoryStore = new MemoryStore(_services);
-        memoryStore.Initialize(Path.Combine(_agenticOsPath, "memory"));
-        memoryStore.BuildInternals(
-            _services.GetRequiredService<IHttpClientFactory>(),
-            new Dna.Core.Config.ProjectConfig(),
-            _services.GetRequiredService<ILoggerFactory>(),
-            topoStore);
-
         memoryStore.Insert(new MemoryEntry
         {
             Id = "01JTESTSESSION0000000000000",
@@ -116,11 +97,17 @@ public sealed class FileProtocolSyncTests : IDisposable
             CreatedAt = DateTime.UtcNow
         });
 
-        var sessionPath = Path.Combine(_agenticOsPath, "session", "tasks", "01JTESTSESSION0000000000000.md");
-        Assert.True(File.Exists(sessionPath));
+        var longTermPath = Path.Combine(_agenticOsPath, "memory", "decisions", "01JTESTMEM0000000000000000.md");
+        var shortTermPath = Path.Combine(_agenticOsPath, "session", "tasks", "01JTESTSESSION0000000000000.md");
 
+        Assert.True(File.Exists(longTermPath));
+        Assert.True(File.Exists(shortTermPath));
+
+        memoryStore.UpdateFreshness("01JTESTMEM0000000000000000", FreshnessStatus.Archived);
         memoryStore.UpdateFreshness("01JTESTSESSION0000000000000", FreshnessStatus.Archived);
-        Assert.False(File.Exists(sessionPath));
+
+        Assert.False(File.Exists(longTermPath));
+        Assert.False(File.Exists(shortTermPath));
     }
 
     [Fact]
@@ -151,7 +138,7 @@ public sealed class FileProtocolSyncTests : IDisposable
     }
 
     [Fact]
-    public void TopoGraphApplicationService_RegisterModule_ShouldWriteModuleFiles_AndPreserveTeamType()
+    public void TopoGraphFileProtocol_ShouldPersistModuleAndKnowledgeWithoutLegacyKnowledgeTable()
     {
         SeedKnowledgeSpace(includeTeamModule: false);
 
@@ -173,45 +160,41 @@ public sealed class FileProtocolSyncTests : IDisposable
         });
 
         var topology = service.BuildTopology();
-
         var appNode = Assert.Single(topology.Nodes, node => node.Name == "App");
         Assert.Equal(NodeType.Team, appNode.Type);
         Assert.Equal("src/app", appNode.RelativePath);
 
         var moduleJsonPath = Path.Combine(_agenticOsPath, "knowledge", "modules", "AgenticOs", "Program", "App", "module.json");
         Assert.True(File.Exists(moduleJsonPath));
-    }
 
-    [Fact]
-    public void TopoGraphStore_UpsertNodeKnowledge_ShouldRefreshIdentityMarkdown()
-    {
-        SeedKnowledgeSpace(includeTeamModule: true);
-
-        var topoStore = new TopoGraphStore(_services);
-        topoStore.Initialize(Path.Combine(_agenticOsPath, "knowledge"));
-
-        topoStore.UpsertNodeKnowledge("AgenticOs/Program/App", new NodeKnowledge
+        var savedKnowledge = service.SaveModuleKnowledge(new TopologyModuleKnowledgeUpsertCommand
         {
-            Identity = "App runtime entrypoint.",
-            Lessons =
-            [
-                new LessonSummary
-                {
-                    Title = "Avoid direct routing",
-                    Resolution = "Prefer facade-backed endpoints"
-                }
-            ],
-            ActiveTasks = ["Move API to new facade"],
-            Facts = ["Reads .agentic-os directly"],
-            TotalMemoryCount = 3,
-            IdentityMemoryId = "mem-identity-1",
-            UpgradeTrailMemoryId = "mem-trail-1",
-            MemoryIds = ["mem-source-1", "mem-identity-1", "mem-trail-1"]
+            NodeIdOrName = "App",
+            Knowledge = new NodeKnowledge
+            {
+                Identity = "App runtime entrypoint.",
+                Lessons =
+                [
+                    new LessonSummary
+                    {
+                        Title = "Avoid direct routing",
+                        Resolution = "Prefer facade-backed endpoints"
+                    }
+                ],
+                ActiveTasks = ["Move API to new facade"],
+                Facts = ["Reads .agentic-os directly"],
+                TotalMemoryCount = 3,
+                IdentityMemoryId = "mem-identity-1",
+                UpgradeTrailMemoryId = "mem-trail-1",
+                MemoryIds = ["mem-source-1", "mem-identity-1", "mem-trail-1"]
+            }
         });
+
+        Assert.Equal("AgenticOs/Program/App", savedKnowledge.NodeId);
+        Assert.Equal("App runtime entrypoint.", savedKnowledge.Knowledge.Identity);
 
         var identityPath = Path.Combine(_agenticOsPath, "knowledge", "modules", "AgenticOs", "Program", "App", "identity.md");
         var content = File.ReadAllText(identityPath);
-
         Assert.Contains("## Summary", content);
         Assert.Contains("App runtime entrypoint.", content);
         Assert.Contains("## Lessons", content);
@@ -220,6 +203,30 @@ public sealed class FileProtocolSyncTests : IDisposable
         Assert.Contains("Identity Memory: `mem-identity-1`", content);
         Assert.Contains("Upgrade Trail: `mem-trail-1`", content);
         Assert.Contains("Source Count: 3", content);
+
+        var reloadedStore = new TopoGraphStore(_services);
+        reloadedStore.Initialize(Path.Combine(_agenticOsPath, "knowledge"));
+        var knowledgeMap = reloadedStore.LoadNodeKnowledgeMap();
+        var reloaded = Assert.Contains("AgenticOs/Program/App", knowledgeMap);
+
+        Assert.Equal("App runtime entrypoint.", reloaded.Identity);
+        var lesson = Assert.Single(reloaded.Lessons);
+        Assert.Equal("Avoid direct routing", lesson.Title);
+        Assert.Equal("Prefer facade-backed endpoints", lesson.Resolution);
+        Assert.Equal(["Move API to new facade"], reloaded.ActiveTasks);
+        Assert.Equal(["Reads .agentic-os directly"], reloaded.Facts);
+        Assert.Equal(3, reloaded.TotalMemoryCount);
+        Assert.Equal("mem-identity-1", reloaded.IdentityMemoryId);
+        Assert.Equal("mem-trail-1", reloaded.UpgradeTrailMemoryId);
+        Assert.Equal(["mem-source-1", "mem-identity-1", "mem-trail-1"], reloaded.MemoryIds);
+
+        var graphDbPath = Path.Combine(_agenticOsPath, "knowledge", "graph.db");
+        using var conn = new SqliteConnection($"Data Source={graphDbPath}");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'graph_node_knowledge'";
+        var tableCount = Convert.ToInt32(cmd.ExecuteScalar());
+        Assert.Equal(0, tableCount);
     }
 
     private void SeedKnowledgeSpace(bool includeTeamModule)

@@ -313,3 +313,32 @@ Project
 > 从工程管理与知识组织视角，对项目、部门、技术能力和业务模块进行统一抽象，并按模块组织最终知识的知识拓扑层。
 
 后续所有 `TopoGraph` 重构，都应以这份文档作为基础约束。
+## 当前对外门面（2026-04-03）
+
+为避免 UI、MCP、CLI 继续直接依赖兼容态 `KnowledgeNode` 结构，`TopoGraph` 当前统一通过 `ITopoGraphApplicationService` 暴露稳定门面：
+
+- `GetModuleKnowledge(nodeIdOrName)`
+  - 按模块读取稳定知识视图。
+  - 返回模块身份、边界、路径、依赖与 `NodeKnowledge` 沉淀结果。
+
+- `ListModuleKnowledge()`
+  - 枚举当前所有模块的稳定知识视图。
+  - 供模块列表、知识管理面板、CLI 批量查询使用。
+
+- `SaveModuleKnowledge(command)`
+  - 以模块为单位回写知识文档。
+  - 内部统一走 `TopoGraphStore` 文件协议持久化，再刷新拓扑缓存。
+
+- `GetModuleRelations(nodeIdOrName)`
+  - 返回模块的入边与出边视图。
+  - 统一覆盖 `Containment / Dependency / Collaboration` 三类关系。
+- `GetWorkbenchSnapshot()`
+  - 返回可直接供 App / UI 使用的工作台拓扑视图。
+  - 将 `project / discipline / module / edge` 的拼装职责收口回 `TopoGraph`，避免宿主层重复组装。
+
+这组门面意味着：
+
+- 上层不需要感知 `identity.md` 的文件格式细节。
+- 上层不需要直接访问 `ITopoGraphStore`。
+- `TopoGraphApplicationService` 负责“模块知识 + 模块关系”的稳定读写语义。
+- `TopoGraphStore` 继续下沉为持久化细节与运行时缓存实现。

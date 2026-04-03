@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dna.Knowledge.FileProtocol;
-using Dna.Memory.Store;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -41,7 +40,7 @@ public sealed class TopoGraphStore : ITopoGraphStore
             return;
 
         _storePath = storePath;
-        _graphDbPath = Path.Combine(storePath, "graph.db");
+        _graphDbPath = Path.Combine(storePath, TopoGraphConstants.Storage.GraphDbFileName);
         ReloadLocked();
         _initialized = true;
     }
@@ -73,31 +72,18 @@ public sealed class TopoGraphStore : ITopoGraphStore
     {
         lock (_lock)
         {
-            EnsureGraphSchemaLocked();
             var map = new Dictionary<string, NodeKnowledge>(StringComparer.OrdinalIgnoreCase);
+            var agenticOsPath = ResolveAgenticOsPathFromStore(_storePath);
+            if (string.IsNullOrWhiteSpace(agenticOsPath))
+                return map;
 
-            using var conn = CreateGraphConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                SELECT node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, identity_memory_id, upgrade_trail_memory_id, memory_ids_json
-                FROM graph_node_knowledge
-                """;
-
-            using var reader = cmd.ExecuteReader();
-            while (reader.Read())
+            foreach (var module in _fileStore.LoadModules(agenticOsPath))
             {
-                var nodeId = reader.GetString(0);
-                map[nodeId] = new NodeKnowledge
-                {
-                    Identity = reader.IsDBNull(1) ? null : reader.GetString(1),
-                    Lessons = DeserializeOrDefault(reader.IsDBNull(2) ? "[]" : reader.GetString(2), new List<LessonSummary>()),
-                    ActiveTasks = DeserializeOrDefault(reader.IsDBNull(3) ? "[]" : reader.GetString(3), new List<string>()),
-                    Facts = DeserializeOrDefault(reader.IsDBNull(4) ? "[]" : reader.GetString(4), new List<string>()),
-                    TotalMemoryCount = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
-                    IdentityMemoryId = reader.IsDBNull(6) ? null : reader.GetString(6),
-                    UpgradeTrailMemoryId = reader.IsDBNull(7) ? null : reader.GetString(7),
-                    MemoryIds = DeserializeOrDefault(reader.IsDBNull(8) ? "[]" : reader.GetString(8), new List<string>())
-                };
+                var identityMarkdown = _fileStore.LoadIdentity(agenticOsPath, module.Uid);
+                if (string.IsNullOrWhiteSpace(identityMarkdown))
+                    continue;
+
+                map[module.Uid] = ParseNodeKnowledgeMarkdown(identityMarkdown);
             }
 
             return map;
@@ -109,41 +95,10 @@ public sealed class TopoGraphStore : ITopoGraphStore
         if (string.IsNullOrWhiteSpace(nodeId))
             throw new ArgumentException("nodeId 不能为空", nameof(nodeId));
 
-        lock (_lock)
-        {
-            EnsureGraphSchemaLocked();
-            using var conn = CreateGraphConnection();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = """
-                INSERT INTO graph_node_knowledge
-                    (node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, identity_memory_id, upgrade_trail_memory_id, memory_ids_json, updated_at)
-                VALUES
-                    (@node, @identity, @lessons, @tasks, @facts, @total, @identityMemoryId, @upgradeTrailMemoryId, @memoryIds, @updatedAt)
-                ON CONFLICT(node_id) DO UPDATE SET
-                    identity = excluded.identity,
-                    lessons_json = excluded.lessons_json,
-                    active_tasks_json = excluded.active_tasks_json,
-                    facts_json = excluded.facts_json,
-                    total_memory_count = excluded.total_memory_count,
-                    identity_memory_id = excluded.identity_memory_id,
-                    upgrade_trail_memory_id = excluded.upgrade_trail_memory_id,
-                    memory_ids_json = excluded.memory_ids_json,
-                    updated_at = excluded.updated_at
-                """;
-            cmd.Parameters.AddWithValue("@node", nodeId);
-            cmd.Parameters.AddWithValue("@identity", (object?)knowledge.Identity ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@lessons", JsonSerializer.Serialize(knowledge.Lessons ?? [], JsonOpts));
-            cmd.Parameters.AddWithValue("@tasks", JsonSerializer.Serialize(knowledge.ActiveTasks ?? [], JsonOpts));
-            cmd.Parameters.AddWithValue("@facts", JsonSerializer.Serialize(knowledge.Facts ?? [], JsonOpts));
-            cmd.Parameters.AddWithValue("@total", Math.Max(knowledge.TotalMemoryCount, 0));
-            cmd.Parameters.AddWithValue("@identityMemoryId", (object?)knowledge.IdentityMemoryId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@upgradeTrailMemoryId", (object?)knowledge.UpgradeTrailMemoryId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@memoryIds", JsonSerializer.Serialize(knowledge.MemoryIds ?? [], JsonOpts));
-            cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
-            cmd.ExecuteNonQuery();
+        ArgumentNullException.ThrowIfNull(knowledge);
 
+        lock (_lock)
             SyncNodeKnowledgeToFileProtocolLocked(nodeId, knowledge);
-        }
     }
 
     public List<string> ResolveNodeIdCandidates(string? nodeId, bool strict = false)
@@ -162,7 +117,7 @@ public sealed class TopoGraphStore : ITopoGraphStore
         }
 
         if (strict)
-            throw new InvalidOperationException($"nodeId '{input}' 不存在于当前 TopoGraph 定义中。");
+            throw new InvalidOperationException(string.Format(TopoGraphConstants.Context.MissingModuleTemplate, input));
 
         return [input];
     }
@@ -184,7 +139,7 @@ public sealed class TopoGraphStore : ITopoGraphStore
             using (var delete = conn.CreateCommand())
             {
                 delete.Transaction = tx;
-                delete.CommandText = "DELETE FROM graph_computed_dependencies WHERE module_name = @module";
+                delete.CommandText = $"DELETE FROM {TopoGraphConstants.Storage.ComputedDependenciesTable} WHERE module_name = @module";
                 delete.Parameters.AddWithValue("@module", moduleName);
                 delete.ExecuteNonQuery();
             }
@@ -192,8 +147,8 @@ public sealed class TopoGraphStore : ITopoGraphStore
             using (var insert = conn.CreateCommand())
             {
                 insert.Transaction = tx;
-                insert.CommandText = """
-                    INSERT INTO graph_computed_dependencies (module_name, dependencies_json)
+                insert.CommandText = $"""
+                    INSERT INTO {TopoGraphConstants.Storage.ComputedDependenciesTable} (module_name, dependencies_json)
                     VALUES (@module, @deps)
                     """;
                 insert.Parameters.AddWithValue("@module", moduleName);
@@ -218,7 +173,7 @@ public sealed class TopoGraphStore : ITopoGraphStore
 
         using var conn = CreateGraphConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT module_name, dependencies_json FROM graph_computed_dependencies";
+        cmd.CommandText = $"SELECT module_name, dependencies_json FROM {TopoGraphConstants.Storage.ComputedDependenciesTable}";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -267,29 +222,13 @@ public sealed class TopoGraphStore : ITopoGraphStore
 
         using var conn = CreateGraphConnection();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS graph_computed_dependencies (
+        cmd.CommandText = $"""
+            CREATE TABLE IF NOT EXISTS {TopoGraphConstants.Storage.ComputedDependenciesTable} (
                 module_name TEXT PRIMARY KEY,
                 dependencies_json TEXT NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS graph_node_knowledge (
-                node_id TEXT PRIMARY KEY,
-                identity TEXT NULL,
-                lessons_json TEXT NOT NULL DEFAULT '[]',
-                active_tasks_json TEXT NOT NULL DEFAULT '[]',
-                facts_json TEXT NOT NULL DEFAULT '[]',
-                total_memory_count INTEGER NOT NULL DEFAULT 0,
-                identity_memory_id TEXT NULL,
-                upgrade_trail_memory_id TEXT NULL,
-                memory_ids_json TEXT NOT NULL DEFAULT '[]',
-                updated_at TEXT NOT NULL
-            );
             """;
         cmd.ExecuteNonQuery();
-
-        EnsureGraphNodeKnowledgeColumnLocked(conn, "identity_memory_id", "TEXT NULL");
-        EnsureGraphNodeKnowledgeColumnLocked(conn, "upgrade_trail_memory_id", "TEXT NULL");
     }
 
     private SqliteConnection CreateGraphConnection()
@@ -315,23 +254,6 @@ public sealed class TopoGraphStore : ITopoGraphStore
         {
             return fallback;
         }
-    }
-
-    private static void EnsureGraphNodeKnowledgeColumnLocked(SqliteConnection conn, string columnName, string columnType)
-    {
-        using var pragma = conn.CreateCommand();
-        pragma.CommandText = "PRAGMA table_info(graph_node_knowledge)";
-        using var reader = pragma.ExecuteReader();
-
-        while (reader.Read())
-        {
-            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
-                return;
-        }
-
-        using var alter = conn.CreateCommand();
-        alter.CommandText = $"ALTER TABLE graph_node_knowledge ADD COLUMN {columnName} {columnType}";
-        alter.ExecuteNonQuery();
     }
 
     private static string? ResolveAgenticOsPathFromStore(string storePath)
@@ -363,55 +285,245 @@ public sealed class TopoGraphStore : ITopoGraphStore
     {
         var agenticOsPath = ResolveAgenticOsPathFromStore(_storePath);
         if (string.IsNullOrWhiteSpace(agenticOsPath))
+        {
+            _logger.LogWarning("[TopoGraphStore] Cannot persist node knowledge because .agentic-os path was not resolved. NodeId={NodeId}", nodeId);
             return;
+        }
 
         var module = _fileStore.LoadModule(agenticOsPath, nodeId);
         if (module == null)
+        {
+            _logger.LogWarning("[TopoGraphStore] Cannot persist node knowledge because module file was not found. NodeId={NodeId}", nodeId);
             return;
+        }
 
         var dependencies = _fileStore.LoadDependencies(agenticOsPath, nodeId);
         _fileStore.SaveModule(agenticOsPath, module, BuildIdentityMarkdown(knowledge), dependencies);
     }
 
+    private static NodeKnowledge ParseNodeKnowledgeMarkdown(string markdown)
+    {
+        var sections = ParseMarkdownSections(markdown);
+        ParseGovernanceSection(
+            GetSectionLines(sections, TopoGraphConstants.Storage.KnowledgeDocument.GovernanceHeading),
+            out var identityMemoryId,
+            out var upgradeTrailMemoryId,
+            out var totalMemoryCount,
+            out var memoryIds);
+
+        return new NodeKnowledge
+        {
+            Identity = ParseSummary(GetSectionLines(sections, TopoGraphConstants.Storage.KnowledgeDocument.SummaryHeading)),
+            Lessons = ParseLessons(GetSectionLines(sections, TopoGraphConstants.Storage.KnowledgeDocument.LessonsHeading)),
+            ActiveTasks = ParseBulletList(GetSectionLines(sections, TopoGraphConstants.Storage.KnowledgeDocument.ActiveTasksHeading)),
+            Facts = ParseBulletList(GetSectionLines(sections, TopoGraphConstants.Storage.KnowledgeDocument.FactsHeading)),
+            TotalMemoryCount = totalMemoryCount,
+            IdentityMemoryId = identityMemoryId,
+            UpgradeTrailMemoryId = upgradeTrailMemoryId,
+            MemoryIds = memoryIds
+        };
+    }
+
+    private static Dictionary<string, List<string>> ParseMarkdownSections(string markdown)
+    {
+        var sections = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        string? currentHeading = null;
+
+        foreach (var rawLine in NormalizeMarkdown(markdown).Split('\n'))
+        {
+            var line = rawLine.TrimEnd();
+            if (line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix, StringComparison.Ordinal))
+            {
+                currentHeading = line[TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix.Length..].Trim();
+                if (!sections.ContainsKey(currentHeading))
+                    sections[currentHeading] = [];
+                continue;
+            }
+
+            if (currentHeading != null)
+                sections[currentHeading].Add(line);
+        }
+
+        return sections;
+    }
+
+    private static List<string> GetSectionLines(Dictionary<string, List<string>> sections, string heading)
+        => sections.TryGetValue(heading, out var lines) ? lines : [];
+
+    private static string? ParseSummary(List<string> lines)
+    {
+        var summary = string.Join('\n', lines).Trim();
+        if (string.IsNullOrWhiteSpace(summary) ||
+            string.Equals(summary, TopoGraphConstants.Storage.KnowledgeDocument.EmptySummaryFallback, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return summary;
+    }
+
+    private static List<LessonSummary> ParseLessons(List<string> lines)
+    {
+        var lessons = new List<LessonSummary>();
+        foreach (var bullet in ParseBulletList(lines))
+        {
+            var separatorIndex = bullet.LastIndexOf(TopoGraphConstants.Storage.KnowledgeDocument.LessonResolutionSeparator, StringComparison.Ordinal);
+            if (separatorIndex > 0 && separatorIndex < bullet.Length - TopoGraphConstants.Storage.KnowledgeDocument.LessonResolutionSeparator.Length)
+            {
+                lessons.Add(new LessonSummary
+                {
+                    Title = bullet[..separatorIndex].Trim(),
+                    Resolution = bullet[(separatorIndex + TopoGraphConstants.Storage.KnowledgeDocument.LessonResolutionSeparator.Length)..].Trim()
+                });
+            }
+            else
+            {
+                lessons.Add(new LessonSummary
+                {
+                    Title = bullet.Trim()
+                });
+            }
+        }
+
+        return lessons.Where(item => !string.IsNullOrWhiteSpace(item.Title)).ToList();
+    }
+
+    private static List<string> ParseBulletList(List<string> lines)
+    {
+        return lines
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix, StringComparison.Ordinal))
+            .Select(line => line[TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix.Length..].Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .ToList();
+    }
+
+    private static void ParseGovernanceSection(
+        List<string> lines,
+        out string? identityMemoryId,
+        out string? upgradeTrailMemoryId,
+        out int totalMemoryCount,
+        out List<string> memoryIds)
+    {
+        identityMemoryId = null;
+        upgradeTrailMemoryId = null;
+        totalMemoryCount = 0;
+        memoryIds = [];
+        var inReferencedMemories = false;
+
+        foreach (var rawLine in lines)
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            if (line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.IdentityMemoryPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                identityMemoryId = ExtractGovernanceValue(line, TopoGraphConstants.Storage.KnowledgeDocument.IdentityMemoryPrefix);
+                inReferencedMemories = false;
+                continue;
+            }
+
+            if (line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.UpgradeTrailPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                upgradeTrailMemoryId = ExtractGovernanceValue(line, TopoGraphConstants.Storage.KnowledgeDocument.UpgradeTrailPrefix);
+                inReferencedMemories = false;
+                continue;
+            }
+
+            if (line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.SourceCountPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = ExtractGovernanceValue(line, TopoGraphConstants.Storage.KnowledgeDocument.SourceCountPrefix);
+                if (!string.IsNullOrWhiteSpace(value) && int.TryParse(value, out var parsedCount))
+                    totalMemoryCount = Math.Max(parsedCount, 0);
+                inReferencedMemories = false;
+                continue;
+            }
+
+            if (line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.ReferencedMemoriesPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                inReferencedMemories = true;
+                continue;
+            }
+
+            if (inReferencedMemories && line.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix, StringComparison.Ordinal))
+            {
+                var memoryId = line[TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix.Length..].Trim();
+                if (memoryId.StartsWith(TopoGraphConstants.Storage.KnowledgeDocument.TruncatedListPrefix, StringComparison.Ordinal))
+                    continue;
+
+                memoryId = TrimMarkdownCode(memoryId);
+                if (!string.IsNullOrWhiteSpace(memoryId))
+                    memoryIds.Add(memoryId);
+                continue;
+            }
+
+            inReferencedMemories = false;
+        }
+    }
+
+    private static string? ExtractGovernanceValue(string line, string prefix)
+    {
+        var value = line[prefix.Length..].Trim();
+        value = TrimMarkdownCode(value);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string TrimMarkdownCode(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length >= 2 &&
+               trimmed.StartsWith('`') &&
+               trimmed.EndsWith('`')
+            ? trimmed[1..^1].Trim()
+            : trimmed;
+    }
+
+    private static string NormalizeMarkdown(string markdown)
+        => markdown.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
+
     private static string BuildIdentityMarkdown(NodeKnowledge knowledge)
     {
         var lines = new List<string>
         {
-            "## Summary",
+            $"{TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.SummaryHeading}",
             string.Empty,
-            string.IsNullOrWhiteSpace(knowledge.Identity) ? "No summary yet." : knowledge.Identity.Trim()
+            string.IsNullOrWhiteSpace(knowledge.Identity)
+                ? TopoGraphConstants.Storage.KnowledgeDocument.EmptySummaryFallback
+                : knowledge.Identity.Trim()
         };
 
         if (knowledge.Lessons.Count > 0)
         {
             lines.Add(string.Empty);
-            lines.Add("## Lessons");
+            lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.LessonsHeading}");
             lines.Add(string.Empty);
             foreach (var lesson in knowledge.Lessons.Where(item => !string.IsNullOrWhiteSpace(item.Title)))
             {
                 var suffix = string.IsNullOrWhiteSpace(lesson.Resolution)
                     ? string.Empty
-                    : $" - {lesson.Resolution!.Trim()}";
-                lines.Add($"- {lesson.Title.Trim()}{suffix}");
+                    : $"{TopoGraphConstants.Storage.KnowledgeDocument.LessonResolutionSeparator}{lesson.Resolution!.Trim()}";
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix}{lesson.Title.Trim()}{suffix}");
             }
         }
 
         if (knowledge.ActiveTasks.Count > 0)
         {
             lines.Add(string.Empty);
-            lines.Add("## Active Tasks");
+            lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.ActiveTasksHeading}");
             lines.Add(string.Empty);
             foreach (var task in knowledge.ActiveTasks.Where(item => !string.IsNullOrWhiteSpace(item)))
-                lines.Add($"- {task.Trim()}");
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix}{task.Trim()}");
         }
 
         if (knowledge.Facts.Count > 0)
         {
             lines.Add(string.Empty);
-            lines.Add("## Facts");
+            lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.FactsHeading}");
             lines.Add(string.Empty);
             foreach (var fact in knowledge.Facts.Where(item => !string.IsNullOrWhiteSpace(item)))
-                lines.Add($"- {fact.Trim()}");
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix}{fact.Trim()}");
         }
 
         if (!string.IsNullOrWhiteSpace(knowledge.IdentityMemoryId) ||
@@ -420,26 +532,29 @@ public sealed class TopoGraphStore : ITopoGraphStore
             knowledge.MemoryIds.Count > 0)
         {
             lines.Add(string.Empty);
-            lines.Add("## Governance");
+            lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.SecondLevelHeadingPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.GovernanceHeading}");
             lines.Add(string.Empty);
 
             if (!string.IsNullOrWhiteSpace(knowledge.IdentityMemoryId))
-                lines.Add($"- Identity Memory: `{knowledge.IdentityMemoryId!.Trim()}`");
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.IdentityMemoryPrefix} `{knowledge.IdentityMemoryId!.Trim()}`");
 
             if (!string.IsNullOrWhiteSpace(knowledge.UpgradeTrailMemoryId))
-                lines.Add($"- Upgrade Trail: `{knowledge.UpgradeTrailMemoryId!.Trim()}`");
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.UpgradeTrailPrefix} `{knowledge.UpgradeTrailMemoryId!.Trim()}`");
 
             if (knowledge.TotalMemoryCount > 0)
-                lines.Add($"- Source Count: {knowledge.TotalMemoryCount}");
+                lines.Add($"{TopoGraphConstants.Storage.KnowledgeDocument.SourceCountPrefix} {knowledge.TotalMemoryCount}");
 
             if (knowledge.MemoryIds.Count > 0)
             {
-                lines.Add("- Referenced Memories:");
-                foreach (var memoryId in knowledge.MemoryIds.Take(20))
-                    lines.Add($"  - `{memoryId}`");
+                lines.Add(TopoGraphConstants.Storage.KnowledgeDocument.ReferencedMemoriesPrefix);
+                foreach (var memoryId in knowledge.MemoryIds.Take(TopoGraphConstants.Storage.KnowledgeDocument.ReferencedMemoryPreviewLimit))
+                    lines.Add($"  {TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix}`{memoryId}`");
 
-                if (knowledge.MemoryIds.Count > 20)
-                    lines.Add($"  - ... (+{knowledge.MemoryIds.Count - 20} more)");
+                if (knowledge.MemoryIds.Count > TopoGraphConstants.Storage.KnowledgeDocument.ReferencedMemoryPreviewLimit)
+                {
+                    lines.Add(
+                        $"  {TopoGraphConstants.Storage.KnowledgeDocument.BulletPrefix}{TopoGraphConstants.Storage.KnowledgeDocument.TruncatedListPrefix} (+{knowledge.MemoryIds.Count - TopoGraphConstants.Storage.KnowledgeDocument.ReferencedMemoryPreviewLimit} more)");
+                }
             }
         }
 
