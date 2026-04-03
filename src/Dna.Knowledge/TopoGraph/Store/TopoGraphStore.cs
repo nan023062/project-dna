@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Knowledge.FileProtocol;
 using Dna.Knowledge.Workspace.Models;
 using Dna.Memory.Store;
 using Microsoft.Data.Sqlite;
@@ -528,6 +529,12 @@ public sealed class TopoGraphStore : ITopoGraphStore
                 CleanupLegacyJsonFilesLocked();
             }
 
+            // 文件协议回退：graph.db 和 legacy JSON 都为空时，从 .agentic-os/ 明文文件加载
+            if (IsGraphSnapshotEmpty() && TryLoadFromFileProtocolLocked())
+            {
+                _logger.LogInformation("从 .agentic-os/ 明文文件加载图谱数据");
+            }
+
             EnsureDerivedDisciplinesLocked();
 
             _logger.LogInformation(
@@ -1038,4 +1045,67 @@ public sealed class TopoGraphStore : ITopoGraphStore
     }
 
     private static string NewId() => UlidGenerator.New();
+
+    /// <summary>
+    /// 从 .agentic-os/ 明文文件协议加载图谱数据。
+    /// 当 graph.db 和 legacy JSON 都为空时作为回退方案。
+    /// </summary>
+    private bool TryLoadFromFileProtocolLocked()
+    {
+        try
+        {
+            // _storePath 通常指向 .agentic-os/knowledge/ 或 .agentic-os/
+            // 需要找到包含 knowledge/modules/ 的 .agentic-os/ 路径
+            var agenticOsPath = ResolveAgenticOsPathFromStore(_storePath);
+            if (string.IsNullOrEmpty(agenticOsPath))
+                return false;
+
+            var modulesRoot = FileProtocolPaths.GetModulesRoot(agenticOsPath);
+            if (!Directory.Exists(modulesRoot))
+                return false;
+
+            var (architecture, modules) = FileProtocolLegacyAdapter.LoadAsLegacyManifests(agenticOsPath);
+
+            if (modules.Disciplines.Count == 0)
+                return false;
+
+            _architecture = architecture;
+            _manifest = modules;
+            _computed = new ComputedManifest();
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "从 .agentic-os/ 文件协议加载图谱失败");
+            return false;
+        }
+    }
+
+    private static string? ResolveAgenticOsPathFromStore(string storePath)
+    {
+        if (string.IsNullOrWhiteSpace(storePath))
+            return null;
+
+        // storePath 可能是 .agentic-os/knowledge/ 或 .agentic-os/ 或项目根目录
+        var candidates = new[]
+        {
+            // storePath 本身是 .agentic-os/
+            storePath,
+            // storePath 是 .agentic-os/knowledge/ → 上一级
+            Path.GetDirectoryName(storePath),
+            // storePath 是项目根目录 → 子目录 .agentic-os/
+            Path.Combine(storePath, FileProtocolPaths.AgenticOsDir),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate == null) continue;
+            var modulesDir = FileProtocolPaths.GetModulesRoot(candidate);
+            if (Directory.Exists(modulesDir))
+                return candidate;
+        }
+
+        return null;
+    }
 }

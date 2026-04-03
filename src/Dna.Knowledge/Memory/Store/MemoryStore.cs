@@ -1,4 +1,5 @@
 using Dna.Knowledge;
+using Dna.Knowledge.FileProtocol;
 using Dna.Memory.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -75,6 +76,11 @@ public partial class MemoryStore : IDisposable
         EnsureSchema();
 
         _initialized = true;
+
+        // 文件协议 seed：memory.db 为空时从 .agentic-os/memory/ 加载明文文件
+        if (Count() == 0)
+            TrySeedFromFileProtocol();
+
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
             dbPath, storePath, Count());
     }
@@ -940,6 +946,90 @@ public partial class MemoryStore : IDisposable
         var floats = new float[bytes.Length / sizeof(float)];
         Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
         return floats;
+    }
+
+    /// <summary>
+    /// 从 .agentic-os/memory/ 明文文件 seed 记忆到空的 memory.db。
+    /// </summary>
+    private void TrySeedFromFileProtocol()
+    {
+        try
+        {
+            // _storePath 通常指向 .agentic-os/memory/ 或 .agentic-os/
+            var agenticOsPath = ResolveAgenticOsPathForMemory(_storePath);
+            if (agenticOsPath == null)
+                return;
+
+            var memoryFileStore = new MemoryFileStore();
+            var files = memoryFileStore.LoadMemories(agenticOsPath);
+            if (files.Count == 0)
+                return;
+
+            var seeded = 0;
+            foreach (var file in files)
+            {
+                var entry = FileToMemoryEntry(file);
+                if (entry == null) continue;
+
+                InsertIntoSqlite(entry);
+                seeded++;
+            }
+
+            if (seeded > 0)
+                _logger.LogInformation("从 .agentic-os/memory/ 明文文件 seed 了 {Count} 条记忆", seeded);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "从 .agentic-os/memory/ 文件 seed 记忆失败");
+        }
+    }
+
+    private static MemoryEntry? FileToMemoryEntry(Dna.Knowledge.FileProtocol.Models.MemoryFile file)
+    {
+        if (string.IsNullOrWhiteSpace(file.Id))
+            return null;
+
+        var type = Enum.TryParse<MemoryType>(file.Type, ignoreCase: true, out var mt) ? mt : MemoryType.Semantic;
+        var source = Enum.TryParse<MemorySource>(file.Source, ignoreCase: true, out var ms) ? ms : MemorySource.Human;
+
+        return new MemoryEntry
+        {
+            Id = file.Id,
+            Type = type,
+            Source = source,
+            Content = file.Body,
+            Summary = null,
+            NodeId = file.NodeId,
+            Disciplines = file.Disciplines ?? [],
+            Tags = file.Tags ?? [],
+            Importance = file.Importance ?? 0.5,
+            Stage = MemoryStage.LongTerm,
+            CreatedAt = file.CreatedAt,
+            LastVerifiedAt = file.LastVerifiedAt,
+            SupersededBy = file.SupersededBy
+        };
+    }
+
+    private static string? ResolveAgenticOsPathForMemory(string storePath)
+    {
+        if (string.IsNullOrWhiteSpace(storePath))
+            return null;
+
+        // storePath 可能是 .agentic-os/memory/ → 上一级
+        var parent = Path.GetDirectoryName(storePath);
+        if (parent != null)
+        {
+            var memoryDir = Path.Combine(parent, FileProtocolPaths.MemoryDir);
+            if (Directory.Exists(memoryDir))
+                return parent;
+        }
+
+        // storePath 本身是 .agentic-os/
+        var directMemory = Path.Combine(storePath, FileProtocolPaths.MemoryDir);
+        if (Directory.Exists(directMemory))
+            return storePath;
+
+        return null;
     }
 
     public void Dispose()
