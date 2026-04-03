@@ -64,6 +64,7 @@ public class AppEndpointRouteSmokeTests
         AssertRoute(routes, "/api/status", "GET");
         AssertRoute(routes, "/api/topology", "GET");
         AssertRoute(routes, "/api/connection/access", "GET");
+        AssertRoute(routes, "/api/workspace/tree", "GET");
 
         AssertRoute(routes, "/api/memory/stats", "GET");
         AssertRoute(routes, "/api/memory/query", "GET");

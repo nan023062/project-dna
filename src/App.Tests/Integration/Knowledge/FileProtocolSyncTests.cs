@@ -138,6 +138,66 @@ public sealed class FileProtocolSyncTests : IDisposable
     }
 
     [Fact]
+    public void MemoryStore_ShouldMigrateLegacyDatabaseBeforeCreatingStageIndex()
+    {
+        var memoryRoot = Path.Combine(_agenticOsPath, "memory");
+        Directory.CreateDirectory(memoryRoot);
+
+        var dbPath = Path.Combine(memoryRoot, "memory.db");
+        using (var connection = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            connection.Open();
+
+            using var create = connection.CreateCommand();
+            create.CommandText = """
+                CREATE TABLE memory_entries (
+                    id              TEXT PRIMARY KEY,
+                    type            TEXT NOT NULL,
+                    layer           TEXT NOT NULL,
+                    source          TEXT NOT NULL,
+                    content         TEXT NOT NULL DEFAULT '',
+                    summary         TEXT,
+                    importance      REAL DEFAULT 0.5,
+                    freshness       TEXT DEFAULT 'Fresh',
+                    created_at      TEXT NOT NULL,
+                    last_verified_at TEXT,
+                    stale_after     TEXT,
+                    superseded_by   TEXT,
+                    parent_id       TEXT,
+                    node_id         TEXT,
+                    version         INTEGER DEFAULT 1,
+                    file_path       TEXT,
+                    embedding       BLOB,
+                    ext_source_url  TEXT,
+                    ext_source_id   TEXT
+                );
+                """;
+            create.ExecuteNonQuery();
+        }
+
+        using var memoryStore = new MemoryStore(_services);
+        var exception = Record.Exception(() => memoryStore.Initialize(memoryRoot));
+        Assert.Null(exception);
+
+        using var verifyConnection = new SqliteConnection($"Data Source={dbPath}");
+        verifyConnection.Open();
+
+        using var columnQuery = verifyConnection.CreateCommand();
+        columnQuery.CommandText = "PRAGMA table_info(memory_entries)";
+        using var columnReader = columnQuery.ExecuteReader();
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (columnReader.Read())
+            columns.Add(columnReader.GetString(1));
+
+        Assert.Contains("stage", columns);
+
+        using var indexQuery = verifyConnection.CreateCommand();
+        indexQuery.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_stage'";
+        var stageIndexCount = Convert.ToInt32(indexQuery.ExecuteScalar());
+        Assert.Equal(1, stageIndexCount);
+    }
+
+    [Fact]
     public void TopoGraphFileProtocol_ShouldPersistModuleAndKnowledgeWithoutLegacyKnowledgeTable()
     {
         SeedKnowledgeSpace(includeTeamModule: false);

@@ -1,6 +1,8 @@
 using Dna.App.Services;
 using Dna.Core.Config;
 using Dna.Knowledge;
+using Dna.Knowledge.Workspace;
+using Dna.Knowledge.Workspace.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dna.App.Interfaces.Api;
@@ -61,5 +63,216 @@ public static class AppLocalRuntimeApiEndpoints
                 reason = string.Empty
             });
         });
+
+        app.MapGet("/api/workspace/tree", (
+            [FromServices] IWorkspaceEngine workspace,
+            [FromServices] ITopoGraphApplicationService topology,
+            [FromServices] ProjectConfig config,
+            [FromQuery] string? path,
+            [FromQuery] int? maxDepth) =>
+        {
+            if (!config.HasProject)
+                return Results.BadRequest(new { error = "Project is not configured." });
+
+            var projectRoot = config.DefaultProjectRoot;
+            var depth = Math.Clamp(maxDepth ?? 4, 0, 8);
+            var tree = BuildWorkspaceDirectoryTree(
+                workspace,
+                projectRoot,
+                topology.GetWorkspaceContext(),
+                path,
+                depth);
+
+            return Results.Ok(tree);
+        });
+    }
+
+    private static WorkspaceDirectoryTreeResponse BuildWorkspaceDirectoryTree(
+        IWorkspaceEngine workspace,
+        string projectRoot,
+        WorkspaceTopologyContext topology,
+        string? relativePath,
+        int remainingDepth)
+    {
+        var snapshot = string.IsNullOrWhiteSpace(relativePath)
+            ? workspace.GetRootSnapshot(projectRoot, topology)
+            : workspace.GetDirectorySnapshot(projectRoot, relativePath, topology);
+
+        return new WorkspaceDirectoryTreeResponse
+        {
+            ProjectRoot = snapshot.ProjectRoot,
+            RelativePath = snapshot.RelativePath,
+            Name = snapshot.Name,
+            FullPath = snapshot.FullPath,
+            Exists = snapshot.Exists,
+            ScannedAtUtc = snapshot.ScannedAtUtc,
+            DirectoryCount = snapshot.DirectoryCount,
+            FileCount = snapshot.FileCount,
+            Entries = snapshot.Entries
+                .Select(entry => BuildWorkspaceEntryTree(
+                    workspace,
+                    projectRoot,
+                    topology,
+                    entry,
+                    remainingDepth))
+                .ToList()
+        };
+    }
+
+    private static WorkspaceTreeEntryResponse BuildWorkspaceEntryTree(
+        IWorkspaceEngine workspace,
+        string projectRoot,
+        WorkspaceTopologyContext topology,
+        WorkspaceFileNode entry,
+        int remainingDepth)
+    {
+        var response = new WorkspaceTreeEntryResponse
+        {
+            Name = entry.Name,
+            Path = entry.Path,
+            ParentPath = entry.ParentPath,
+            FullPath = entry.FullPath,
+            Kind = entry.Kind.ToString(),
+            Status = entry.Status.ToString(),
+            StatusLabel = entry.StatusLabel,
+            Badge = entry.Badge,
+            Extension = entry.Extension,
+            SizeBytes = entry.SizeBytes,
+            LastModifiedUtc = entry.LastModifiedUtc,
+            Exists = entry.Exists,
+            HasChildren = entry.HasChildren,
+            ChildDirectoryCount = entry.ChildDirectoryCount,
+            ChildFileCount = entry.ChildFileCount,
+            Ownership = entry.Ownership is null
+                ? null
+                : new WorkspaceTreeOwnershipResponse
+                {
+                    ModuleId = entry.Ownership.ModuleId,
+                    ModuleName = entry.Ownership.ModuleName,
+                    Discipline = entry.Ownership.Discipline,
+                    Layer = entry.Ownership.Layer,
+                    IsCrossWorkModule = entry.Ownership.IsCrossWorkModule,
+                    Kind = entry.Ownership.Kind.ToString(),
+                    IsExactMatch = entry.Ownership.IsExactMatch,
+                    ScopePath = entry.Ownership.ScopePath
+                },
+            Module = entry.Module is null
+                ? null
+                : new WorkspaceTreeModuleResponse
+                {
+                    Id = entry.Module.Id,
+                    Name = entry.Module.Name,
+                    Discipline = entry.Module.Discipline,
+                    Layer = entry.Module.Layer,
+                    IsCrossWorkModule = entry.Module.IsCrossWorkModule,
+                    RegistrationPath = entry.Module.RegistrationPath
+                },
+            Descriptor = entry.Descriptor is null
+                ? null
+                : new WorkspaceTreeDescriptorResponse
+                {
+                    FileName = entry.Descriptor.FileName,
+                    RelativeFilePath = entry.Descriptor.RelativeFilePath,
+                    StableGuid = entry.Descriptor.StableGuid,
+                    Summary = entry.Descriptor.Summary
+                },
+            Actions = new WorkspaceTreeActionsResponse
+            {
+                CanRegister = entry.Actions.CanRegister,
+                CanEdit = entry.Actions.CanEdit,
+                SuggestedDiscipline = entry.Actions.SuggestedDiscipline,
+                SuggestedLayer = entry.Actions.SuggestedLayer
+            }
+        };
+
+        if (entry.Kind == WorkspaceEntryKind.Directory && entry.HasChildren && remainingDepth > 0)
+        {
+            var snapshot = workspace.GetDirectorySnapshot(projectRoot, entry.Path, topology);
+            response.Children = snapshot.Entries
+                .Select(child => BuildWorkspaceEntryTree(
+                    workspace,
+                    projectRoot,
+                    topology,
+                    child,
+                    remainingDepth - 1))
+                .ToList();
+        }
+
+        return response;
+    }
+
+    private sealed class WorkspaceDirectoryTreeResponse
+    {
+        public string ProjectRoot { get; init; } = string.Empty;
+        public string RelativePath { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public string FullPath { get; init; } = string.Empty;
+        public bool Exists { get; init; }
+        public DateTime ScannedAtUtc { get; init; }
+        public int DirectoryCount { get; init; }
+        public int FileCount { get; init; }
+        public List<WorkspaceTreeEntryResponse> Entries { get; init; } = [];
+    }
+
+    private sealed class WorkspaceTreeEntryResponse
+    {
+        public string Name { get; init; } = string.Empty;
+        public string Path { get; init; } = string.Empty;
+        public string ParentPath { get; init; } = string.Empty;
+        public string FullPath { get; init; } = string.Empty;
+        public string Kind { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public string StatusLabel { get; init; } = string.Empty;
+        public string? Badge { get; init; }
+        public string? Extension { get; init; }
+        public long? SizeBytes { get; init; }
+        public DateTime? LastModifiedUtc { get; init; }
+        public bool Exists { get; init; }
+        public bool HasChildren { get; init; }
+        public int ChildDirectoryCount { get; init; }
+        public int ChildFileCount { get; init; }
+        public WorkspaceTreeOwnershipResponse? Ownership { get; init; }
+        public WorkspaceTreeModuleResponse? Module { get; init; }
+        public WorkspaceTreeDescriptorResponse? Descriptor { get; init; }
+        public WorkspaceTreeActionsResponse Actions { get; init; } = new();
+        public List<WorkspaceTreeEntryResponse>? Children { get; set; }
+    }
+
+    private sealed class WorkspaceTreeOwnershipResponse
+    {
+        public string ModuleId { get; init; } = string.Empty;
+        public string ModuleName { get; init; } = string.Empty;
+        public string Discipline { get; init; } = string.Empty;
+        public int Layer { get; init; }
+        public bool IsCrossWorkModule { get; init; }
+        public string Kind { get; init; } = string.Empty;
+        public bool IsExactMatch { get; init; }
+        public string ScopePath { get; init; } = string.Empty;
+    }
+
+    private sealed class WorkspaceTreeModuleResponse
+    {
+        public string Id { get; init; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
+        public string Discipline { get; init; } = string.Empty;
+        public int Layer { get; init; }
+        public bool IsCrossWorkModule { get; init; }
+        public string RegistrationPath { get; init; } = string.Empty;
+    }
+
+    private sealed class WorkspaceTreeDescriptorResponse
+    {
+        public string FileName { get; init; } = string.Empty;
+        public string RelativeFilePath { get; init; } = string.Empty;
+        public string StableGuid { get; init; } = string.Empty;
+        public string? Summary { get; init; }
+    }
+
+    private sealed class WorkspaceTreeActionsResponse
+    {
+        public bool CanRegister { get; init; }
+        public bool CanEdit { get; init; }
+        public string? SuggestedDiscipline { get; init; }
+        public int? SuggestedLayer { get; init; }
     }
 }

@@ -130,27 +130,12 @@ public partial class MemoryStore : IDisposable
                 relation TEXT NOT NULL,
                 PRIMARY KEY (from_id, to_id, relation)
             );
-
-            CREATE INDEX IF NOT EXISTS idx_layer ON memory_entries(layer);
-            CREATE INDEX IF NOT EXISTS idx_freshness ON memory_entries(freshness);
-            CREATE INDEX IF NOT EXISTS idx_stage ON memory_entries(stage);
-            CREATE INDEX IF NOT EXISTS idx_parent ON memory_entries(parent_id);
-            CREATE INDEX IF NOT EXISTS idx_node ON memory_entries(node_id);
-            CREATE INDEX IF NOT EXISTS idx_created ON memory_entries(created_at);
-            CREATE INDEX IF NOT EXISTS idx_disc ON memory_disciplines(discipline);
-            CREATE INDEX IF NOT EXISTS idx_feat ON memory_features(feature);
             """;
         cmd.ExecuteNonQuery();
 
-        using var ftsCmd = _db.CreateCommand();
-        ftsCmd.CommandText = """
-            CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-                id, summary, content, tags, tokenize='unicode61'
-            );
-            """;
-        ftsCmd.ExecuteNonQuery();
-
         MigrateSchemaIfNeeded();
+        EnsureIndexes();
+        EnsureFullTextSearchTable();
     }
 
     private void MigrateSchemaIfNeeded()
@@ -179,6 +164,33 @@ public partial class MemoryStore : IDisposable
             alterStage.CommandText = "ALTER TABLE memory_entries ADD COLUMN stage TEXT NOT NULL DEFAULT 'LongTerm'";
             alterStage.ExecuteNonQuery();
         }
+    }
+
+    private void EnsureIndexes()
+    {
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = """
+            CREATE INDEX IF NOT EXISTS idx_layer ON memory_entries(layer);
+            CREATE INDEX IF NOT EXISTS idx_freshness ON memory_entries(freshness);
+            CREATE INDEX IF NOT EXISTS idx_stage ON memory_entries(stage);
+            CREATE INDEX IF NOT EXISTS idx_parent ON memory_entries(parent_id);
+            CREATE INDEX IF NOT EXISTS idx_node ON memory_entries(node_id);
+            CREATE INDEX IF NOT EXISTS idx_created ON memory_entries(created_at);
+            CREATE INDEX IF NOT EXISTS idx_disc ON memory_disciplines(discipline);
+            CREATE INDEX IF NOT EXISTS idx_feat ON memory_features(feature);
+            """;
+        cmd.ExecuteNonQuery();
+    }
+
+    private void EnsureFullTextSearchTable()
+    {
+        using var ftsCmd = _db!.CreateCommand();
+        ftsCmd.CommandText = """
+            CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+                id, summary, content, tags, tokenize='unicode61'
+            );
+            """;
+        ftsCmd.ExecuteNonQuery();
     }
 
     // ═══════════════════════════════════════════

@@ -57,6 +57,7 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         InitializeDefaults();
+        InitializeWorkspaceExplorer();
         HookTopologyEditorEvents();
 
         TopologyGraph.NodeSelected += TopologyGraph_OnNodeSelected;
@@ -288,7 +289,7 @@ public partial class MainWindow : Window
         AccessStateText.Text = "写入边界: 检查中...";
         LaunchModeText.Text = "启动方式: 桌面主宿主 + 嵌入式 App API";
         OverviewModeText.Text = "桌面主宿主负责项目切换、知识图谱预览、记忆维护，以及本地 CLI / MCP 连接。";
-        OverviewPrimaryActionText.Text = "先加载一个包含 .agentic-os/project.json 的项目，然后确认本地运行时与知识库状态。";
+        OverviewPrimaryActionText.Text = "先加载一个项目目录；如缺少 .agentic-os，桌面宿主会自动创建并初始化运行数据。";
         OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
         OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
         StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
@@ -699,6 +700,7 @@ public partial class MainWindow : Window
     private async Task RefreshAllAsync()
     {
         await RefreshRuntimeStatusAsync();
+        await RefreshWorkspaceTreeAsync();
         await RefreshTopologyAsync();
         await RefreshMemoriesAsync();
         await RefreshToolingStatusAsync();
@@ -1391,6 +1393,7 @@ public partial class MainWindow : Window
             ServerStateText.Text = "本地知识库: 未选择项目";
             _connectionAccess = ConnectionAccessState.None;
             ApplyConnectionState(appOnline);
+            await RefreshLogTailAsync();
             return;
         }
 
@@ -1403,6 +1406,7 @@ public partial class MainWindow : Window
                 ServerStateText.Text = "本地知识库: 运行时离线";
                 _connectionAccess = ConnectionAccessState.RuntimeOffline(AppRuntimeConstants.ApiBaseUrl);
                 ApplyConnectionState(appOnline);
+                await RefreshLogTailAsync();
                 return;
             }
 
@@ -1432,6 +1436,7 @@ public partial class MainWindow : Window
         }
 
         ApplyConnectionState(appOnline);
+        await RefreshLogTailAsync();
     }
 
     private async Task RefreshTopologyAsync()
@@ -2506,7 +2511,7 @@ public partial class MainWindow : Window
 
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            Title = "选择目标项目根目录（必须包含 .agentic-os/project.json）",
+            Title = "选择目标项目根目录（.agentic-os 将在需要时自动创建）",
             AllowMultiple = false,
             SuggestedStartLocation = suggested
         });
@@ -2539,7 +2544,7 @@ public partial class MainWindow : Window
 
     private DesktopProjectConfig EnsureProjectSelected()
     {
-        return _project ?? throw new InvalidOperationException("请先选择目标项目并完成 .agentic-os/project.json 校验。");
+        return _project ?? throw new InvalidOperationException("请先选择目标项目目录。");
     }
 
     private static async Task<bool> IsAppOnlineAsync()
@@ -2703,7 +2708,7 @@ public partial class MainWindow : Window
             MemoryAccessText.Text = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
             AddMemoryButton.IsEnabled = false;
             StatusText.Text = "请先在项目加载页选择项目，进入工作区后会自动拉起本地 5052 运行时。";
-            OverviewPrimaryActionText.Text = "先加载一个包含 .agentic-os/project.json 的项目，然后确认本地运行时与知识库状态。";
+            OverviewPrimaryActionText.Text = "先加载一个项目目录；如缺少 .agentic-os，桌面宿主会自动创建并初始化运行数据。";
             OverviewWorkflowText.Text = "推荐顺序：概览 -> 本地状态 -> 知识图谱/记忆 -> 连接Agent。";
             OverviewRecommendationText.Text = "当前以单人本地管理员 MVP 为主，优先把桌面主路径稳定下来。";
             UpdateChatAvailability();

@@ -6,19 +6,19 @@ public sealed class TopologyTheme
 {
     public static TopologyTheme Default { get; } = new();
 
-    public Color Background { get; init; } = Color.Parse("#F8FAFC");
-    public Color Grid { get; init; } = Color.Parse("#CBD5E1");
-    public Color Border { get; init; } = Color.Parse("#D0D5DD");
-    public Color Label { get; init; } = Color.Parse("#101828");
-    public Color Meta { get; init; } = Color.Parse("#667085");
-    public Color SurfaceStroke { get; init; } = Color.Parse("#FFFFFF");
-    public Color ScopeBorder { get; init; } = Color.Parse("#2E90FA");
-    public Color SelectedBorder { get; init; } = Color.Parse("#2F6FED");
-    public Color Collaboration { get; init; } = Color.Parse("#0EA5E9");
-    public Color Dependency { get; init; } = Color.Parse("#2F6FED");
-    public Color Composition { get; init; } = Color.Parse("#12B76A");
-    public Color Aggregation { get; init; } = Color.Parse("#F79009");
-    public Color ParentChild { get; init; } = Color.Parse("#98A2B3");
+    public Color Background { get; init; } = Color.Parse("#1E1E1E");
+    public Color Grid { get; init; } = Color.Parse("#3A3D41");
+    public Color Border { get; init; } = Color.Parse("#3C3C3C");
+    public Color Label { get; init; } = Color.Parse("#F3F3F3");
+    public Color Meta { get; init; } = Color.Parse("#A7A7A7");
+    public Color SurfaceStroke { get; init; } = Color.Parse("#2A2D2E");
+    public Color ScopeBorder { get; init; } = Color.Parse("#4FC1FF");
+    public Color SelectedBorder { get; init; } = Color.Parse("#0E639C");
+    public Color Collaboration { get; init; } = Color.Parse("#C586C0");
+    public Color Dependency { get; init; } = Color.Parse("#4FC1FF");
+    public Color Composition { get; init; } = Color.Parse("#73C991");
+    public Color Aggregation { get; init; } = Color.Parse("#D7BA7D");
+    public Color ParentChild { get; init; } = Color.Parse("#7F848E");
 
     public Color ResolveEdgeColor(string relationKey)
     {
@@ -46,14 +46,14 @@ public sealed class TopologyTheme
 
     public Color ResolveNodeFill(TopologyNodeViewModel node, bool isScopeCenter)
     {
-        var color = Color.Parse("#FFFFFF");
+        var color = Color.Parse("#252526");
         if (!isScopeCenter)
             return color;
 
         return Color.FromArgb(
             color.A,
-            (byte)Math.Min(255, color.R + 12),
-            (byte)Math.Min(255, color.G + 14),
-            (byte)Math.Min(255, color.B + 18));
+            (byte)Math.Min(255, color.R + 10),
+            (byte)Math.Min(255, color.G + 10),
+            (byte)Math.Min(255, color.B + 12));
     }
 }

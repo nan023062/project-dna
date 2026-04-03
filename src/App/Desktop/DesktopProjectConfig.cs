@@ -39,37 +39,18 @@ public sealed class DesktopProjectConfig
     {
         var normalizedRoot = Path.GetFullPath(projectRoot);
         if (!Directory.Exists(normalizedRoot))
-            throw new InvalidOperationException($"项目目录不存在：{normalizedRoot}");
+            throw new InvalidOperationException($"Project directory does not exist: {normalizedRoot}");
 
         var metadataRootPath = ResolveMetadataRootPath(normalizedRoot);
         var configPath = ResolveProjectConfigPath(normalizedRoot);
-
-        if (!File.Exists(configPath))
-            throw new InvalidOperationException($"未找到 Agentic OS 项目配置：{configPath}");
-
-        AgenticOsConfig dto;
-        try
-        {
-            var json = File.ReadAllText(configPath);
-            dto = JsonSerializer.Deserialize<AgenticOsConfig>(json, JsonOptions)
-                  ?? throw new InvalidOperationException($"{ProjectConfigFileName} 内容为空。");
-        }
-        catch (JsonException ex)
-        {
-            throw new InvalidOperationException($"{ProjectConfigFileName} JSON 解析失败：{ex.Message}");
-        }
-
-        var projectName = (dto.ProjectName ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(projectName))
-            throw new InvalidOperationException($"{ProjectConfigFileName} 缺少 projectName。");
-
-        var serverBaseUrl = AppRuntimeConstants.ApiBaseUrl;
+        var dto = TryReadOptionalConfig(configPath);
+        var projectName = ResolveProjectName(dto, normalizedRoot);
 
         return new DesktopProjectConfig
         {
             ProjectRoot = normalizedRoot,
             ProjectName = projectName,
-            ServerBaseUrl = serverBaseUrl,
+            ServerBaseUrl = AppRuntimeConstants.ApiBaseUrl,
             MetadataRootPath = metadataRootPath,
             MemoryRootPath = ResolveMemoryRootPath(normalizedRoot),
             SessionRootPath = ResolveSessionRootPath(normalizedRoot),
@@ -109,7 +90,7 @@ public sealed class DesktopProjectConfig
         }
 
         var dir = Path.GetDirectoryName(WorkspaceConfigPath)
-                  ?? throw new InvalidOperationException("无法确定 workspace 配置目录。");
+                  ?? throw new InvalidOperationException("Unable to resolve workspace config directory.");
         Directory.CreateDirectory(dir);
         File.WriteAllText(WorkspaceConfigPath, JsonSerializer.Serialize(CreateInitialWorkspaceState(), JsonOptions));
     }
@@ -117,7 +98,7 @@ public sealed class DesktopProjectConfig
     public void EnsureLlmConfig()
     {
         Directory.CreateDirectory(MetadataRootPath);
-        Dna.Core.Config.RuntimeLlmConfigStore.LoadOrCreate(LlmConfigPath);
+        RuntimeLlmConfigStore.LoadOrCreate(LlmConfigPath);
     }
 
     public void EnsureAgentShellStorage()
@@ -132,7 +113,7 @@ public sealed class DesktopProjectConfig
     }
 
     public static string ResolveMetadataRootPath(string projectRoot)
-        => ProjectConfig.ResolveMetadataRootPath(projectRoot);
+        => Path.Combine(Path.GetFullPath(projectRoot), MetadataDirectoryName);
 
     public static string ResolveMemoryRootPath(string projectRoot)
         => ProjectConfig.ResolveMemoryStorePath(ResolveMetadataRootPath(projectRoot));
@@ -207,6 +188,34 @@ public sealed class DesktopProjectConfig
         }
 
         return false;
+    }
+
+    private static AgenticOsConfig? TryReadOptionalConfig(string configPath)
+    {
+        if (!File.Exists(configPath))
+            return null;
+
+        try
+        {
+            var json = File.ReadAllText(configPath);
+            return JsonSerializer.Deserialize<AgenticOsConfig>(json, JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string ResolveProjectName(AgenticOsConfig? dto, string projectRoot)
+    {
+        var projectName = (dto?.ProjectName ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(projectName))
+            return projectName;
+
+        var directoryName = new DirectoryInfo(projectRoot).Name.Trim();
+        return string.IsNullOrWhiteSpace(directoryName)
+            ? "workspace"
+            : directoryName;
     }
 
     private sealed class AgenticOsConfig

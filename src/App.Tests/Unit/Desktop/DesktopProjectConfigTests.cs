@@ -128,6 +128,22 @@ public sealed class DesktopProjectConfigTests
             File.ReadAllText(config.AgentShellStatePath));
     }
 
+    [Fact]
+    public void Load_ShouldFallbackToDirectoryName_WhenProjectConfigDoesNotExist()
+    {
+        var projectRoot = CreateProjectRoot();
+
+        var config = DesktopProjectConfig.Load(projectRoot);
+        config.EnsureProjectScopedAppState();
+
+        Assert.Equal(new DirectoryInfo(projectRoot).Name, config.ProjectName);
+        Assert.False(File.Exists(config.ConfigPath));
+        Assert.True(Directory.Exists(config.MemoryRootPath));
+        Assert.True(Directory.Exists(config.KnowledgeRootPath));
+        Assert.True(Directory.Exists(config.SessionRootPath));
+        Assert.True(Directory.Exists(config.LogDirectoryPath));
+    }
+
     private static string CreateProjectRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "dna-desktop-project-config-tests", Guid.NewGuid().ToString("N"));
