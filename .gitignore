@@ -19,7 +19,6 @@ node_modules/
 # DNA runtime data (user-specific, not versioned)
 .dna/
 *.db
-.agentic.meta
 
 # User-specific config (copy from .example.json)
 server-tools/server-config.json
