@@ -521,18 +521,23 @@ public sealed class TopoGraphStore : ITopoGraphStore
         {
             _graphDbPath = Path.Combine(_storePath, "graph.db");
             EnsureGraphSchemaLocked();
-            LoadGraphSnapshotLocked();
 
-            if (IsGraphSnapshotEmpty() && TryLoadLegacyJsonLocked())
+            // 文件优先：明文文件存在时始终从文件重建，DB 只是缓存
+            if (TryLoadFromFileProtocolLocked())
             {
-                SaveGraphSnapshotLocked();
-                CleanupLegacyJsonFilesLocked();
+                _logger.LogInformation("从 .agentic-os/ 明文文件重建图谱");
             }
-
-            // 文件协议回退：graph.db 和 legacy JSON 都为空时，从 .agentic-os/ 明文文件加载
-            if (IsGraphSnapshotEmpty() && TryLoadFromFileProtocolLocked())
+            else
             {
-                _logger.LogInformation("从 .agentic-os/ 明文文件加载图谱数据");
+                // 回退到 DB
+                LoadGraphSnapshotLocked();
+
+                // 再回退到 legacy JSON
+                if (IsGraphSnapshotEmpty() && TryLoadLegacyJsonLocked())
+                {
+                    SaveGraphSnapshotLocked();
+                    CleanupLegacyJsonFilesLocked();
+                }
             }
 
             EnsureDerivedDisciplinesLocked();

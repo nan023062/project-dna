@@ -77,9 +77,8 @@ public partial class MemoryStore : IDisposable
 
         _initialized = true;
 
-        // 文件协议 seed：memory.db 为空时从 .agentic-os/memory/ 加载明文文件
-        if (Count() == 0)
-            TrySeedFromFileProtocol();
+        // 文件优先：每次启动都从 .agentic-os/memory/ 明文文件重建，DB 只是缓存
+        RebuildFromFileProtocol();
 
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
             dbPath, storePath, Count());
@@ -949,13 +948,13 @@ public partial class MemoryStore : IDisposable
     }
 
     /// <summary>
-    /// 从 .agentic-os/memory/ 明文文件 seed 记忆到空的 memory.db。
+    /// 每次启动时从 .agentic-os/memory/ 明文文件重建 DB。
+    /// 明文文件是真相源，DB 是可重建的索引缓存。
     /// </summary>
-    private void TrySeedFromFileProtocol()
+    private void RebuildFromFileProtocol()
     {
         try
         {
-            // _storePath 通常指向 .agentic-os/memory/ 或 .agentic-os/
             var agenticOsPath = ResolveAgenticOsPathForMemory(_storePath);
             if (agenticOsPath == null)
                 return;
@@ -965,22 +964,53 @@ public partial class MemoryStore : IDisposable
             if (files.Count == 0)
                 return;
 
-            var seeded = 0;
+            // 收集文件中的所有 ID
+            var fileIds = new HashSet<string>(StringComparer.Ordinal);
+            var upserted = 0;
+
             foreach (var file in files)
             {
                 var entry = FileToMemoryEntry(file);
                 if (entry == null) continue;
 
-                InsertIntoSqlite(entry);
-                seeded++;
+                fileIds.Add(entry.Id);
+
+                // 检查 DB 中是否已存在
+                var existing = GetById(entry.Id);
+                if (existing == null)
+                {
+                    InsertIntoSqlite(entry);
+                    upserted++;
+                }
+                else
+                {
+                    // 文件内容可能更新，用文件覆盖 DB
+                    DeleteFromSqlite(entry.Id);
+                    InsertIntoSqlite(entry);
+                    upserted++;
+                }
             }
 
-            if (seeded > 0)
-                _logger.LogInformation("从 .agentic-os/memory/ 明文文件 seed 了 {Count} 条记忆", seeded);
+            // 删除 DB 中有但文件中没有的条目（文件已删除）
+            var dbIds = LoadAllIdsFromSqlite();
+            var removed = 0;
+            foreach (var dbId in dbIds)
+            {
+                if (!fileIds.Contains(dbId))
+                {
+                    DeleteFromSqlite(dbId);
+                    removed++;
+                }
+            }
+
+            if (upserted > 0 || removed > 0)
+                _logger.LogInformation(
+                    "从 .agentic-os/memory/ 重建记忆: 同步={Upserted}, 清理={Removed}",
+                    upserted, removed);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "从 .agentic-os/memory/ 文件 seed 记忆失败");
+            _logger.LogWarning(ex, "从 .agentic-os/memory/ 重建记忆失败");
         }
     }
 
@@ -1030,6 +1060,17 @@ public partial class MemoryStore : IDisposable
             return storePath;
 
         return null;
+    }
+
+    private List<string> LoadAllIdsFromSqlite()
+    {
+        var ids = new List<string>();
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = "SELECT id FROM memory_entries";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            ids.Add(reader.GetString(0));
+        return ids;
     }
 
     public void Dispose()
