@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Dna.Core.Config;
 using Dna.Knowledge;
+using Dna.Memory.Models;
 using Dna.Knowledge.Workspace.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -68,7 +69,7 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             return Results.Json(new { query = q, count = results.Count, results }, JsonOpts);
         });
 
-        api.MapGet("/context", ([FromQuery] string target, [FromQuery] string? current, [FromQuery] string? activeModules, [FromServices] ITopoGraphApplicationService topology) =>
+        api.MapGet("/context", ([FromQuery] string target, [FromQuery] string? current, [FromQuery] string? activeModules, [FromServices] ITopoGraphApplicationService topology, [FromServices] IMemoryEngine memory) =>
         {
             if (string.IsNullOrWhiteSpace(target))
                 return Results.Json(new { error = "target is required." }, statusCode: 400);
@@ -80,11 +81,13 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             var currentModule = string.IsNullOrWhiteSpace(current) ? target : current;
             var context = topology.GetModuleContext(target, currentModule, active);
             var crossWorks = topology.GetCrossWorksForModule(target);
+            var session = BuildSessionSnapshot(topology, memory, target);
 
             return Results.Json(new
             {
                 target,
                 context,
+                session,
                 crossWorks = crossWorks.Select(cw => new
                 {
                     cw.Name,
@@ -101,7 +104,7 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             }, JsonOpts);
         });
 
-        api.MapPost("/begin-task", ([FromBody] BeginTaskRequest request, [FromServices] ITopoGraphApplicationService topology) =>
+        api.MapPost("/begin-task", ([FromBody] BeginTaskRequest request, [FromServices] ITopoGraphApplicationService topology, [FromServices] IMemoryEngine memory) =>
         {
             var topo = topology.BuildTopology();
 
@@ -132,7 +135,8 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             var contexts = request.ModuleNames.Select(name =>
             {
                 var context = topology.GetModuleContext(name, current, request.ModuleNames);
-                return new { module = name, context };
+                var session = BuildSessionSnapshot(topology, memory, name);
+                return new { module = name, context, session };
             }).ToList();
 
             var crossWorks = request.ModuleNames
@@ -155,6 +159,42 @@ public static class AppLocalKnowledgeManagementApiEndpoints
 
             return Results.Json(new { contexts, crossWorks }, JsonOpts);
         });
+    }
+
+    private static object BuildSessionSnapshot(
+        ITopoGraphApplicationService topology,
+        IMemoryEngine memory,
+        string moduleName)
+    {
+        var module = topology.FindModule(moduleName);
+        if (module?.Id == null)
+            return new { count = 0, items = Array.Empty<object>() };
+
+        var items = memory.QueryMemories(new MemoryFilter
+            {
+                NodeId = module.Id,
+                Stages = [MemoryStage.ShortTerm],
+                Freshness = FreshnessFilter.FreshAndAging,
+                Limit = 10
+            })
+            .OrderByDescending(entry => entry.CreatedAt)
+            .Select(entry => new
+            {
+                entry.Id,
+                type = entry.Type.ToString(),
+                stage = entry.Stage.ToString(),
+                entry.Summary,
+                entry.Content,
+                entry.Tags,
+                entry.CreatedAt
+            })
+            .ToList();
+
+        return new
+        {
+            count = items.Count,
+            items
+        };
     }
 
     private static void MapGovernanceEndpoints(IEndpointRouteBuilder app)
@@ -184,6 +224,14 @@ public static class AppLocalKnowledgeManagementApiEndpoints
                 decayedCount = decayed,
                 message = decayed > 0 ? $"Decayed {decayed} stale memories." : "All memories are fresh enough."
             }, JsonOpts);
+        });
+
+        api.MapPost("/evolve", async ([FromBody] EvolveKnowledgeRequest request, [FromServices] IGovernanceEngine governance) =>
+        {
+            var result = await governance.EvolveKnowledgeAsync(
+                string.IsNullOrWhiteSpace(request.NodeIdOrName) ? null : request.NodeIdOrName,
+                request.MaxSuggestions is > 0 ? request.MaxSuggestions.Value : 50);
+            return Results.Json(result, JsonOpts);
         });
 
         api.MapPost("/condense/node", async ([FromBody] CondenseNodeRequest request, [FromServices] IGovernanceEngine governance) =>
@@ -411,6 +459,12 @@ public sealed class CondenseNodeRequest
 {
     public string NodeIdOrName { get; set; } = string.Empty;
     public int? MaxSourceMemories { get; set; }
+}
+
+public sealed class EvolveKnowledgeRequest
+{
+    public string? NodeIdOrName { get; set; }
+    public int? MaxSuggestions { get; set; }
 }
 
 public sealed class CondenseAllRequest

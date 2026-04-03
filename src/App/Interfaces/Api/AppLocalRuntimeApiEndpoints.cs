@@ -35,6 +35,7 @@ public static class AppLocalRuntimeApiEndpoints
                 dataPath = config.MetadataRootPath,
                 metadataRootPath = config.MetadataRootPath,
                 memoryStorePath = config.MemoryStorePath,
+                sessionStorePath = config.SessionStorePath,
                 knowledgeStorePath = config.KnowledgeStorePath,
                 projectName = runtime.ProjectName,
                 moduleCount,

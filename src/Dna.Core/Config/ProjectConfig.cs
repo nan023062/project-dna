@@ -21,6 +21,7 @@ public class ProjectConfig
     public string DnaStorePath => _storePath;
     public string MetadataRootPath => _storePath;
     public string MemoryStorePath => string.IsNullOrWhiteSpace(_storePath) ? string.Empty : ResolveMemoryStorePath(_storePath);
+    public string SessionStorePath => string.IsNullOrWhiteSpace(_storePath) ? string.Empty : ResolveSessionStorePath(_storePath);
     public string KnowledgeStorePath => string.IsNullOrWhiteSpace(_storePath) ? string.Empty : ResolveKnowledgeStorePath(_storePath);
     public bool HasStore => !string.IsNullOrEmpty(_storePath);
 
@@ -72,6 +73,9 @@ public class ProjectConfig
 
     public static string ResolveMemoryStorePath(string metadataRootPath)
         => Path.Combine(Path.GetFullPath(metadataRootPath), "memory");
+
+    public static string ResolveSessionStorePath(string metadataRootPath)
+        => Path.Combine(Path.GetFullPath(metadataRootPath), "session");
 
     public static string ResolveKnowledgeStorePath(string metadataRootPath)
         => Path.Combine(Path.GetFullPath(metadataRootPath), "knowledge");

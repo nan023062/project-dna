@@ -42,11 +42,12 @@ public sealed class AppLocalRuntimeInitializer(
 
         // 新系统初始化：从 .agentic-os/ 文件加载 TopoGraphFacade
         logger.LogInformation(
-            "App local runtime initialized: project={ProjectName}, root={ProjectRoot}, metadata={MetadataRoot}, memory={MemoryRoot}, knowledge={KnowledgeRoot}, metadataFiles={MetadataCount}, migratedMemoryFiles={MigratedMemoryFiles}, migratedKnowledgeFiles={MigratedKnowledgeFiles}, api={ApiBaseUrl}",
+            "App local runtime initialized: project={ProjectName}, root={ProjectRoot}, metadata={MetadataRoot}, memory={MemoryRoot}, session={SessionRoot}, knowledge={KnowledgeRoot}, metadataFiles={MetadataCount}, migratedMemoryFiles={MigratedMemoryFiles}, migratedKnowledgeFiles={MigratedKnowledgeFiles}, api={ApiBaseUrl}",
             options.ProjectName,
             options.WorkspaceRoot,
             storage.MetadataRootPath,
             storage.MemoryRootPath,
+            storage.SessionRootPath,
             storage.KnowledgeRootPath,
             metadataSync.CreatedMetadataCount,
             storage.MigratedMemoryFileCount,

@@ -19,6 +19,7 @@ public sealed class MemoryTools(DnaServerApi api)
         [Description("Memory type: Structural/Semantic/Episodic/Working/Procedural")] string type,
         [Description("Disciplines, comma separated.")] string disciplines,
         [Description("Node type: Project/Department/Technical/Team")] string? nodeType = null,
+        [Description("Memory stage: ShortTerm/LongTerm. Empty means auto-route.")] string? stage = null,
         [Description("Tags, comma separated.")] string? tags = null,
         [Description("Short summary.")] string? summary = null,
         [Description("Features, comma separated.")] string? features = null,
@@ -33,6 +34,9 @@ public sealed class MemoryTools(DnaServerApi api)
             var parsedNodeType = ParseNodeTypeOrDefault(nodeType);
             if (parsedNodeType == null)
                 return $"Error: invalid node type '{nodeType}'.";
+            var parsedStage = ParseMemoryStageOrNull(stage);
+            if (!string.IsNullOrWhiteSpace(stage) && parsedStage == null)
+                return $"Error: invalid memory stage '{stage}'.";
 
             var payload = new RememberRequest
             {
@@ -46,6 +50,7 @@ public sealed class MemoryTools(DnaServerApi api)
                 NodeId = nodeId,
                 Tags = SplitCsv(tags),
                 ParentId = parentId,
+                Stage = parsedStage,
                 Importance = Math.Clamp(importance, 0, 1)
             };
 
@@ -153,6 +158,13 @@ public sealed class MemoryTools(DnaServerApi api)
                     continue;
                 }
 
+                var parsedStage = ParseMemoryStageOrNull(item.Stage);
+                if (!string.IsNullOrWhiteSpace(item.Stage) && parsedStage == null)
+                {
+                    errors.Add($"[{i}] invalid stage '{item.Stage}'");
+                    continue;
+                }
+
                 requests.Add(new RememberRequest
                 {
                     Content = item.Content,
@@ -165,6 +177,7 @@ public sealed class MemoryTools(DnaServerApi api)
                     NodeId = item.NodeId,
                     Tags = SplitCsv(item.Tags),
                     ParentId = item.ParentId,
+                    Stage = parsedStage,
                     Importance = Math.Clamp(item.Importance ?? 0.5, 0, 1)
                 });
             }
@@ -271,6 +284,7 @@ public sealed class MemoryTools(DnaServerApi api)
     public async Task<string> query_memories(
         [Description("Node types, comma separated.")] string? nodeTypes = null,
         [Description("Memory types, comma separated.")] string? types = null,
+        [Description("Memory stages, comma separated.")] string? stages = null,
         [Description("Disciplines, comma separated.")] string? disciplines = null,
         [Description("Features, comma separated.")] string? features = null,
         [Description("Node id filter.")] string? nodeId = null,
@@ -283,6 +297,7 @@ public sealed class MemoryTools(DnaServerApi api)
             var parts = new List<string> { $"limit={Math.Clamp(limit, 1, 100)}" };
             if (!string.IsNullOrWhiteSpace(nodeTypes)) parts.Add($"nodeTypes={Uri.EscapeDataString(nodeTypes)}");
             if (!string.IsNullOrWhiteSpace(types)) parts.Add($"types={Uri.EscapeDataString(types)}");
+            if (!string.IsNullOrWhiteSpace(stages)) parts.Add($"stages={Uri.EscapeDataString(stages)}");
             if (!string.IsNullOrWhiteSpace(disciplines)) parts.Add($"disciplines={Uri.EscapeDataString(disciplines)}");
             if (!string.IsNullOrWhiteSpace(features)) parts.Add($"features={Uri.EscapeDataString(features)}");
             if (!string.IsNullOrWhiteSpace(nodeId)) parts.Add($"nodeId={Uri.EscapeDataString(nodeId)}");
@@ -474,11 +489,20 @@ public sealed class MemoryTools(DnaServerApi api)
         return NodeTypeCompat.TryParse(value, out var parsed) ? parsed : null;
     }
 
+    private static MemoryStage? ParseMemoryStageOrNull(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return Enum.TryParse<MemoryStage>(value, true, out var parsed) ? parsed : null;
+    }
+
     private sealed class BatchEntry
     {
         public string Content { get; set; } = "";
         public string Type { get; set; } = "";
         public string? NodeType { get; set; }
+        public string? Stage { get; set; }
         public string? Disciplines { get; set; }
         public string? Tags { get; set; }
         public string? Summary { get; set; }

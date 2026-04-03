@@ -37,6 +37,9 @@ public sealed class GovernanceEngine : IGovernanceEngine
     public int ArchiveStaleMemories(TimeSpan staleThreshold)
         => _memoryMaintainer.ArchiveStaleMemories(staleThreshold);
 
+    public Task<KnowledgeEvolutionReport> EvolveKnowledgeAsync(string? nodeIdOrName = null, int maxSuggestions = 50)
+        => _memoryMaintainer.EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions);
+
     public Task<KnowledgeCondenseResult> CondenseNodeKnowledgeAsync(string nodeIdOrName, int maxSourceMemories = 200)
         => _memoryMaintainer.CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories);
 

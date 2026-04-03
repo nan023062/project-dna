@@ -32,8 +32,8 @@ internal static class AppCliHandler
         }
         catch (HttpRequestException)
         {
-            WriteError($"无法连接到本地 App 运行时：{settings.BaseUrl}");
-            Console.WriteLine("  请先启动桌面桌面应用，让本地 5052 运行时就绪。");
+            WriteError($"Cannot connect to local app runtime: {settings.BaseUrl}");
+            Console.WriteLine("  Start the desktop app first so the local runtime is available.");
             return 1;
         }
         catch (Exception ex)
@@ -49,20 +49,23 @@ internal static class AppCliHandler
         var app = await GetJsonAsync(settings.BaseUrl, "/api/app/status");
 
         WriteHeader("Agentic OS Runtime");
-        Console.WriteLine($"  地址:         {settings.BaseUrl}");
-        Console.WriteLine($"  项目:         {GetString(runtime, "projectName", "-")}");
-        Console.WriteLine($"  项目根目录:   {GetString(runtime, "projectRoot", "-")}");
-        Console.WriteLine($"  存储目录:     {GetString(runtime, "storePath", "-")}");
-        Console.WriteLine($"  传输方式:     {GetString(runtime, "transport", "Local REST + MCP")}");
-        Console.WriteLine($"  MCP:          {settings.BaseUrl}/mcp");
-        Console.WriteLine($"  模块数:       {GetInt(runtime, "moduleCount")}");
-        Console.WriteLine($"  记忆数:       {GetInt(runtime, "memoryCount")}");
-        Console.WriteLine($"  运行时长:     {GetString(runtime, "uptime", "-")}");
+        Console.WriteLine($"  URL:            {settings.BaseUrl}");
+        Console.WriteLine($"  Project:        {GetString(runtime, "projectName", "-")}");
+        Console.WriteLine($"  Project root:   {GetString(runtime, "projectRoot", "-")}");
+        Console.WriteLine($"  Metadata root:  {GetString(runtime, "storePath", "-")}");
+        Console.WriteLine($"  Memory root:    {GetString(runtime, "memoryStorePath", "-")}");
+        Console.WriteLine($"  Session root:   {GetString(runtime, "sessionStorePath", "-")}");
+        Console.WriteLine($"  Knowledge root: {GetString(runtime, "knowledgeStorePath", "-")}");
+        Console.WriteLine($"  Transport:      {GetString(runtime, "transport", "Local REST + MCP")}");
+        Console.WriteLine($"  MCP:            {settings.BaseUrl}/mcp");
+        Console.WriteLine($"  Modules:        {GetInt(runtime, "moduleCount")}");
+        Console.WriteLine($"  Memories:       {GetInt(runtime, "memoryCount")}");
+        Console.WriteLine($"  Uptime:         {GetString(runtime, "uptime", "-")}");
 
         if (app.TryGetProperty("currentWorkspace", out var workspace))
         {
-            Console.WriteLine($"  当前工作区:   {GetString(workspace, "name", "-")}");
-            Console.WriteLine($"  工作区目录:   {GetString(workspace, "workspaceRoot", "-")}");
+            Console.WriteLine($"  Workspace:      {GetString(workspace, "name", "-")}");
+            Console.WriteLine($"  Workspace root: {GetString(workspace, "workspaceRoot", "-")}");
         }
 
         return 0;
@@ -71,13 +74,13 @@ internal static class AppCliHandler
     private static async Task<int> RunTopologyAsync(AppCliSettings settings)
     {
         var topology = await GetJsonAsync(settings.BaseUrl, "/api/topology");
-        WriteHeader("知识图谱");
-        Console.WriteLine($"  {GetString(topology, "summary", "图谱已加载")}");
+        WriteHeader("Topology");
+        Console.WriteLine($"  {GetString(topology, "summary", "Topology loaded.")}");
         Console.WriteLine();
 
         if (!topology.TryGetProperty("modules", out var modules) || modules.ValueKind != JsonValueKind.Array)
         {
-            Console.WriteLine("  当前没有可显示的模块。");
+            Console.WriteLine("  No modules available.");
             return 0;
         }
 
@@ -95,7 +98,7 @@ internal static class AppCliHandler
 
         var count = modules.GetArrayLength();
         if (count > 20)
-            Console.WriteLine($"  ... 其余 {count - 20} 个模块可在桌面图谱或 API 中查看。");
+            Console.WriteLine($"  ... {count - 20} more modules are available via API or UI.");
 
         return 0;
     }
@@ -105,12 +108,12 @@ internal static class AppCliHandler
         var query = settings.Args.Count > 1 ? string.Join(' ', settings.Args.Skip(1)) : null;
         if (string.IsNullOrWhiteSpace(query))
         {
-            WriteError("用法: agentic-os cli search <关键字>");
+            WriteError("Usage: agentic-os cli search <query>");
             return 1;
         }
 
         var json = await GetJsonAsync(settings.BaseUrl, $"/api/graph/search?q={Uri.EscapeDataString(query)}&maxResults=10");
-        WriteHeader($"模块搜索: {query}");
+        WriteHeader($"Module Search: {query}");
 
         if (json.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
         {
@@ -123,7 +126,7 @@ internal static class AppCliHandler
             }
 
             if (results.GetArrayLength() == 0)
-                Console.WriteLine("  没有找到匹配模块。");
+                Console.WriteLine("  No matching modules found.");
         }
 
         return 0;
@@ -134,7 +137,7 @@ internal static class AppCliHandler
         var question = settings.Args.Count > 1 ? string.Join(' ', settings.Args.Skip(1)) : null;
         if (string.IsNullOrWhiteSpace(question))
         {
-            WriteError("用法: agentic-os cli recall <问题>");
+            WriteError("Usage: agentic-os cli recall <question>");
             return 1;
         }
 
@@ -144,10 +147,10 @@ internal static class AppCliHandler
             maxResults = 5
         });
 
-        WriteHeader($"记忆检索: {question}");
+        WriteHeader($"Recall: {question}");
         if (!json.TryGetProperty("memories", out var memories) || memories.ValueKind != JsonValueKind.Array)
         {
-            Console.WriteLine("  没有返回记忆结果。");
+            Console.WriteLine("  No recall results were returned.");
             return 0;
         }
 
@@ -155,12 +158,14 @@ internal static class AppCliHandler
         foreach (var memory in memories.EnumerateArray())
         {
             index++;
-            var summary = GetString(memory, "summary", GetString(memory, "content", "(空内容)"));
-            Console.WriteLine($"  {index}. {summary}");
+            var entry = memory.TryGetProperty("entry", out var nested) ? nested : memory;
+            var summary = GetString(entry, "summary", GetString(entry, "content", "(empty)"));
+            var stage = GetString(entry, "stage", "-");
+            Console.WriteLine($"  {index}. ({stage}) {summary}");
         }
 
         if (index == 0)
-            Console.WriteLine("  没有找到相关记忆。");
+            Console.WriteLine("  No relevant memories found.");
 
         return 0;
     }
@@ -168,11 +173,11 @@ internal static class AppCliHandler
     private static async Task<int> RunMemoriesAsync(AppCliSettings settings)
     {
         var json = await GetJsonAsync(settings.BaseUrl, "/api/memory/query?limit=10&offset=0");
-        WriteHeader("最近记忆");
+        WriteHeader("Recent Memories");
 
         if (json.ValueKind != JsonValueKind.Array)
         {
-            Console.WriteLine("  没有可显示的记忆。");
+            Console.WriteLine("  No memories available.");
             return 0;
         }
 
@@ -181,12 +186,13 @@ internal static class AppCliHandler
         {
             index++;
             var id = GetString(memory, "id", "-");
-            var summary = GetString(memory, "summary", GetString(memory, "content", "(空内容)"));
-            Console.WriteLine($"  {index}. [{id}] {summary}");
+            var stage = GetString(memory, "stage", "-");
+            var summary = GetString(memory, "summary", GetString(memory, "content", "(empty)"));
+            Console.WriteLine($"  {index}. [{id}] ({stage}) {summary}");
         }
 
         if (index == 0)
-            Console.WriteLine("  当前记忆库为空。");
+            Console.WriteLine("  Memory store is empty.");
 
         return 0;
     }
@@ -194,12 +200,12 @@ internal static class AppCliHandler
     private static async Task<int> RunToolsAsync(AppCliSettings settings)
     {
         var json = await GetJsonAsync(settings.BaseUrl, "/api/app/mcp/tools");
-        WriteHeader("MCP 工具清单");
-        Console.WriteLine($"  MCP 入口: {GetString(json, "mcpEndpoint", $"{settings.BaseUrl}/mcp")}");
+        WriteHeader("MCP Tools");
+        Console.WriteLine($"  MCP endpoint: {GetString(json, "mcpEndpoint", $"{settings.BaseUrl}/mcp")}");
 
         if (!json.TryGetProperty("tools", out var tools) || tools.ValueKind != JsonValueKind.Array)
         {
-            Console.WriteLine("  没有返回工具清单。");
+            Console.WriteLine("  No tools returned.");
             return 0;
         }
 
@@ -218,28 +224,28 @@ internal static class AppCliHandler
         Console.WriteLine();
         Console.WriteLine("Agentic OS App CLI");
         Console.WriteLine();
-        Console.WriteLine($"用法: agentic-os cli [--url {AppRuntimeConstants.ApiBaseUrl}] <命令> [参数...]");
+        Console.WriteLine($"Usage: agentic-os cli [--url {AppRuntimeConstants.ApiBaseUrl}] <command> [args...]");
         Console.WriteLine();
-        Console.WriteLine("命令:");
-        Console.WriteLine("  status            查看本地运行时、当前项目和工作区状态");
-        Console.WriteLine("  topology          查看知识图谱摘要");
-        Console.WriteLine("  search <关键词>   搜索模块");
-        Console.WriteLine("  recall <问题>     检索记忆");
-        Console.WriteLine("  memories          查看最近记忆");
-        Console.WriteLine("  tools             查看 MCP 工具清单");
-        Console.WriteLine("  help              显示帮助");
+        Console.WriteLine("Commands:");
+        Console.WriteLine("  status            Show runtime, project, and storage status");
+        Console.WriteLine("  topology          Show topology summary");
+        Console.WriteLine("  search <query>    Search modules");
+        Console.WriteLine("  recall <question> Recall memories");
+        Console.WriteLine("  memories          Show recent memories");
+        Console.WriteLine("  tools             Show MCP tool list");
+        Console.WriteLine("  help              Show help");
         Console.WriteLine();
-        Console.WriteLine($"默认地址: {baseUrl}");
-        Console.WriteLine("环境变量: DNA_CLIENT_URL 或 DNA_URL");
+        Console.WriteLine($"Default URL: {baseUrl}");
+        Console.WriteLine("Environment: DNA_CLIENT_URL or DNA_URL");
         Console.WriteLine();
         return 0;
     }
 
     private static int RunUnknown(string command, string baseUrl)
     {
-        WriteError($"未知命令: {command}");
-        Console.WriteLine("  运行 `agentic-os cli help` 查看可用命令。");
-        Console.WriteLine($"  当前默认地址: {baseUrl}");
+        WriteError($"Unknown command: {command}");
+        Console.WriteLine("  Run `agentic-os cli help` to see available commands.");
+        Console.WriteLine($"  Current default URL: {baseUrl}");
         return 1;
     }
 

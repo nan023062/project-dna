@@ -1,10 +1,8 @@
 # Dna.Knowledge.Governance 类图
 
-> 状态：重构后类图基线
+> 状态：重构后稳定类图
 > 最后更新：2026-04-03
 > 适用范围：`src/Dna.Knowledge/Governance`
-
-本文档只描述治理模块当前稳定的责任分层。
 
 ## 目标类图
 
@@ -16,6 +14,7 @@ classDiagram
         +CheckFreshness() int
         +DetectMemoryConflicts() int
         +ArchiveStaleMemories(staleThreshold) int
+        +EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions) Task~KnowledgeEvolutionReport~
         +CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories) Task~KnowledgeCondenseResult~
         +CondenseAllNodesAsync(maxSourceMemories) Task~List~KnowledgeCondenseResult~~
     }
@@ -37,50 +36,56 @@ classDiagram
         -ITopoGraphApplicationService topology
         +DetectConflicts() int
         +ArchiveStaleMemories(staleThreshold) int
+        +EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions) Task~KnowledgeEvolutionReport~
         +CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories) Task~KnowledgeCondenseResult~
         +CondenseAllNodesAsync(maxSourceMemories) Task~List~KnowledgeCondenseResult~~
     }
 
-    class GovernanceTargetNode {
-        <<internal record>>
-        +string Id
-        +string Name
-        +NodeType Type
-        +string? Discipline
-        +string? Summary
-        +string? Contract
+    class KnowledgeEvolutionReport {
+        +DateTime GeneratedAt
+        +string? FilterNodeId
+        +string? FilterNodeName
+        +int SessionToMemoryCount
+        +int MemoryToKnowledgeCount
+        +List~KnowledgeEvolutionSuggestion~ Suggestions
     }
 
-    class TopologyManagementSnapshot {
-        +List~TopologyModuleDefinition~ Modules
-    }
-
-    class TopologyModuleDefinition {
-        +string Id
-        +string Name
-        +string Discipline
-        +int Layer
-        +bool IsCrossWorkModule
-        +string? Summary
-        +string? Boundary
+    class KnowledgeEvolutionSuggestion {
+        +string MemoryId
+        +string? NodeId
+        +string? NodeName
+        +EvolutionKnowledgeLayer CurrentLayer
+        +EvolutionKnowledgeLayer TargetLayer
+        +string Reason
+        +double Confidence
+        +List~string~ CandidateModuleIds
+        +List~string~ CandidateModuleNames
     }
 
     class KnowledgeCondenseResult {
         +string NodeId
         +string? NodeName
         +int SourceCount
+        +int SessionSourceCount
+        +int MemorySourceCount
         +int ArchivedCount
         +string? NewIdentityMemoryId
+        +string? UpgradeTrailMemoryId
+        +List~string~ SessionSourceMemoryIds
+        +List~string~ MemorySourceMemoryIds
+        +List~string~ ArchivedMemoryIds
         +string? Summary
     }
 
-    class MemoryStore {
-        <<external>>
-        +DecayStaleMemories() int
-        +Query(filter) List~MemoryEntry~
-        +UpdateTags(id, tags) void
-        +UpdateFreshness(id, freshness) void
-        +RememberAsync(request) Task~MemoryEntry~
+    class NodeKnowledge {
+        +string? Identity
+        +List~LessonSummary~ Lessons
+        +List~string~ ActiveTasks
+        +List~string~ Facts
+        +int TotalMemoryCount
+        +string? IdentityMemoryId
+        +string? UpgradeTrailMemoryId
+        +List~string~ MemoryIds
     }
 
     class ITopoGraphStore {
@@ -88,7 +93,6 @@ classDiagram
         +ResolveNodeIdCandidates(nodeId, strict) List~string~
         +LoadNodeKnowledgeMap() Dictionary~string, NodeKnowledge~
         +UpsertNodeKnowledge(nodeId, knowledge) void
-        +GetComputedManifest() ComputedManifest
     }
 
     class ITopoGraphApplicationService {
@@ -98,34 +102,33 @@ classDiagram
         +BuildTopology() TopologySnapshot
     }
 
-    IGovernanceEngine <|.. GovernanceEngine
+    class MemoryStore {
+        <<external>>
+        +Query(filter) List~MemoryEntry~
+        +RememberAsync(request) Task~MemoryEntry~
+        +UpdateTags(id, tags) void
+        +UpdateFreshness(id, freshness) void
+    }
 
+    IGovernanceEngine <|.. GovernanceEngine
     GovernanceEngine --> FreshnessChecker : delegates freshness
-    GovernanceEngine --> MemoryMaintainer : delegates maintenance
+    GovernanceEngine --> MemoryMaintainer : delegates evolve / condense
     GovernanceEngine --> ITopoGraphApplicationService : validates architecture
 
     FreshnessChecker --> MemoryStore : decays freshness
 
-    MemoryMaintainer --> MemoryStore : reads/writes memories
+    MemoryMaintainer --> MemoryStore : reads / writes memories
     MemoryMaintainer --> ITopoGraphStore : resolves node ids / writes node knowledge
     MemoryMaintainer --> ITopoGraphApplicationService : reads management snapshot
-    MemoryMaintainer --> GovernanceTargetNode : projects target node
-    ITopoGraphApplicationService --> TopologyManagementSnapshot : returns
-    TopologyManagementSnapshot --> TopologyModuleDefinition : contains
+    MemoryMaintainer --> KnowledgeEvolutionReport : returns
+    MemoryMaintainer --> KnowledgeCondenseResult : returns
+    KnowledgeEvolutionReport *-- KnowledgeEvolutionSuggestion : contains
+    ITopoGraphStore --> NodeKnowledge : persists
 ```
 
-## 类图说明
+## 说明
 
-- `GovernanceEngine` 只做门面和编排。
-- `FreshnessChecker` 只负责鲜活度衰减。
-- `MemoryMaintainer` 负责冲突检测、归档和知识压缩，但不拥有拓扑定义。
-- `ITopoGraphStore` 已收敛为轻量运行时仓库，只承担候选节点解析、计算依赖和节点知识写入。
-- `ITopoGraphApplicationService` 是治理读取管理模型与执行架构校验的唯一拓扑入口。
-- `GovernanceTargetNode` 是治理内部投影视图，来自 `TopologyManagementSnapshot.Modules`，不是新的注册模型。
-
-## 约束
-
-1. `Governance` 不重新引入图谱定义、模块注册或兼容运行时。
-2. `MemoryMaintainer` 必须通过 `GetManagementSnapshot()` 获取治理目标，而不是自行读取定义文件。
-3. `ValidateArchitecture()` 只能走 `ITopoGraphApplicationService`。
-4. 模块知识沉淀必须回写 `ITopoGraphStore.UpsertNodeKnowledge(...)`。
+- `evolve` 是治理建议接口，只分析升级机会，不直接落库。
+- `condense` 是治理执行接口，负责真正生成 identity、upgrade trail，并归档已沉淀记忆。
+- `Governance` 不拥有拓扑定义，只消费 `ITopoGraphApplicationService` 与 `ITopoGraphStore`。
+- `NodeKnowledge` 已稳定持久化 `IdentityMemoryId` 与 `UpgradeTrailMemoryId`，用于 `.agentic-os/knowledge/modules/<uid>/identity.md` 回写。

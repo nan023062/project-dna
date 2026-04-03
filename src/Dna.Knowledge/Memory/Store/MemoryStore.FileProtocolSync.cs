@@ -7,6 +7,7 @@ namespace Dna.Memory.Store;
 public partial class MemoryStore
 {
     private readonly MemoryFileStore _memoryFileStore = new();
+    private readonly SessionFileStore _sessionFileStore = new();
 
     private void SyncEntryToFileProtocol(MemoryEntry entry)
     {
@@ -14,26 +15,33 @@ public partial class MemoryStore
         if (string.IsNullOrWhiteSpace(agenticOsPath))
             return;
 
-        var existingPaths = GetMemoryFilePaths(agenticOsPath, entry.Id);
+        var memoryPaths = GetMemoryFilePaths(agenticOsPath, entry.Id);
+        var sessionPaths = GetSessionFilePaths(agenticOsPath, entry.Id);
 
         if (!ShouldPersistToFileProtocol(entry))
         {
-            DeleteMemoryFiles(existingPaths);
+            DeleteFiles(memoryPaths);
+            DeleteFiles(sessionPaths);
+            return;
+        }
+
+        if (entry.Stage == MemoryStage.ShortTerm)
+        {
+            var sessionFile = ToSessionFile(entry);
+            _sessionFileStore.SaveSession(agenticOsPath, sessionFile);
+            DeleteUnexpectedFiles(
+                sessionPaths,
+                Path.Combine(FileProtocolPaths.GetSessionRoot(agenticOsPath), sessionFile.Category!, $"{entry.Id}.md"));
+            DeleteFiles(memoryPaths);
             return;
         }
 
         var memoryFile = ToMemoryFile(entry);
         _memoryFileStore.SaveMemory(agenticOsPath, memoryFile);
-
-        var expectedPath = Path.Combine(
-            FileProtocolPaths.GetMemoryCategoryDir(agenticOsPath, memoryFile.Category!),
-            $"{entry.Id}.md");
-
-        foreach (var path in existingPaths)
-        {
-            if (!string.Equals(path, expectedPath, StringComparison.OrdinalIgnoreCase) && File.Exists(path))
-                File.Delete(path);
-        }
+        DeleteUnexpectedFiles(
+            memoryPaths,
+            Path.Combine(FileProtocolPaths.GetMemoryCategoryDir(agenticOsPath, memoryFile.Category!), $"{entry.Id}.md"));
+        DeleteFiles(sessionPaths);
     }
 
     private void DeleteEntryFileFromProtocol(string id)
@@ -42,11 +50,12 @@ public partial class MemoryStore
         if (string.IsNullOrWhiteSpace(agenticOsPath))
             return;
 
-        DeleteMemoryFiles(GetMemoryFilePaths(agenticOsPath, id));
+        DeleteFiles(GetMemoryFilePaths(agenticOsPath, id));
+        DeleteFiles(GetSessionFilePaths(agenticOsPath, id));
     }
 
     private static bool ShouldPersistToFileProtocol(MemoryEntry entry)
-        => entry.Stage != MemoryStage.ShortTerm && entry.Freshness != FreshnessStatus.Archived;
+        => entry.Freshness != FreshnessStatus.Archived;
 
     private static MemoryFile ToMemoryFile(MemoryEntry entry)
     {
@@ -67,6 +76,21 @@ public partial class MemoryStore
         };
     }
 
+    private static SessionFile ToSessionFile(MemoryEntry entry)
+    {
+        return new SessionFile
+        {
+            Id = entry.Id,
+            Type = entry.Type.ToString(),
+            Source = entry.Source.ToString(),
+            NodeId = entry.NodeId,
+            Tags = entry.Tags.Count > 0 ? [.. entry.Tags] : null,
+            CreatedAt = entry.CreatedAt,
+            Body = entry.Content,
+            Category = InferSessionCategory(entry)
+        };
+    }
+
     private static string InferMemoryCategory(MemoryType type)
     {
         return type switch
@@ -76,6 +100,17 @@ public partial class MemoryStore
             MemoryType.Procedural => FileProtocolPaths.ConventionsDir,
             _ => FileProtocolPaths.SummariesDir
         };
+    }
+
+    private static string InferSessionCategory(MemoryEntry entry)
+    {
+        if (entry.Type == MemoryType.Working ||
+            entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+        {
+            return FileProtocolPaths.TasksDir;
+        }
+
+        return FileProtocolPaths.ContextDir;
     }
 
     private static List<string> GetMemoryFilePaths(string agenticOsPath, string id)
@@ -90,7 +125,26 @@ public partial class MemoryStore
         ];
     }
 
-    private static void DeleteMemoryFiles(IEnumerable<string> paths)
+    private static List<string> GetSessionFilePaths(string agenticOsPath, string id)
+    {
+        var fileName = $"{id}.md";
+        return
+        [
+            Path.Combine(FileProtocolPaths.GetSessionRoot(agenticOsPath), FileProtocolPaths.TasksDir, fileName),
+            Path.Combine(FileProtocolPaths.GetSessionRoot(agenticOsPath), FileProtocolPaths.ContextDir, fileName)
+        ];
+    }
+
+    private static void DeleteUnexpectedFiles(IEnumerable<string> paths, string expectedPath)
+    {
+        foreach (var path in paths)
+        {
+            if (!string.Equals(path, expectedPath, StringComparison.OrdinalIgnoreCase) && File.Exists(path))
+                File.Delete(path);
+        }
+    }
+
+    private static void DeleteFiles(IEnumerable<string> paths)
     {
         foreach (var path in paths)
         {

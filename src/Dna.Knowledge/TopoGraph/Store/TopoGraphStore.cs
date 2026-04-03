@@ -79,7 +79,7 @@ public sealed class TopoGraphStore : ITopoGraphStore
             using var conn = CreateGraphConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
-                SELECT node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, memory_ids_json
+                SELECT node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, identity_memory_id, upgrade_trail_memory_id, memory_ids_json
                 FROM graph_node_knowledge
                 """;
 
@@ -94,7 +94,9 @@ public sealed class TopoGraphStore : ITopoGraphStore
                     ActiveTasks = DeserializeOrDefault(reader.IsDBNull(3) ? "[]" : reader.GetString(3), new List<string>()),
                     Facts = DeserializeOrDefault(reader.IsDBNull(4) ? "[]" : reader.GetString(4), new List<string>()),
                     TotalMemoryCount = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
-                    MemoryIds = DeserializeOrDefault(reader.IsDBNull(6) ? "[]" : reader.GetString(6), new List<string>())
+                    IdentityMemoryId = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    UpgradeTrailMemoryId = reader.IsDBNull(7) ? null : reader.GetString(7),
+                    MemoryIds = DeserializeOrDefault(reader.IsDBNull(8) ? "[]" : reader.GetString(8), new List<string>())
                 };
             }
 
@@ -114,15 +116,17 @@ public sealed class TopoGraphStore : ITopoGraphStore
             using var cmd = conn.CreateCommand();
             cmd.CommandText = """
                 INSERT INTO graph_node_knowledge
-                    (node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, memory_ids_json, updated_at)
+                    (node_id, identity, lessons_json, active_tasks_json, facts_json, total_memory_count, identity_memory_id, upgrade_trail_memory_id, memory_ids_json, updated_at)
                 VALUES
-                    (@node, @identity, @lessons, @tasks, @facts, @total, @memoryIds, @updatedAt)
+                    (@node, @identity, @lessons, @tasks, @facts, @total, @identityMemoryId, @upgradeTrailMemoryId, @memoryIds, @updatedAt)
                 ON CONFLICT(node_id) DO UPDATE SET
                     identity = excluded.identity,
                     lessons_json = excluded.lessons_json,
                     active_tasks_json = excluded.active_tasks_json,
                     facts_json = excluded.facts_json,
                     total_memory_count = excluded.total_memory_count,
+                    identity_memory_id = excluded.identity_memory_id,
+                    upgrade_trail_memory_id = excluded.upgrade_trail_memory_id,
                     memory_ids_json = excluded.memory_ids_json,
                     updated_at = excluded.updated_at
                 """;
@@ -132,6 +136,8 @@ public sealed class TopoGraphStore : ITopoGraphStore
             cmd.Parameters.AddWithValue("@tasks", JsonSerializer.Serialize(knowledge.ActiveTasks ?? [], JsonOpts));
             cmd.Parameters.AddWithValue("@facts", JsonSerializer.Serialize(knowledge.Facts ?? [], JsonOpts));
             cmd.Parameters.AddWithValue("@total", Math.Max(knowledge.TotalMemoryCount, 0));
+            cmd.Parameters.AddWithValue("@identityMemoryId", (object?)knowledge.IdentityMemoryId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@upgradeTrailMemoryId", (object?)knowledge.UpgradeTrailMemoryId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@memoryIds", JsonSerializer.Serialize(knowledge.MemoryIds ?? [], JsonOpts));
             cmd.Parameters.AddWithValue("@updatedAt", DateTime.UtcNow.ToString("O"));
             cmd.ExecuteNonQuery();
@@ -274,11 +280,16 @@ public sealed class TopoGraphStore : ITopoGraphStore
                 active_tasks_json TEXT NOT NULL DEFAULT '[]',
                 facts_json TEXT NOT NULL DEFAULT '[]',
                 total_memory_count INTEGER NOT NULL DEFAULT 0,
+                identity_memory_id TEXT NULL,
+                upgrade_trail_memory_id TEXT NULL,
                 memory_ids_json TEXT NOT NULL DEFAULT '[]',
                 updated_at TEXT NOT NULL
             );
             """;
         cmd.ExecuteNonQuery();
+
+        EnsureGraphNodeKnowledgeColumnLocked(conn, "identity_memory_id", "TEXT NULL");
+        EnsureGraphNodeKnowledgeColumnLocked(conn, "upgrade_trail_memory_id", "TEXT NULL");
     }
 
     private SqliteConnection CreateGraphConnection()
@@ -304,6 +315,23 @@ public sealed class TopoGraphStore : ITopoGraphStore
         {
             return fallback;
         }
+    }
+
+    private static void EnsureGraphNodeKnowledgeColumnLocked(SqliteConnection conn, string columnName, string columnType)
+    {
+        using var pragma = conn.CreateCommand();
+        pragma.CommandText = "PRAGMA table_info(graph_node_knowledge)";
+        using var reader = pragma.ExecuteReader();
+
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        using var alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE graph_node_knowledge ADD COLUMN {columnName} {columnType}";
+        alter.ExecuteNonQuery();
     }
 
     private static string? ResolveAgenticOsPathFromStore(string storePath)
@@ -384,6 +412,35 @@ public sealed class TopoGraphStore : ITopoGraphStore
             lines.Add(string.Empty);
             foreach (var fact in knowledge.Facts.Where(item => !string.IsNullOrWhiteSpace(item)))
                 lines.Add($"- {fact.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(knowledge.IdentityMemoryId) ||
+            !string.IsNullOrWhiteSpace(knowledge.UpgradeTrailMemoryId) ||
+            knowledge.TotalMemoryCount > 0 ||
+            knowledge.MemoryIds.Count > 0)
+        {
+            lines.Add(string.Empty);
+            lines.Add("## Governance");
+            lines.Add(string.Empty);
+
+            if (!string.IsNullOrWhiteSpace(knowledge.IdentityMemoryId))
+                lines.Add($"- Identity Memory: `{knowledge.IdentityMemoryId!.Trim()}`");
+
+            if (!string.IsNullOrWhiteSpace(knowledge.UpgradeTrailMemoryId))
+                lines.Add($"- Upgrade Trail: `{knowledge.UpgradeTrailMemoryId!.Trim()}`");
+
+            if (knowledge.TotalMemoryCount > 0)
+                lines.Add($"- Source Count: {knowledge.TotalMemoryCount}");
+
+            if (knowledge.MemoryIds.Count > 0)
+            {
+                lines.Add("- Referenced Memories:");
+                foreach (var memoryId in knowledge.MemoryIds.Take(20))
+                    lines.Add($"  - `{memoryId}`");
+
+                if (knowledge.MemoryIds.Count > 20)
+                    lines.Add($"  - ... (+{knowledge.MemoryIds.Count - 20} more)");
+            }
         }
 
         return string.Join(Environment.NewLine, lines) + Environment.NewLine;

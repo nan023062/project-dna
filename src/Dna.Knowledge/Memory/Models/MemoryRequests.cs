@@ -83,6 +83,7 @@ public sealed class MemoryFilter
     public List<string>? Disciplines { get; init; }
     public List<string>? Features { get; init; }
     public List<MemoryType>? Types { get; init; }
+    public List<MemoryStage>? Stages { get; init; }
     public List<string>? Tags { get; init; }
     public string? NodeId { get; init; }
     public FreshnessFilter Freshness { get; init; } = FreshnessFilter.FreshAndAging;
@@ -90,6 +91,7 @@ public sealed class MemoryFilter
     public int Offset { get; init; }
 
     public List<NodeType>? ResolvedNodeTypes => NodeTypes?.Distinct().ToList();
+    public List<MemoryStage>? ResolvedStages => Stages?.Distinct().ToList();
 }
 
 /// <summary>

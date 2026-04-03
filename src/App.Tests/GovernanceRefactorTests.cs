@@ -122,8 +122,72 @@ public sealed class GovernanceRefactorTests
         Assert.Equal("tech-core", result.NodeId);
         Assert.Equal("Core", result.NodeName);
         Assert.NotNull(result.NewIdentityMemoryId);
+        Assert.NotNull(result.UpgradeTrailMemoryId);
+        Assert.Equal(1, result.SessionSourceCount);
+        Assert.Equal(1, result.MemorySourceCount);
+        Assert.Contains("mem-task-1", result.SessionSourceMemoryIds);
+        Assert.Contains("mem-lesson-1", result.MemorySourceMemoryIds);
+        Assert.Contains("mem-task-1", result.ArchivedMemoryIds);
+        Assert.Equal(FreshnessStatus.Archived, harness.MemoryStore.GetById("mem-task-1")?.Freshness);
+        Assert.Equal(MemoryStage.LongTerm, harness.MemoryStore.GetById(result.UpgradeTrailMemoryId!)?.Stage);
         Assert.True(harness.TopoStore.KnowledgeByNodeId.ContainsKey("tech-core"));
+        Assert.Equal(result.NewIdentityMemoryId, harness.TopoStore.KnowledgeByNodeId["tech-core"].IdentityMemoryId);
+        Assert.Equal(result.UpgradeTrailMemoryId, harness.TopoStore.KnowledgeByNodeId["tech-core"].UpgradeTrailMemoryId);
         Assert.False(harness.TopologyService.TopologyRequested);
+    }
+
+    [Fact]
+    public async Task EvolveKnowledge_ShouldSuggestSessionToMemoryAndMemoryToKnowledge()
+    {
+        using var harness = GovernanceTestHarness.Create();
+
+        harness.MemoryStore.Insert(new MemoryEntry
+        {
+            Id = "mem-session-1",
+            Type = MemoryType.Working,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "{\"task\":\"stabilize governance api\",\"status\":\"doing\"}",
+            Summary = "stabilize governance api",
+            NodeId = "tech-core",
+            Tags = [WellKnownTags.ActiveTask],
+            Freshness = FreshnessStatus.Fresh,
+            Stage = MemoryStage.ShortTerm,
+            Importance = 0.85,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-30)
+        });
+
+        harness.MemoryStore.Insert(new MemoryEntry
+        {
+            Id = "mem-memory-1",
+            Type = MemoryType.Structural,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "{\"summary\":\"Core module identity\"}",
+            Summary = "Core module identity",
+            NodeId = "tech-core",
+            Tags = [WellKnownTags.Identity, "#decision"],
+            Freshness = FreshnessStatus.Fresh,
+            Stage = MemoryStage.LongTerm,
+            Importance = 0.9,
+            CreatedAt = DateTime.UtcNow.AddDays(-1)
+        });
+
+        var report = await harness.Engine.EvolveKnowledgeAsync("Core", 10);
+
+        Assert.Equal("tech-core", report.FilterNodeId);
+        Assert.Equal(1, report.SessionToMemoryCount);
+        Assert.Equal(1, report.MemoryToKnowledgeCount);
+
+        var sessionSuggestion = Assert.Single(report.Suggestions, item => item.MemoryId == "mem-session-1");
+        Assert.Equal(EvolutionKnowledgeLayer.Session, sessionSuggestion.CurrentLayer);
+        Assert.Equal(EvolutionKnowledgeLayer.Memory, sessionSuggestion.TargetLayer);
+        Assert.Contains("tech-core", sessionSuggestion.CandidateModuleIds);
+
+        var memorySuggestion = Assert.Single(report.Suggestions, item => item.MemoryId == "mem-memory-1");
+        Assert.Equal(EvolutionKnowledgeLayer.Memory, memorySuggestion.CurrentLayer);
+        Assert.Equal(EvolutionKnowledgeLayer.Knowledge, memorySuggestion.TargetLayer);
+        Assert.Contains("Core", memorySuggestion.CandidateModuleNames);
     }
 
     [Fact]

@@ -13,6 +13,14 @@ namespace Dna.Memory.Services;
 internal class MemoryWriter
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
+    private static readonly string[] LongTermTags =
+    [
+        "#decision",
+        "#lesson",
+        "#convention",
+        "#completed-task",
+        WellKnownTags.Identity
+    ];
     private readonly MemoryStore _store;
     private readonly ITopoGraphStore _topoGraphStore;
     private readonly EmbeddingService _embeddingService;
@@ -53,7 +61,7 @@ internal class MemoryWriter
             PathPatterns = request.PathPatterns ?? [],
             Tags = request.Tags,
             ParentId = request.ParentId,
-            Stage = request.Stage ?? MemoryStage.LongTerm,
+            Stage = ResolveStage(request),
             Importance = request.Importance,
             ExternalSourceUrl = request.ExternalSourceUrl,
             ExternalSourceId = request.ExternalSourceId,
@@ -161,6 +169,23 @@ internal class MemoryWriter
 
     private static string? Truncate(string? text, int maxLen)
         => text == null ? null : (text.Length <= maxLen ? text : text[..maxLen] + "…");
+
+    private static MemoryStage ResolveStage(RememberRequest request)
+    {
+        if (request.Stage.HasValue)
+            return request.Stage.Value;
+
+        if (request.Type == MemoryType.Working)
+            return MemoryStage.ShortTerm;
+
+        if (request.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+            return MemoryStage.ShortTerm;
+
+        if (request.Tags.Any(tag => LongTermTags.Contains(tag, StringComparer.OrdinalIgnoreCase)))
+            return MemoryStage.LongTerm;
+
+        return MemoryStage.LongTerm;
+    }
 
     private static void ValidateSystemTagPayload(List<string> tags, string content)
     {

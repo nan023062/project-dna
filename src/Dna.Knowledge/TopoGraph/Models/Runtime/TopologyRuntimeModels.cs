@@ -184,6 +184,8 @@ public class NodeKnowledge
     public List<string> ActiveTasks { get; set; } = [];
     public List<string> Facts { get; set; } = [];
     public int TotalMemoryCount { get; set; }
+    public string? IdentityMemoryId { get; set; }
+    public string? UpgradeTrailMemoryId { get; set; }
     public List<string> MemoryIds { get; set; } = [];
 }
 

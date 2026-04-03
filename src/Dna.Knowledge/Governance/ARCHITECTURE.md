@@ -6,66 +6,98 @@
 
 ## 模块定位
 
-`Dna.Knowledge.Governance` 是知识域最上层的治理与编排层。
+`Governance` 是知识域最上层的治理与编排模块。
 
-它不保存底层记忆数据，不维护图谱定义文件，也不扫描工作区。
-它只负责判断哪些记忆应该衰减、归档、压缩，并把稳定结果沉淀为模块知识。
-
-一句话概括：
-
-> Governance 负责“治理记忆，并驱动记忆向模块知识升级”。
-
-## 核心职责
-
-- 治理短期记忆与长期记忆的生命周期
-- 识别冲突、陈旧和可归档记忆
-- 将稳定记忆压缩为模块级知识摘要
-- 调用拓扑应用服务执行架构校验
-- 保持“短期记忆 -> 长期记忆 -> 模块知识”的升级链路
+它不保存底层记忆，不维护拓扑定义，也不直接扫描工作区。
+它负责判断哪些记忆该衰减、归档、升级，以及哪些结果应当沉淀为模块级知识。
 
 ## 依赖方向
 
 ```text
-Dna.Knowledge.Governance
+Governance
     ->
-Dna.Knowledge.Memory
+Memory
     ->
-Dna.Knowledge.TopoGraph
+TopoGraph
     ->
-Dna.Knowledge.Workspace
+Workspace
 ```
 
-约束如下：
+约束：
 
-- `Governance` 只编排下层能力，不回收下层实现职责
-- `Memory` 与 `TopoGraph` 不允许反向依赖 `Governance`
-- 模块知识最终落点在 `TopoGraph`，不是 `Memory`
+- `Governance` 只能编排下层能力，不能回收下层职责。
+- `Memory` / `TopoGraph` 不反向依赖 `Governance`。
+- 模块知识最终落在 `TopoGraph`，不是 `Memory`。
 
-## 与其他模块的边界
+## 核心职责
 
-- `Workspace`
-  - 提供真实文件与目录事实
-- `TopoGraph`
-  - 提供模块定义、关系和知识落位目标
-- `Memory`
-  - 提供记忆读写、检索和生命周期基础能力
-- `Governance`
-  - 负责压缩、归档、冲突治理和架构健康校验
+### 1. Freshness / Conflict / Archive
 
-## 对外提供
+- 检查记忆新鲜度
+- 标记冲突 identity
+- 归档长期失效的记忆
 
-- `IGovernanceEngine`
-- `GovernanceEngine`
-- `KnowledgeCondenseResult`
-- `GovernanceReport`
+### 2. Evolve
 
-## 当前架构结论
+`EvolveKnowledgeAsync(...)` 是治理建议接口。
 
-当前治理主链路已经完全切到新架构：
+它会：
 
-- 记忆治理直接消费 `MemoryStore`
-- 节点知识落位直接消费精简后的 `ITopoGraphStore`
-- 治理目标节点解析来自 `ITopoGraphApplicationService.GetManagementSnapshot()`
-- 架构校验统一通过 `ITopoGraphApplicationService.ValidateArchitecture()`
+- 从 `MemoryStore` 读取 `ShortTerm` / `LongTerm` 记忆
+- 通过 `ITopoGraphApplicationService.GetManagementSnapshot()` 解析候选模块
+- 输出两类建议：
+  - `session -> memory`
+  - `memory -> knowledge`
 
-因此，`Governance` 已不再承担任何旧图谱运行时兼容职责。
+它不会直接写文件，也不会直接修改 `.agentic-os`。
+
+### 3. Condense
+
+`CondenseNodeKnowledgeAsync(...)` 是治理执行接口。
+
+它会：
+
+- 读取某个节点的可用记忆
+- 生成新的 identity memory
+- 生成一条长期 `upgrade trail`
+- 归档已沉淀的工作型 / 情节型记忆
+- 通过 `ITopoGraphStore.UpsertNodeKnowledge(...)` 回写模块知识
+
+## 写回约定
+
+治理层的沉淀结果需要稳定暴露到两处：
+
+1. `graph_node_knowledge`
+   - `Identity`
+   - `Lessons`
+   - `ActiveTasks`
+   - `Facts`
+   - `TotalMemoryCount`
+   - `IdentityMemoryId`
+   - `UpgradeTrailMemoryId`
+   - `MemoryIds`
+
+2. `.agentic-os/knowledge/modules/<uid>/identity.md`
+   - `## Summary`
+   - `## Lessons`
+   - `## Active Tasks`
+   - `## Facts`
+   - `## Governance`
+
+`## Governance` 段至少包含：
+
+- `Identity Memory`
+- `Upgrade Trail`
+- `Source Count`
+- `Referenced Memories`
+
+## 架构结论
+
+当前治理主链已经从旧架构切到新架构：
+
+- 治理目标节点来自 `ITopoGraphApplicationService.GetManagementSnapshot()`
+- 模块知识落点来自 `ITopoGraphStore`
+- 治理建议通过 `evolve`
+- 治理执行通过 `condense`
+
+因此 `Governance` 现在承担的是“升级判断 + 沉淀编排”，而不再承担任何 legacy TopoGraph 兼容职责。

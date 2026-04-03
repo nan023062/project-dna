@@ -26,6 +26,7 @@ public sealed class DesktopProjectConfig
     public required string ServerBaseUrl { get; init; }
     public required string MetadataRootPath { get; init; }
     public required string MemoryRootPath { get; init; }
+    public required string SessionRootPath { get; init; }
     public required string KnowledgeRootPath { get; init; }
     public required string ConfigPath { get; init; }
     public required string LlmConfigPath { get; init; }
@@ -71,6 +72,7 @@ public sealed class DesktopProjectConfig
             ServerBaseUrl = serverBaseUrl,
             MetadataRootPath = metadataRootPath,
             MemoryRootPath = ResolveMemoryRootPath(normalizedRoot),
+            SessionRootPath = ResolveSessionRootPath(normalizedRoot),
             KnowledgeRootPath = ResolveKnowledgeRootPath(normalizedRoot),
             ConfigPath = configPath,
             LlmConfigPath = ResolveLlmConfigPath(normalizedRoot),
@@ -85,6 +87,7 @@ public sealed class DesktopProjectConfig
     {
         Directory.CreateDirectory(MetadataRootPath);
         Directory.CreateDirectory(MemoryRootPath);
+        Directory.CreateDirectory(SessionRootPath);
         Directory.CreateDirectory(KnowledgeRootPath);
         Directory.CreateDirectory(LogDirectoryPath);
         EnsureWorkspaceConfig();
@@ -133,6 +136,9 @@ public sealed class DesktopProjectConfig
 
     public static string ResolveMemoryRootPath(string projectRoot)
         => ProjectConfig.ResolveMemoryStorePath(ResolveMetadataRootPath(projectRoot));
+
+    public static string ResolveSessionRootPath(string projectRoot)
+        => ProjectConfig.ResolveSessionStorePath(ResolveMetadataRootPath(projectRoot));
 
     public static string ResolveKnowledgeRootPath(string projectRoot)
         => ProjectConfig.ResolveKnowledgeStorePath(ResolveMetadataRootPath(projectRoot));

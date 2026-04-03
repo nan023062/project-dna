@@ -730,6 +730,14 @@ public partial class MemoryStore : IDisposable
                 parameters.Add(($"@type{i}", filter.Types[i].ToString()));
         }
 
+        if (filter.ResolvedStages is { Count: > 0 })
+        {
+            var placeholders = filter.ResolvedStages.Select((_, i) => $"@stage{i}").ToList();
+            conditions.Add($"e.stage IN ({string.Join(",", placeholders)})");
+            for (var i = 0; i < filter.ResolvedStages.Count; i++)
+                parameters.Add(($"@stage{i}", filter.ResolvedStages[i].ToString()));
+        }
+
         if (filter.Disciplines is { Count: > 0 })
         {
             var placeholders = filter.Disciplines.Select((_, i) => $"@disc{i}").ToList();
@@ -911,19 +919,20 @@ public partial class MemoryStore : IDisposable
                 return;
 
             var memoryFileStore = new MemoryFileStore();
-            var files = memoryFileStore.LoadMemories(agenticOsPath);
-            if (files.Count == 0)
-                return;
+            var sessionFileStore = new SessionFileStore();
+            var memoryFiles = memoryFileStore.LoadMemories(agenticOsPath);
+            var sessionFiles = sessionFileStore.LoadSessions(agenticOsPath);
 
             // 收集文件中的所有 ID
             var fileIds = new HashSet<string>(StringComparer.Ordinal);
             var upserted = 0;
 
-            foreach (var file in files)
+            foreach (var entry in memoryFiles
+                         .Select(FileToLongTermMemoryEntry)
+                         .Concat(sessionFiles.Select(FileToShortTermMemoryEntry))
+                         .Where(entry => entry != null)
+                         .Cast<MemoryEntry>())
             {
-                var entry = FileToMemoryEntry(file);
-                if (entry == null) continue;
-
                 fileIds.Add(entry.Id);
 
                 // 检查 DB 中是否已存在
@@ -965,7 +974,7 @@ public partial class MemoryStore : IDisposable
         }
     }
 
-    private static MemoryEntry? FileToMemoryEntry(Dna.Knowledge.FileProtocol.Models.MemoryFile file)
+    private static MemoryEntry? FileToLongTermMemoryEntry(Dna.Knowledge.FileProtocol.Models.MemoryFile file)
     {
         if (string.IsNullOrWhiteSpace(file.Id))
             return null;
@@ -988,6 +997,30 @@ public partial class MemoryStore : IDisposable
             CreatedAt = file.CreatedAt,
             LastVerifiedAt = file.LastVerifiedAt,
             SupersededBy = file.SupersededBy
+        };
+    }
+
+    private static MemoryEntry? FileToShortTermMemoryEntry(Dna.Knowledge.FileProtocol.Models.SessionFile file)
+    {
+        if (string.IsNullOrWhiteSpace(file.Id))
+            return null;
+
+        var type = Enum.TryParse<MemoryType>(file.Type, ignoreCase: true, out var mt) ? mt : MemoryType.Working;
+        var source = Enum.TryParse<MemorySource>(file.Source, ignoreCase: true, out var ms) ? ms : MemorySource.Human;
+
+        return new MemoryEntry
+        {
+            Id = file.Id,
+            Type = type,
+            Source = source,
+            Content = file.Body,
+            Summary = null,
+            NodeId = file.NodeId,
+            Disciplines = [],
+            Tags = file.Tags ?? [],
+            Importance = 0.5,
+            Stage = MemoryStage.ShortTerm,
+            CreatedAt = file.CreatedAt
         };
     }
 

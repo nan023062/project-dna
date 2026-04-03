@@ -37,7 +37,7 @@ public static class AppLocalMemoryApiEndpoints
 
         group.MapGet("/query", (
             string? nodeTypes, string? disciplines, string? features,
-            string? types, string? tags, string? nodeId, string? freshness,
+            string? types, string? stages, string? tags, string? nodeId, string? freshness,
             int? limit, int? offset,
             [FromServices] IMemoryEngine memory,
             [FromServices] ProjectConfig config) =>
@@ -49,6 +49,7 @@ public static class AppLocalMemoryApiEndpoints
                 Disciplines = SplitOrNull(disciplines),
                 Features = SplitOrNull(features),
                 Types = ParseEnumList<MemoryType>(types),
+                Stages = ParseEnumList<MemoryStage>(stages),
                 Tags = SplitOrNull(tags),
                 NodeId = nodeId,
                 Freshness = ParseEnum<FreshnessFilter>(freshness) ?? FreshnessFilter.FreshAndAging,

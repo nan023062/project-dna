@@ -90,6 +90,67 @@ public sealed class FileProtocolSyncTests : IDisposable
     }
 
     [Fact]
+    public void MemoryStore_ShouldWriteShortTermMemoryIntoSessionFileProtocol()
+    {
+        var topoStore = new StubTopoGraphStore();
+        using var memoryStore = new MemoryStore(_services);
+        memoryStore.Initialize(Path.Combine(_agenticOsPath, "memory"));
+        memoryStore.BuildInternals(
+            _services.GetRequiredService<IHttpClientFactory>(),
+            new Dna.Core.Config.ProjectConfig(),
+            _services.GetRequiredService<ILoggerFactory>(),
+            topoStore);
+
+        memoryStore.Insert(new MemoryEntry
+        {
+            Id = "01JTESTSESSION0000000000000",
+            Type = MemoryType.Working,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "{\"task\":\"wire session\"}",
+            Summary = "wire session",
+            NodeId = "AgenticOs/Program/App",
+            Tags = [WellKnownTags.ActiveTask],
+            Stage = MemoryStage.ShortTerm,
+            Freshness = FreshnessStatus.Fresh,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        var sessionPath = Path.Combine(_agenticOsPath, "session", "tasks", "01JTESTSESSION0000000000000.md");
+        Assert.True(File.Exists(sessionPath));
+
+        memoryStore.UpdateFreshness("01JTESTSESSION0000000000000", FreshnessStatus.Archived);
+        Assert.False(File.Exists(sessionPath));
+    }
+
+    [Fact]
+    public void MemoryStore_ShouldRebuildShortTermMemoryFromSessionFiles()
+    {
+        var sessionStore = new SessionFileStore();
+        sessionStore.SaveSession(_agenticOsPath, new SessionFile
+        {
+            Id = "01JSESSIONREBUILD00000000000",
+            Type = "Working",
+            Source = "Ai",
+            NodeId = "AgenticOs/Program/App",
+            Tags = [WellKnownTags.ActiveTask],
+            CreatedAt = new DateTime(2026, 4, 3, 12, 0, 0, DateTimeKind.Utc),
+            Body = "{\"task\":\"rebuild from session\"}",
+            Category = FileProtocolPaths.TasksDir
+        });
+
+        using var memoryStore = new MemoryStore(_services);
+        memoryStore.Initialize(Path.Combine(_agenticOsPath, "memory"));
+
+        var rebuilt = memoryStore.GetById("01JSESSIONREBUILD00000000000");
+        Assert.NotNull(rebuilt);
+        Assert.Equal(MemoryStage.ShortTerm, rebuilt!.Stage);
+        Assert.Equal(MemoryType.Working, rebuilt.Type);
+        Assert.Equal("AgenticOs/Program/App", rebuilt.NodeId);
+        Assert.Contains(WellKnownTags.ActiveTask, rebuilt.Tags);
+    }
+
+    [Fact]
     public void TopoGraphApplicationService_RegisterModule_ShouldWriteModuleFiles_AndPreserveTeamType()
     {
         SeedKnowledgeSpace(includeTeamModule: false);
@@ -141,7 +202,11 @@ public sealed class FileProtocolSyncTests : IDisposable
                 }
             ],
             ActiveTasks = ["Move API to new facade"],
-            Facts = ["Reads .agentic-os directly"]
+            Facts = ["Reads .agentic-os directly"],
+            TotalMemoryCount = 3,
+            IdentityMemoryId = "mem-identity-1",
+            UpgradeTrailMemoryId = "mem-trail-1",
+            MemoryIds = ["mem-source-1", "mem-identity-1", "mem-trail-1"]
         });
 
         var identityPath = Path.Combine(_agenticOsPath, "knowledge", "modules", "AgenticOs", "Program", "App", "identity.md");
@@ -151,6 +216,10 @@ public sealed class FileProtocolSyncTests : IDisposable
         Assert.Contains("App runtime entrypoint.", content);
         Assert.Contains("## Lessons", content);
         Assert.Contains("Move API to new facade", content);
+        Assert.Contains("## Governance", content);
+        Assert.Contains("Identity Memory: `mem-identity-1`", content);
+        Assert.Contains("Upgrade Trail: `mem-trail-1`", content);
+        Assert.Contains("Source Count: 3", content);
     }
 
     private void SeedKnowledgeSpace(bool includeTeamModule)

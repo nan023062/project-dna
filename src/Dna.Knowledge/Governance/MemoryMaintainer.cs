@@ -95,6 +95,58 @@ internal class MemoryMaintainer
         return archivedCount;
     }
 
+    public Task<KnowledgeEvolutionReport> EvolveKnowledgeAsync(
+        string? nodeIdOrName = null,
+        int maxSuggestions = 50)
+    {
+        var limit = Math.Clamp(maxSuggestions, 1, 200);
+        var filterNode = string.IsNullOrWhiteSpace(nodeIdOrName)
+            ? null
+            : ResolveNode(nodeIdOrName.Trim())
+                ?? throw new InvalidOperationException($"节点不存在: {nodeIdOrName}");
+
+        var modules = GetGovernanceTargets().ToList();
+        var knowledgeMap = _topoGraphStore.LoadNodeKnowledgeMap();
+        var candidates = _memoryStore.Query(new MemoryFilter
+        {
+            Freshness = FreshnessFilter.FreshAndAging,
+            Limit = Math.Clamp(limit * 10, 100, 2000)
+        })
+        .OrderByDescending(entry => entry.Importance)
+        .ThenByDescending(entry => entry.CreatedAt)
+        .ToList();
+
+        var suggestions = new List<KnowledgeEvolutionSuggestion>();
+        foreach (var entry in candidates)
+        {
+            var suggestion = TryBuildSessionToMemorySuggestion(entry, filterNode, modules)
+                ?? TryBuildMemoryToKnowledgeSuggestion(entry, filterNode, modules, knowledgeMap);
+            if (suggestion != null)
+                suggestions.Add(suggestion);
+        }
+
+        var ordered = suggestions
+            .OrderByDescending(item => item.Confidence)
+            .ThenByDescending(item => item.TargetLayer)
+            .ThenBy(item => item.NodeName ?? item.NodeId ?? item.MemoryId, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToList();
+
+        return Task.FromResult(new KnowledgeEvolutionReport
+        {
+            GeneratedAt = DateTime.UtcNow,
+            FilterNodeId = filterNode?.Id,
+            FilterNodeName = filterNode?.Name,
+            SessionToMemoryCount = ordered.Count(item =>
+                item.CurrentLayer == EvolutionKnowledgeLayer.Session &&
+                item.TargetLayer == EvolutionKnowledgeLayer.Memory),
+            MemoryToKnowledgeCount = ordered.Count(item =>
+                item.CurrentLayer == EvolutionKnowledgeLayer.Memory &&
+                item.TargetLayer == EvolutionKnowledgeLayer.Knowledge),
+            Suggestions = ordered
+        });
+    }
+
     /// <summary>
     /// 按模块压缩记忆：将短期记忆提炼为模块 Identity，并归档已提炼的 Episodic/Working 记忆。
     /// </summary>
@@ -121,6 +173,13 @@ internal class MemoryMaintainer
             .ThenByDescending(m => m.CreatedAt)
             .ToList();
 
+        var sessionSource = source
+            .Where(m => m.Stage == MemoryStage.ShortTerm)
+            .ToList();
+        var memorySource = source
+            .Where(m => m.Stage != MemoryStage.ShortTerm)
+            .ToList();
+
         if (source.Count == 0)
         {
             return new KnowledgeCondenseResult
@@ -128,6 +187,8 @@ internal class MemoryMaintainer
                 NodeId = node.Id,
                 NodeName = node.Name,
                 SourceCount = 0,
+                SessionSourceCount = 0,
+                MemorySourceCount = 0,
                 ArchivedCount = 0,
                 Summary = "无可压缩记忆"
             };
@@ -148,9 +209,12 @@ internal class MemoryMaintainer
         };
 
         var condensed = await _memoryStore.RememberAsync(identityRequest);
+        var upgradeTrail = await _memoryStore.RememberAsync(
+            BuildCondenseTrailRequest(node, sessionSource, memorySource, condensed));
 
         // 归档已提炼的短期记忆（避免持续膨胀）
         var archivedCount = 0;
+        var archivedMemoryIds = new List<string>();
         foreach (var m in source)
         {
             if (m.Id == condensed.Id) continue;
@@ -158,6 +222,7 @@ internal class MemoryMaintainer
             {
                 _memoryStore.UpdateFreshness(m.Id, FreshnessStatus.Archived);
                 archivedCount++;
+                archivedMemoryIds.Add(m.Id);
             }
         }
 
@@ -174,22 +239,37 @@ internal class MemoryMaintainer
             if (old.Freshness != FreshnessStatus.Archived)
             {
                 _memoryStore.UpdateFreshness(old.Id, FreshnessStatus.Archived);
+                archivedMemoryIds.Add(old.Id);
             }
         }
 
-        var knowledgeView = BuildNodeKnowledgeView(identity, source, condensed);
+        var knowledgeView = BuildNodeKnowledgeView(identity, source, condensed, upgradeTrail);
         _topoGraphStore.UpsertNodeKnowledge(node.Id, knowledgeView);
 
         _logger.LogInformation("模块知识压缩完成: node={Node} source={Source} archived={Archived} identity={IdentityId}",
             node.Name, source.Count, archivedCount, condensed.Id);
+
+        _logger.LogDebug(
+            "condense-upgrade-trail: node={Node} sessionSourceIds={SessionIds} memorySourceIds={MemoryIds} archivedIds={ArchivedIds} trail={TrailId}",
+            node.Name,
+            string.Join(",", sessionSource.Select(m => m.Id)),
+            string.Join(",", memorySource.Select(m => m.Id)),
+            string.Join(",", archivedMemoryIds.Distinct(StringComparer.OrdinalIgnoreCase)),
+            upgradeTrail.Id);
 
         return new KnowledgeCondenseResult
         {
             NodeId = node.Id,
             NodeName = node.Name,
             SourceCount = source.Count,
+            SessionSourceCount = sessionSource.Count,
+            MemorySourceCount = memorySource.Count,
             ArchivedCount = archivedCount,
             NewIdentityMemoryId = condensed.Id,
+            UpgradeTrailMemoryId = upgradeTrail.Id,
+            SessionSourceMemoryIds = [.. sessionSource.Select(m => m.Id)],
+            MemorySourceMemoryIds = [.. memorySource.Select(m => m.Id)],
+            ArchivedMemoryIds = [.. archivedMemoryIds.Distinct(StringComparer.OrdinalIgnoreCase)],
             Summary = identity.Summary
         };
     }
@@ -236,6 +316,200 @@ internal class MemoryMaintainer
     private IEnumerable<GovernanceTargetNode> GetGovernanceTargets()
     {
         return _topology.GetManagementSnapshot().Modules.Select(ToGovernanceTarget);
+    }
+
+    private KnowledgeEvolutionSuggestion? TryBuildSessionToMemorySuggestion(
+        MemoryEntry entry,
+        GovernanceTargetNode? filterNode,
+        IReadOnlyList<GovernanceTargetNode> modules)
+    {
+        if (entry.Stage != MemoryStage.ShortTerm)
+            return null;
+
+        if (entry.Freshness == FreshnessStatus.Archived ||
+            entry.Tags.Contains("#condensed", StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        var relatedModules = ResolveCandidateModules(entry, modules);
+        if (relatedModules.Count == 0 || !MatchesFilter(entry, relatedModules, filterNode))
+            return null;
+
+        var looksStable =
+            entry.Type is MemoryType.Structural or MemoryType.Procedural ||
+            entry.Importance >= 0.7 ||
+            entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase);
+        if (!looksStable)
+            return null;
+
+        var reasons = new List<string>();
+        var confidence = 0.58;
+
+        if (!string.IsNullOrWhiteSpace(entry.NodeId))
+        {
+            reasons.Add("已绑定具体模块");
+            confidence += 0.12;
+        }
+
+        if (entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+        {
+            reasons.Add("包含可延续的任务上下文");
+            confidence += 0.1;
+        }
+
+        if (entry.Type is MemoryType.Structural or MemoryType.Procedural)
+        {
+            reasons.Add("内容已接近稳定规则或约定");
+            confidence += 0.12;
+        }
+
+        if (entry.Importance >= 0.7)
+        {
+            reasons.Add("重要度较高");
+            confidence += 0.08;
+        }
+
+        return new KnowledgeEvolutionSuggestion
+        {
+            MemoryId = entry.Id,
+            NodeId = entry.NodeId,
+            NodeName = relatedModules[0].Name,
+            Type = entry.Type,
+            Stage = entry.Stage,
+            CurrentLayer = EvolutionKnowledgeLayer.Session,
+            TargetLayer = EvolutionKnowledgeLayer.Memory,
+            Summary = entry.Summary,
+            Reason = string.Join("；", reasons),
+            Confidence = Math.Round(Math.Min(confidence, 0.95), 3),
+            Tags = [.. entry.Tags],
+            CandidateModuleIds = [.. relatedModules.Select(module => module.Id)],
+            CandidateModuleNames = [.. relatedModules.Select(module => module.Name)]
+        };
+    }
+
+    private KnowledgeEvolutionSuggestion? TryBuildMemoryToKnowledgeSuggestion(
+        MemoryEntry entry,
+        GovernanceTargetNode? filterNode,
+        IReadOnlyList<GovernanceTargetNode> modules,
+        IReadOnlyDictionary<string, NodeKnowledge> knowledgeMap)
+    {
+        if (entry.Stage != MemoryStage.LongTerm ||
+            string.IsNullOrWhiteSpace(entry.NodeId) ||
+            entry.Freshness == FreshnessStatus.Archived ||
+            entry.Tags.Contains("#upgrade-trail", StringComparer.OrdinalIgnoreCase) ||
+            entry.Tags.Contains("#conflict", StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        var relatedModules = ResolveCandidateModules(entry, modules);
+        if (relatedModules.Count == 0 || !MatchesFilter(entry, relatedModules, filterNode))
+            return null;
+
+        var primaryNodeId = relatedModules[0].Id;
+        if (knowledgeMap.TryGetValue(primaryNodeId, out var knowledge) &&
+            knowledge.MemoryIds.Contains(entry.Id, StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        var isKnowledgeCandidate =
+            entry.Tags.Contains(WellKnownTags.Identity, StringComparer.OrdinalIgnoreCase) ||
+            entry.Tags.Contains(WellKnownTags.Lesson, StringComparer.OrdinalIgnoreCase) ||
+            entry.Tags.Contains("#decision", StringComparer.OrdinalIgnoreCase) ||
+            entry.Tags.Contains("#convention", StringComparer.OrdinalIgnoreCase) ||
+            entry.Type is MemoryType.Structural or MemoryType.Procedural ||
+            entry.Importance >= 0.8;
+        if (!isKnowledgeCandidate)
+            return null;
+
+        var reasons = new List<string> { "已是长期记忆" };
+        var confidence = 0.62;
+
+        if (entry.Tags.Contains(WellKnownTags.Identity, StringComparer.OrdinalIgnoreCase))
+        {
+            reasons.Add("包含模块身份信息");
+            confidence += 0.16;
+        }
+
+        if (entry.Tags.Contains(WellKnownTags.Lesson, StringComparer.OrdinalIgnoreCase))
+        {
+            reasons.Add("包含可复用教训");
+            confidence += 0.08;
+        }
+
+        if (entry.Type is MemoryType.Structural or MemoryType.Procedural)
+        {
+            reasons.Add("语义接近结构化知识");
+            confidence += 0.08;
+        }
+
+        if (entry.Importance >= 0.8)
+        {
+            reasons.Add("重要度已达到治理阈值");
+            confidence += 0.06;
+        }
+
+        return new KnowledgeEvolutionSuggestion
+        {
+            MemoryId = entry.Id,
+            NodeId = entry.NodeId,
+            NodeName = relatedModules[0].Name,
+            Type = entry.Type,
+            Stage = entry.Stage,
+            CurrentLayer = EvolutionKnowledgeLayer.Memory,
+            TargetLayer = EvolutionKnowledgeLayer.Knowledge,
+            Summary = entry.Summary,
+            Reason = string.Join("；", reasons),
+            Confidence = Math.Round(Math.Min(confidence, 0.97), 3),
+            Tags = [.. entry.Tags],
+            CandidateModuleIds = [.. relatedModules.Select(module => module.Id)],
+            CandidateModuleNames = [.. relatedModules.Select(module => module.Name)]
+        };
+    }
+
+    private static bool MatchesFilter(
+        MemoryEntry entry,
+        IReadOnlyList<GovernanceTargetNode> relatedModules,
+        GovernanceTargetNode? filterNode)
+    {
+        if (filterNode == null)
+            return true;
+
+        if (string.Equals(entry.NodeId, filterNode.Id, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return relatedModules.Any(module =>
+            string.Equals(module.Id, filterNode.Id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static List<GovernanceTargetNode> ResolveCandidateModules(
+        MemoryEntry entry,
+        IReadOnlyList<GovernanceTargetNode> modules)
+    {
+        var results = new List<GovernanceTargetNode>();
+
+        if (!string.IsNullOrWhiteSpace(entry.NodeId))
+        {
+            var direct = modules.FirstOrDefault(module =>
+                string.Equals(module.Id, entry.NodeId, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(module.Name, entry.NodeId, StringComparison.OrdinalIgnoreCase));
+            if (direct != null)
+                results.Add(direct);
+        }
+
+        if (entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+        {
+            var payload = ParseActiveTaskPayload(entry);
+            foreach (var related in payload?.RelatedModules ?? [])
+            {
+                var match = modules.FirstOrDefault(module =>
+                    string.Equals(module.Id, related, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(module.Name, related, StringComparison.OrdinalIgnoreCase));
+                if (match != null &&
+                    results.All(item => !string.Equals(item.Id, match.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    results.Add(match);
+                }
+            }
+        }
+
+        return results;
     }
 
     private static GovernanceTargetNode ToGovernanceTarget(TopologyModuleDefinition module)
@@ -356,10 +630,69 @@ internal class MemoryMaintainer
         }
     }
 
+    private static RememberRequest BuildCondenseTrailRequest(
+        GovernanceTargetNode node,
+        List<MemoryEntry> sessionSource,
+        List<MemoryEntry> memorySource,
+        MemoryEntry condensed)
+    {
+        return new RememberRequest
+        {
+            Type = MemoryType.Episodic,
+            NodeType = node.Type,
+            Source = MemorySource.System,
+            NodeId = node.Id,
+            Disciplines = string.IsNullOrWhiteSpace(node.Discipline) ? [] : [node.Discipline],
+            Tags = ["#condensed", "#completed-task", "#upgrade-trail"],
+            Stage = MemoryStage.LongTerm,
+            Summary = $"Condense trail for {node.Name}",
+            Content = BuildCondenseTrailContent(node, sessionSource, memorySource, condensed),
+            Importance = 0.7
+        };
+    }
+
+    private static string BuildCondenseTrailContent(
+        GovernanceTargetNode node,
+        List<MemoryEntry> sessionSource,
+        List<MemoryEntry> memorySource,
+        MemoryEntry condensed)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Condense Trail: {node.Name}");
+        sb.AppendLine();
+        sb.AppendLine($"Generated identity memory `{condensed.Id}` from {sessionSource.Count + memorySource.Count} source memories.");
+        sb.AppendLine();
+        sb.AppendLine("## Session Sources");
+        if (sessionSource.Count == 0)
+        {
+            sb.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var entry in sessionSource)
+                sb.AppendLine($"- [{entry.Id}] {entry.Summary ?? entry.Content}");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("## Long-Term Sources");
+        if (memorySource.Count == 0)
+        {
+            sb.AppendLine("- None");
+        }
+        else
+        {
+            foreach (var entry in memorySource)
+                sb.AppendLine($"- [{entry.Id}] {entry.Summary ?? entry.Content}");
+        }
+
+        return sb.ToString().Trim();
+    }
+
     private static NodeKnowledge BuildNodeKnowledgeView(
         IdentityPayload identity,
         List<MemoryEntry> source,
-        MemoryEntry condensed)
+        MemoryEntry condensed,
+        MemoryEntry upgradeTrail)
     {
         var lessons = source
             .Where(m => m.Tags.Contains(WellKnownTags.Lesson, StringComparer.OrdinalIgnoreCase))
@@ -394,7 +727,7 @@ internal class MemoryMaintainer
 
         var memoryIds = source
             .Select(m => m.Id)
-            .Concat([condensed.Id])
+            .Concat([condensed.Id, upgradeTrail.Id])
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(200)
             .ToList();
@@ -406,6 +739,8 @@ internal class MemoryMaintainer
             ActiveTasks = activeTasks,
             Facts = facts,
             TotalMemoryCount = source.Count,
+            IdentityMemoryId = condensed.Id,
+            UpgradeTrailMemoryId = upgradeTrail.Id,
             MemoryIds = memoryIds
         };
     }

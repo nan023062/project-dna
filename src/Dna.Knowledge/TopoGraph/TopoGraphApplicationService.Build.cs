@@ -201,6 +201,8 @@ public sealed partial class TopoGraphApplicationService
             ActiveTasks = persisted?.ActiveTasks ?? [],
             Facts = persisted?.Facts ?? [.. module.Knowledge.Facts],
             TotalMemoryCount = persisted?.TotalMemoryCount ?? 0,
+            IdentityMemoryId = persisted?.IdentityMemoryId,
+            UpgradeTrailMemoryId = persisted?.UpgradeTrailMemoryId,
             MemoryIds = persisted?.MemoryIds ?? [.. module.Knowledge.MemoryIds]
         };
     }

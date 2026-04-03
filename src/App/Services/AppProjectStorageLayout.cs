@@ -6,6 +6,7 @@ namespace Dna.App.Services;
 internal sealed record AppProjectStorageLayout(
     string MetadataRootPath,
     string MemoryRootPath,
+    string SessionRootPath,
     string KnowledgeRootPath,
     int MigratedMemoryFileCount,
     int MigratedKnowledgeFileCount);
@@ -27,10 +28,12 @@ internal static class AppProjectStoragePaths
 
         var normalizedMetadataRoot = Path.GetFullPath(metadataRootPath);
         var memoryRoot = ProjectConfig.ResolveMemoryStorePath(normalizedMetadataRoot);
+        var sessionRoot = ProjectConfig.ResolveSessionStorePath(normalizedMetadataRoot);
         var knowledgeRoot = ProjectConfig.ResolveKnowledgeStorePath(normalizedMetadataRoot);
 
         Directory.CreateDirectory(normalizedMetadataRoot);
         Directory.CreateDirectory(memoryRoot);
+        Directory.CreateDirectory(sessionRoot);
         Directory.CreateDirectory(knowledgeRoot);
 
         var migratedMemoryFileCount = 0;
@@ -66,6 +69,7 @@ internal static class AppProjectStoragePaths
         return new AppProjectStorageLayout(
             normalizedMetadataRoot,
             memoryRoot,
+            sessionRoot,
             knowledgeRoot,
             migratedMemoryFileCount,
             migratedKnowledgeFileCount);
