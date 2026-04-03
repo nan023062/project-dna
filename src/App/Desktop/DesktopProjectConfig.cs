@@ -9,11 +9,6 @@ public sealed class DesktopProjectConfig
     private const string MetadataDirectoryName = ".agentic-os";
     private const string ProjectConfigFileName = "project.json";
     private const string LlmConfigFileName = "llm.json";
-    private const string WorkspaceConfigFileName = "app-workspaces.json";
-    private const string WorkspaceSnapshotFileName = "app-workspaces.snapshot.json";
-    private const string AgentShellDirectoryName = "agent-shell";
-    private const string AgentShellStateFileName = "agent-shell-state.json";
-    private const string AgentShellSnapshotFileName = "app-agent-shell.snapshot.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,9 +26,6 @@ public sealed class DesktopProjectConfig
     public required string ConfigPath { get; init; }
     public required string LlmConfigPath { get; init; }
     public required string LogDirectoryPath { get; init; }
-    public required string WorkspaceConfigPath { get; init; }
-    public required string AgentShellRootPath { get; init; }
-    public required string AgentShellStatePath { get; init; }
 
     public static DesktopProjectConfig Load(string projectRoot)
     {
@@ -57,10 +49,7 @@ public sealed class DesktopProjectConfig
             KnowledgeRootPath = ResolveKnowledgeRootPath(normalizedRoot),
             ConfigPath = configPath,
             LlmConfigPath = ResolveLlmConfigPath(normalizedRoot),
-            LogDirectoryPath = ResolveLogDirectoryPath(normalizedRoot),
-            WorkspaceConfigPath = ResolveWorkspaceConfigPath(normalizedRoot),
-            AgentShellRootPath = ResolveAgentShellRootPath(normalizedRoot),
-            AgentShellStatePath = ResolveAgentShellStatePath(normalizedRoot)
+            LogDirectoryPath = ResolveLogDirectoryPath(normalizedRoot)
         };
     }
 
@@ -71,45 +60,16 @@ public sealed class DesktopProjectConfig
         Directory.CreateDirectory(SessionRootPath);
         Directory.CreateDirectory(KnowledgeRootPath);
         Directory.CreateDirectory(LogDirectoryPath);
-        EnsureWorkspaceConfig();
         EnsureLlmConfig();
-        EnsureAgentShellStorage();
-    }
-
-    public void EnsureWorkspaceConfig()
-    {
-        Directory.CreateDirectory(MetadataRootPath);
-        if (File.Exists(WorkspaceConfigPath))
-            return;
-
-        if (TryCopyFromCandidates(
-                WorkspaceConfigPath,
-                ResolveWorkspaceSnapshotPath(ProjectRoot)))
-        {
-            return;
-        }
-
-        var dir = Path.GetDirectoryName(WorkspaceConfigPath)
-                  ?? throw new InvalidOperationException("Unable to resolve workspace config directory.");
-        Directory.CreateDirectory(dir);
-        File.WriteAllText(WorkspaceConfigPath, JsonSerializer.Serialize(CreateInitialWorkspaceState(), JsonOptions));
     }
 
     public void EnsureLlmConfig()
     {
-        Directory.CreateDirectory(MetadataRootPath);
+        var dir = Path.GetDirectoryName(LlmConfigPath);
+        if (!string.IsNullOrWhiteSpace(dir))
+            Directory.CreateDirectory(dir);
+            
         RuntimeLlmConfigStore.LoadOrCreate(LlmConfigPath);
-    }
-
-    public void EnsureAgentShellStorage()
-    {
-        Directory.CreateDirectory(AgentShellRootPath);
-        if (File.Exists(AgentShellStatePath))
-            return;
-
-        TryCopyFromCandidates(
-            AgentShellStatePath,
-            ResolveAgentShellSnapshotPath(ProjectRoot));
     }
 
     public static string ResolveMetadataRootPath(string projectRoot)
@@ -131,63 +91,9 @@ public sealed class DesktopProjectConfig
         => Path.Combine(ResolveMetadataRootPath(projectRoot), "logs");
 
     public static string ResolveLlmConfigPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), LlmConfigFileName);
-
-    public static string ResolveWorkspaceConfigPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), WorkspaceConfigFileName);
-
-    public static string ResolveAgentShellRootPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), AgentShellDirectoryName);
-
-    public static string ResolveAgentShellStatePath(string projectRoot)
-        => Path.Combine(ResolveAgentShellRootPath(projectRoot), AgentShellStateFileName);
-
-    private WorkspaceConfigState CreateInitialWorkspaceState()
     {
-        var mode = InferWorkspaceMode(ServerBaseUrl);
-        return new WorkspaceConfigState
-        {
-            CurrentWorkspaceId = "default",
-            Workspaces =
-            [
-                new WorkspaceConfigRecord
-                {
-                    Id = "default",
-                    Name = ProjectName,
-                    Mode = mode,
-                    ServerBaseUrl = ServerBaseUrl,
-                    WorkspaceRoot = ProjectRoot,
-                    UpdatedAtUtc = DateTime.UtcNow
-                }
-            ]
-        };
-    }
-
-    private static string InferWorkspaceMode(string serverBaseUrl)
-    {
-        _ = serverBaseUrl;
-        return "personal";
-    }
-
-    private static string ResolveWorkspaceSnapshotPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), WorkspaceSnapshotFileName);
-
-    private static string ResolveAgentShellSnapshotPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), AgentShellSnapshotFileName);
-
-    private static bool TryCopyFromCandidates(string targetPath, params string[] candidatePaths)
-    {
-        foreach (var candidatePath in candidatePaths)
-        {
-            if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
-                continue;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-            File.Copy(candidatePath, targetPath, overwrite: false);
-            return true;
-        }
-
-        return false;
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(userProfile, MetadataDirectoryName, LlmConfigFileName);
     }
 
     private static AgenticOsConfig? TryReadOptionalConfig(string configPath)
@@ -222,21 +128,5 @@ public sealed class DesktopProjectConfig
     {
         public string? ProjectName { get; init; }
         public string? ServerBaseUrl { get; init; }
-    }
-
-    private sealed class WorkspaceConfigState
-    {
-        public string CurrentWorkspaceId { get; init; } = "default";
-        public List<WorkspaceConfigRecord> Workspaces { get; init; } = [];
-    }
-
-    private sealed class WorkspaceConfigRecord
-    {
-        public string Id { get; init; } = "default";
-        public string Name { get; init; } = string.Empty;
-        public string Mode { get; init; } = "personal";
-        public string ServerBaseUrl { get; init; } = string.Empty;
-        public string WorkspaceRoot { get; init; } = string.Empty;
-        public DateTime UpdatedAtUtc { get; init; }
     }
 }

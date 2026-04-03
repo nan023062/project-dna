@@ -20,7 +20,6 @@ public sealed class AppRuntimeOptions
     public string WorkspaceRoot { get; init; } = Directory.GetCurrentDirectory();
     public string? MetadataRootPath { get; init; }
     public string? WorkspaceConfigPath { get; init; }
-    public string? AgentShellRootPath { get; init; }
     public DateTime StartedAtUtc { get; init; } = DateTime.UtcNow;
 
     private static string NormalizeBaseUrl(string? raw)

@@ -10,11 +10,6 @@ public partial class MainWindow
 
     private bool _isRefreshingLogTail;
 
-    private async void RefreshLogTail_OnClick(object? sender, RoutedEventArgs e)
-    {
-        await RefreshLogTailAsync();
-    }
-
     private async Task RefreshLogTailAsync()
     {
         if (_isRefreshingLogTail)

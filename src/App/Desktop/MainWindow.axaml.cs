@@ -708,11 +708,6 @@ public partial class MainWindow : Window
         await RefreshChatShellAsync();
     }
 
-    private async void RefreshChatShell_OnClick(object? sender, RoutedEventArgs e)
-    {
-        await RefreshChatShellAsync();
-    }
-
     private async void ToggleChatSessions_OnClick(object? sender, RoutedEventArgs e)
     {
         if (_isViewingChatSessions)
@@ -1214,7 +1209,6 @@ public partial class MainWindow : Window
         var hasProvider = ChatProviderBox.SelectedItem is ChatProviderOption || !string.IsNullOrWhiteSpace(_activeChatProviderId);
 
         ChatProviderBox.IsEnabled = runtimeReady && !_isChatStreaming;
-        ChatRefreshButton.IsEnabled = runtimeReady && !_isChatStreaming;
         ChatSessionsToggleButton.IsEnabled = runtimeReady && !_isChatStreaming;
         ChatNewButton.IsEnabled = runtimeReady && !_isChatStreaming;
         ChatModeAskButton.IsEnabled = runtimeReady && !_isChatStreaming;

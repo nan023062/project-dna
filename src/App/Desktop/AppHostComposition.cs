@@ -1,6 +1,5 @@
 using Dna.App.Interfaces.Api;
 using Dna.App.Services;
-using Dna.App.Services.AgentShell;
 using Dna.App.Services.Tooling;
 using Dna.Core.Config;
 using Dna.Knowledge;
@@ -17,8 +16,7 @@ internal static class AppHostComposition
         string projectName,
         string workspaceRoot,
         string metadataRootPath,
-        string? workspaceConfigPath,
-        string? agentShellRootPath)
+        string? workspaceConfigPath)
     {
         services.AddSingleton(new AppRuntimeOptions
         {
@@ -26,8 +24,7 @@ internal static class AppHostComposition
             ProjectName = projectName,
             WorkspaceRoot = workspaceRoot,
             MetadataRootPath = metadataRootPath,
-            WorkspaceConfigPath = workspaceConfigPath,
-            AgentShellRootPath = agentShellRootPath
+            WorkspaceConfigPath = workspaceConfigPath
         });
 
         services.AddSingleton<ProjectConfig>();
@@ -35,14 +32,6 @@ internal static class AppHostComposition
         services.AddHostedService<AppLocalRuntimeInitializer>();
         services.AddSingleton<AppWorkspaceStore>();
         services.AddSingleton<AppProjectLlmConfigService>();
-        services.AddSingleton<IAgentShellContext, AppAgentShellContext>();
-        services.AddSingleton(sp => new AgentShellStorageOptions
-        {
-            RootDirectory = string.IsNullOrWhiteSpace(agentShellRootPath)
-                ? Path.Combine(metadataRootPath, "agent-shell")
-                : Path.GetFullPath(agentShellRootPath)
-        });
-        services.AddSingleton<AgentShellService>();
 
         services.AddHttpClient<DnaServerApi>((_, app) =>
         {
@@ -65,7 +54,6 @@ internal static class AppHostComposition
         web.MapAppLlmConfigEndpoints();
         web.MapAppWorkspaceEndpoints();
         web.MapAppDiscoveryEndpoints();
-        web.MapAppAgentProxyEndpoints();
         web.MapAppToolingEndpoints();
         web.MapMcp("/mcp");
     }

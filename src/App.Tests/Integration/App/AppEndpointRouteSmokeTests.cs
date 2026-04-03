@@ -39,7 +39,6 @@ public class AppEndpointRouteSmokeTests
         app.MapAppLlmConfigEndpoints();
         app.MapAppWorkspaceEndpoints();
         app.MapAppDiscoveryEndpoints();
-        app.MapAppAgentProxyEndpoints();
         app.MapAppToolingEndpoints();
 
         var routes = ((IEndpointRouteBuilder)app).DataSources
@@ -72,18 +71,6 @@ public class AppEndpointRouteSmokeTests
         AssertRoute(routes, "/api/memory/{id}", "PUT");
         AssertRoute(routes, "/api/memory/{id}", "DELETE");
         AssertRoute(routes, "/api/memory/remember", "POST");
-
-        AssertRoute(routes, "/agent/chat", "POST");
-        AssertRoute(routes, "/agent/sessions", "GET");
-        AssertRoute(routes, "/agent/sessions/{id}", "GET");
-        AssertRoute(routes, "/agent/sessions/save", "POST");
-        AssertRoute(routes, "/agent/providers", "GET");
-        AssertRoute(routes, "/agent/providers", "POST");
-        AssertRoute(routes, "/agent/providers/active", "POST");
-        AssertRoute(routes, "/agent/providers/active", "PUT");
-        AssertRoute(routes, "/agent/providers/{id}", "DELETE");
-        AssertRoute(routes, "/api/agent/edits/keep", "POST");
-        AssertRoute(routes, "/api/agent/edits/undo", "POST");
 
         AssertRoute(routes, "/api/app/tooling/list", "GET");
         AssertRoute(routes, "/api/app/tooling/install", "POST");

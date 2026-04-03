@@ -30,7 +30,7 @@ public partial class MainWindow
 
         WorkspaceTreeSummaryText.Text = "Loading WorkspaceEngine tree...";
         WorkspaceProjectPathText.Text = _project.ProjectRoot;
-        WorkspaceExplorerWindow.Title = _project.ProjectRoot;
+        WorkspaceExplorerWindow.Title = "Workspace Tree";
 
         try
         {
@@ -42,7 +42,7 @@ public partial class MainWindow
             WorkspaceTreeSummaryText.Text =
                 $"{root.Name}  |  {root.DirectoryCount} dirs  |  {root.FileCount} files  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
             WorkspaceProjectPathText.Text = root.FullPath;
-            WorkspaceExplorerWindow.Title = root.FullPath;
+            WorkspaceExplorerWindow.Title = "Workspace Tree";
 
             var preferred = FindWorkspaceTreeItem(items, _selectedWorkspaceEntryPath);
             if (preferred is not null)
@@ -59,7 +59,7 @@ public partial class MainWindow
             WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
             WorkspaceTreeSummaryText.Text = "Workspace tree unavailable";
             WorkspaceProjectPathText.Text = ex.Message;
-            WorkspaceExplorerWindow.Title = "Workspace unavailable";
+            WorkspaceExplorerWindow.Title = "Workspace Tree";
             ResetWorkspaceSelectionDetails($"Workspace tree load failed: {ex.Message}");
         }
     }
@@ -93,7 +93,7 @@ public partial class MainWindow
         WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
         WorkspaceTreeSummaryText.Text = "WorkspaceEngine Snapshot";
         WorkspaceProjectPathText.Text = "No workspace selected.";
-        WorkspaceExplorerWindow.Title = "No workspace selected";
+        WorkspaceExplorerWindow.Title = "Workspace Tree";
         ResetWorkspaceSelectionDetails("Select a project to load the physical folder tree.");
     }
 

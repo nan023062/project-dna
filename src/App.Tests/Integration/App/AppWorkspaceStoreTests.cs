@@ -29,22 +29,19 @@ public sealed class AppWorkspaceStoreTests : IDisposable
     }
 
     [Fact]
-    public void Store_ShouldUseProjectMetadataConfigPath_WhenMetadataRootIsProvided()
+    public void Store_ShouldUseUserProfileConfigPath_WhenMetadataRootIsProvided()
     {
-        var metadataRoot = Path.Combine(_workspaceRoot, ".agentic-os");
-        Directory.CreateDirectory(metadataRoot);
-
         var store = new AppWorkspaceStore(new AppRuntimeOptions
         {
             ServerBaseUrl = "http://localhost:5051",
-            WorkspaceRoot = _workspaceRoot,
-            MetadataRootPath = metadataRoot
+            WorkspaceRoot = _workspaceRoot
         });
 
         var snapshot = store.GetSnapshot();
 
         Assert.Single(snapshot.Workspaces);
-        Assert.True(File.Exists(Path.Combine(metadataRoot, "app-workspaces.json")));
+        var expectedPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".agentic-os", "app-workspaces.json");
+        Assert.True(File.Exists(expectedPath));
     }
 
     [Fact]

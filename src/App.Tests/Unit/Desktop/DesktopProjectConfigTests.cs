@@ -26,11 +26,11 @@ public sealed class DesktopProjectConfigTests
         Assert.Equal(Path.Combine(metadataRoot, "memory"), config.MemoryRootPath);
         Assert.Equal(Path.Combine(metadataRoot, "knowledge"), config.KnowledgeRootPath);
         Assert.Equal(Path.Combine(metadataRoot, "project.json"), config.ConfigPath);
-        Assert.Equal(Path.Combine(metadataRoot, "llm.json"), config.LlmConfigPath);
+        
+        var expectedLlmPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".agentic-os", "llm.json");
+        Assert.Equal(expectedLlmPath, config.LlmConfigPath);
+        
         Assert.Equal(Path.Combine(metadataRoot, "logs"), config.LogDirectoryPath);
-        Assert.Equal(Path.Combine(metadataRoot, "app-workspaces.json"), config.WorkspaceConfigPath);
-        Assert.Equal(Path.Combine(metadataRoot, "agent-shell"), config.AgentShellRootPath);
-        Assert.Equal(Path.Combine(metadataRoot, "agent-shell", "agent-shell-state.json"), config.AgentShellStatePath);
     }
 
     [Fact]
@@ -58,7 +58,7 @@ public sealed class DesktopProjectConfigTests
     }
 
     [Fact]
-    public void EnsureProjectScopedAppState_ShouldMaterializeWorkspaceAndAgentShellFromProjectSnapshots()
+    public void EnsureProjectScopedAppState_ShouldMaterializeWorkspaceFromProjectSnapshots()
     {
         var projectRoot = CreateProjectRoot();
         var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
@@ -88,44 +88,14 @@ public sealed class DesktopProjectConfigTests
               ]
             }
             """);
-        File.WriteAllText(
-            Path.Combine(metadataRoot, "app-agent-shell.snapshot.json"),
-            """
-            {
-              "activeProviderId": "dna-lite",
-              "providers": [
-                {
-                  "id": "dna-lite",
-                  "name": "Lightweight Shell",
-                  "providerType": "openai",
-                  "apiKey": "",
-                  "apiKeyHint": "Not required",
-                  "baseUrl": "local",
-                  "model": "dna-lite",
-                  "embeddingBaseUrl": "",
-                  "embeddingModel": "",
-                  "updatedAt": "2026-03-31T10:29:27.943522Z"
-                }
-              ],
-              "sessions": []
-            }
-            """);
 
         var config = DesktopProjectConfig.Load(projectRoot);
         config.EnsureProjectScopedAppState();
 
-        Assert.True(File.Exists(config.WorkspaceConfigPath));
         Assert.True(File.Exists(config.LlmConfigPath));
         Assert.True(Directory.Exists(config.MemoryRootPath));
         Assert.True(Directory.Exists(config.KnowledgeRootPath));
         Assert.True(Directory.Exists(config.LogDirectoryPath));
-        Assert.True(File.Exists(config.AgentShellStatePath));
-        Assert.Equal(
-            File.ReadAllText(Path.Combine(metadataRoot, "app-workspaces.snapshot.json")),
-            File.ReadAllText(config.WorkspaceConfigPath));
-        Assert.Equal(
-            File.ReadAllText(Path.Combine(metadataRoot, "app-agent-shell.snapshot.json")),
-            File.ReadAllText(config.AgentShellStatePath));
     }
 
     [Fact]

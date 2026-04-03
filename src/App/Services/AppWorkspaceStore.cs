@@ -377,12 +377,9 @@ public sealed class AppWorkspaceStore
 
     private static string ResolveDefaultConfigPath(AppRuntimeOptions options)
     {
-        if (!string.IsNullOrWhiteSpace(options.MetadataRootPath))
-            return Path.Combine(Path.GetFullPath(options.MetadataRootPath), "app-workspaces.json");
-
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".dna",
+            ".agentic-os",
             "app-workspaces.json");
     }
 

@@ -47,8 +47,7 @@ public sealed class EmbeddedAppHost
                 project.ProjectName,
                 project.ProjectRoot,
                 project.MetadataRootPath,
-                project.WorkspaceConfigPath,
-                project.AgentShellRootPath);
+                null);
 
             var app = builder.Build();
             AppHostComposition.ConfigureWebApp(app);

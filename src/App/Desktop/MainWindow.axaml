@@ -130,19 +130,12 @@
                                                   PrimaryLength="*">
                         <desktop:WorkbenchSplitLayout.First>
                             <desktop:WorkbenchWindow x:Name="WorkspaceExplorerWindow"
-                                                     Title="-">
+                                                     Title="Workspace Tree">
                                 <desktop:WorkbenchWindow.WindowContent>
                                     <Grid RowDefinitions="Auto,*" RowSpacing="0">
-                                        <StackPanel Margin="12,10,12,12" Spacing="8">
-                                            <StackPanel IsVisible="False">
-                                                <TextBlock x:Name="WorkspaceTreeSummaryText" Text="WorkspaceEngine Snapshot" />
-                                                <TextBlock x:Name="WorkspaceProjectPathText" Text="-" />
-                                            </StackPanel>
-                                            <WrapPanel Orientation="Horizontal">
-                                                <Button Classes="primaryAction"
-                                                        Content="Refresh"
-                                                        Click="RefreshWorkspaceTree_OnClick" />
-                                            </WrapPanel>
+                                        <StackPanel IsVisible="False">
+                                            <TextBlock x:Name="WorkspaceTreeSummaryText" Text="WorkspaceEngine Snapshot" />
+                                            <TextBlock x:Name="WorkspaceProjectPathText" Text="-" />
                                         </StackPanel>
 
                                         <Border Grid.Row="1" Background="Transparent" Padding="0">
@@ -207,9 +200,9 @@
                             <desktop:WorkbenchSplitLayout Orientation="Horizontal"
                                                           PrimaryLength="*">
                                 <desktop:WorkbenchSplitLayout.First>
-                                    <desktop:WorkbenchWindow Title="工作区">
+                                    <desktop:WorkbenchWindow Title="知识工作台">
                                         <desktop:WorkbenchWindow.WindowContent>
-                                            <desktop:WorkbenchTabLayout x:Name="WorkspaceTabs">
+                                            <desktop:WorkbenchTabLayout x:Name="WorkspaceTabs" SelectedIndex="1">
                                                 <desktop:WorkbenchTab Title="记忆">
                                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                         <StackPanel Margin="16" Spacing="14">
@@ -286,7 +279,7 @@
                                                         </StackPanel>
                                                     </ScrollViewer>
                                                 </desktop:WorkbenchTab>
-                                                <desktop:WorkbenchTab Title="知识图谱">
+                                                <desktop:WorkbenchTab Title="知识拓扑图">
                                                     <Grid Margin="16" RowDefinitions="Auto,Auto,*" RowSpacing="12">
                                                         <StackPanel Spacing="8">
                                                             <WrapPanel Orientation="Horizontal">
@@ -570,7 +563,7 @@
                                                         </Grid>
                                                     </Grid>
                                                 </desktop:WorkbenchTab>
-                                                <desktop:WorkbenchTab Title="连接 Agent">
+                                                <desktop:WorkbenchTab Title="MCP 工具">
                                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                         <StackPanel Margin="16" Spacing="12">
                                                             <Border Classes="innerSurface" Padding="16">
@@ -653,13 +646,9 @@
                                                 </Grid>
 
                                                 <Border Grid.Row="1" Margin="12,12,12,0" Classes="innerSurface" Padding="10">
-                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                                    <Grid ColumnDefinitions="*">
                                                         <ComboBox x:Name="ChatProviderBox"
                                                                   SelectionChanged="ChatProviderBox_OnSelectionChanged" />
-                                                        <Button Grid.Column="1"
-                                                                x:Name="ChatRefreshButton"
-                                                                Content="Refresh"
-                                                                Click="RefreshChatShell_OnClick" />
                                                     </Grid>
                                                 </Border>
 
@@ -732,14 +721,11 @@
                                             <TextBlock x:Name="LogFileText" Text="No log file loaded." />
                                         </StackPanel>
                                         <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="8">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <Grid ColumnDefinitions="*">
                                                 <TextBlock x:Name="LogStatusText"
                                                            Classes="tertiaryText"
                                                            TextWrapping="Wrap"
                                                            Text="Load a workspace to view runtime logs." />
-                                                <Button Grid.Column="1"
-                                                        Content="Refresh"
-                                                        Click="RefreshLogTail_OnClick" />
                                             </Grid>
                                             <TextBox Grid.Row="1"
                                                      x:Name="LogTailBox"
