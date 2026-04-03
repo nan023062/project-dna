@@ -324,6 +324,13 @@
 
         <Style Selector="TabControl.workspaceTabs">
             <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="#252526" />
+            <Setter Property="TabStripPlacement" Value="Top" />
+        </Style>
+
+        <Style Selector="TabControl.workspaceTabs TabItem">
+            <Setter Property="MinWidth" Value="104" />
+            <Setter Property="MinHeight" Value="34" />
         </Style>
 
         <Style Selector="TabItem">

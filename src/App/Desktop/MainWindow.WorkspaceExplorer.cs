@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 
 namespace Dna.App.Desktop;
@@ -29,6 +30,7 @@ public partial class MainWindow
 
         WorkspaceTreeSummaryText.Text = "Loading WorkspaceEngine tree...";
         WorkspaceProjectPathText.Text = _project.ProjectRoot;
+        WorkspaceExplorerWindow.Title = _project.ProjectRoot;
 
         try
         {
@@ -40,6 +42,7 @@ public partial class MainWindow
             WorkspaceTreeSummaryText.Text =
                 $"{root.Name}  |  {root.DirectoryCount} dirs  |  {root.FileCount} files  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
             WorkspaceProjectPathText.Text = root.FullPath;
+            WorkspaceExplorerWindow.Title = root.FullPath;
 
             var preferred = FindWorkspaceTreeItem(items, _selectedWorkspaceEntryPath);
             if (preferred is not null)
@@ -56,6 +59,7 @@ public partial class MainWindow
             WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
             WorkspaceTreeSummaryText.Text = "Workspace tree unavailable";
             WorkspaceProjectPathText.Text = ex.Message;
+            WorkspaceExplorerWindow.Title = "Workspace unavailable";
             ResetWorkspaceSelectionDetails($"Workspace tree load failed: {ex.Message}");
         }
     }
@@ -73,11 +77,23 @@ public partial class MainWindow
         ApplyWorkspaceSelection(item);
     }
 
+    private void WorkspaceTreeNode_OnTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not Control { DataContext: WorkspaceTreeItemViewModel item })
+            return;
+
+        WorkspaceTreeView.SelectedItem = item;
+        _selectedWorkspaceEntryPath = item.Path;
+        ApplyWorkspaceSelection(item);
+        e.Handled = true;
+    }
+
     private void ResetWorkspaceExplorer()
     {
         WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
         WorkspaceTreeSummaryText.Text = "WorkspaceEngine Snapshot";
         WorkspaceProjectPathText.Text = "No workspace selected.";
+        WorkspaceExplorerWindow.Title = "No workspace selected";
         ResetWorkspaceSelectionDetails("Select a project to load the physical folder tree.");
     }
 
@@ -161,7 +177,7 @@ public partial class MainWindow
             Caption: isDirectory ? BuildFolderCaption(directoryCount, fileCount, badge) : (badge ?? statusLabel),
             BadgeLine: badge,
             ActionLine: actionParts.Count == 0 ? null : string.Join(" | ", actionParts),
-            Icon: isDirectory ? "📁" : "📄",
+            Icon: isDirectory ? "D" : "F",
             Children: children);
     }
 
