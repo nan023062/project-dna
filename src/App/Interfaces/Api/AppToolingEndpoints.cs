@@ -139,7 +139,7 @@ public static class AppToolingEndpoints
 
     private static IReadOnlyList<AppMcpToolDescriptor> BuildMcpToolCatalog()
     {
-        var toolTypes = new[] { typeof(KnowledgeTools), typeof(MemoryTools) };
+        var toolTypes = new[] { typeof(WorkbenchTools) };
         var descriptors = new List<AppMcpToolDescriptor>();
 
         foreach (var toolType in toolTypes)

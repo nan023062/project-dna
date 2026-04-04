@@ -62,27 +62,15 @@ public class AppEndpointRouteSmokeTests
 
         AssertRoute(routes, "/api/status", "GET");
         AssertRoute(routes, "/api/session", "GET");
-        AssertRoute(routes, "/api/topology", "GET");
-        AssertRoute(routes, "/api/mcdp", "GET");
-        AssertRoute(routes, "/api/graph/search", "GET");
-        AssertRoute(routes, "/api/graph/context", "GET");
-        AssertRoute(routes, "/api/graph/begin-task", "POST");
+        AssertRoute(routes, "/api/connection/access", "GET");
+        AssertRoute(routes, "/api/workspace/tree", "GET");
+
         AssertRoute(routes, "/api/workbench/tasks/resolve-support", "POST");
         AssertRoute(routes, "/api/workbench/tasks/start", "POST");
         AssertRoute(routes, "/api/workbench/tasks/end", "POST");
         AssertRoute(routes, "/api/workbench/tasks/active", "GET");
         AssertRoute(routes, "/api/workbench/tasks/completed", "GET");
         AssertRoute(routes, "/api/workbench/governance/resolve", "POST");
-        AssertRoute(routes, "/api/connection/access", "GET");
-        AssertRoute(routes, "/api/workspace/tree", "GET");
-
-        AssertRoute(routes, "/api/memory/stats", "GET");
-        AssertRoute(routes, "/api/memory/recall", "POST");
-        AssertRoute(routes, "/api/memory/query", "GET");
-        AssertRoute(routes, "/api/memory/{id}", "GET");
-        AssertRoute(routes, "/api/memory/{id}", "PUT");
-        AssertRoute(routes, "/api/memory/{id}", "DELETE");
-        AssertRoute(routes, "/api/memory/remember", "POST");
 
         AssertRoute(routes, "/api/app/tooling/list", "GET");
         AssertRoute(routes, "/api/app/tooling/install", "POST");

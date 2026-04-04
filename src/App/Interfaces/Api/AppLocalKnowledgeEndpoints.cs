@@ -5,8 +5,6 @@ public static class AppLocalKnowledgeEndpoints
     public static void MapAppLocalKnowledgeEndpoints(this WebApplication app)
     {
         app.MapAppLocalRuntimeApiEndpoints();
-        app.MapAppLocalTopologyApiEndpoints();
         app.MapAppLocalKnowledgeManagementApiEndpoints();
-        app.MapAppLocalMemoryApiEndpoints();
     }
 }
