@@ -8,9 +8,7 @@
 
 `Dna.Knowledge` 是整个知识域的父级模块。
 
-它在当前建模中属于一个 `Department` 级边界，负责组织知识域的核心子模块，并对上提供统一知识能力。
-
-它本身不是单一引擎，也不直接承载桌面 UI、HTTP、MCP 或 CLI 协议细节。
+它在当前建模中属于一个 `Department` 级边界，负责组织知识域的核心子模块，并对上提供统一知识能力基础。
 
 一句话概括：
 
@@ -23,6 +21,8 @@
 ```text
 App
   ->
+Dna.Agent
+  ->
 Dna.Workbench
   ->
 Dna.Knowledge
@@ -34,8 +34,10 @@ Dna.Core
 
 - `App`
   - 桌面宿主与外部适配层
+- `Dna.Agent`
+  - 内置 Agent 的任务编排与执行层（目标架构）
 - `Dna.Workbench`
-  - 应用服务、Agent 编排、运行时事件
+  - 应用服务、项目能力门面、运行时观测入口
 - `Dna.Knowledge`
   - 知识域能力
 - `Dna.Core`
@@ -44,8 +46,9 @@ Dna.Core
 这意味着：
 
 - `Dna.Knowledge` 的主要上游应是 `Dna.Workbench`
+- `Dna.Agent` 通过 `Dna.Workbench` 间接使用知识能力
 - `App` 最终不应继续直接承载大量知识用例编排
-- `Dna.Knowledge` 不允许反向依赖 `Dna.Workbench`
+- `Dna.Knowledge` 不允许反向依赖 `Dna.Workbench` 或 `Dna.Agent`
 
 ## 子模块构成
 
@@ -123,11 +126,12 @@ Workspace 事实
 - MCP 工具协议映射
 - HTTP 端点协议适配
 - Agent 任务编排
-- Agent 运行时事件总线
+- Agent 执行循环
 
 这些职责分别属于：
 
 - `App`
+- `Dna.Agent`
 - `Dna.Workbench`
 
 ## 如何组合出完整能力
@@ -145,10 +149,15 @@ Workspace 事实
 
 上层的 `Dna.Workbench` 再在这个基础上组合出：
 
-- 高层知识查询
-- 高层知识修改
-- Agent 编排上下文
-- 运行时拓扑投影
+- 项目级知识查询
+- 项目级知识修改
+- 统一运行时观测能力
+
+而未来的 `Dna.Agent` 再在 `Dna.Workbench` 之上负责：
+
+- 任务编排
+- 执行循环
+- 模型与工具调用策略
 
 ## 对外能力
 
@@ -163,9 +172,7 @@ Workspace 事实
 
 ## 当前结论
 
-`Dna.Knowledge` 的正确定位不是某个具体功能模块，而是：
+`Dna.Knowledge` 的正确定位不是某一个具体功能模块，而是：
 
 > 一个面向知识域的父级 `Department` 模块，负责组织 `Workspace`、`TopoGraph`、`Memory`、`Governance` 四个子模块，并为 `Dna.Workbench` 提供统一的知识域能力基础。
 
-后续如果继续重构，根级文档只维护整体轮廓、边界和组合方式；
-各子模块的内部设计，继续沉淀在各自目录下的 `ARCHITECTURE.md` 与 `CLASS-DIAGRAM.md` 中。

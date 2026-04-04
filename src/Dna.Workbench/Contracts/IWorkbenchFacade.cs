@@ -4,5 +4,7 @@ public interface IWorkbenchFacade
 {
     IKnowledgeWorkbenchService Knowledge { get; }
 
-    IAgentOrchestrationService Agent { get; }
+    IWorkbenchToolService Tools { get; }
+
+    IWorkbenchRuntimeService Runtime { get; }
 }

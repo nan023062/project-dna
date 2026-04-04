@@ -1,26 +1,28 @@
 # Dna.Workbench
 
-> 状态：第一阶段架构基线
+> 状态：当前有效（按 2026-04-04 架构决策收口）
 > 最后更新：2026-04-04
 > 适用范围：`src/Dna.Workbench`
 
 ## 模块定位
 
-`Dna.Workbench` 是位于 `App` 与 `Dna.Knowledge` 之间的应用层模块。
+`Dna.Workbench` 是位于 `App` / `Dna.Agent` 与 `Dna.Knowledge` 之间的应用服务层模块。
 
-它不是新的知识引擎，也不是新的桌面 UI 层。
-它的职责是把底层知识能力组织成真正可被桌面端、CLI、MCP 和未来外部 Agent 复用的应用服务。
+它不是新的知识引擎，也不是 Agent 编排器。  
+它的职责是把 `Workspace / TopoGraph / Memory / Governance` 这些底层能力整理成稳定、统一、可复用的工作台能力，供内置 Agent、外置 Agent、CLI 与桌面 UI 共用。
 
 一句话概括：
 
-> `Dna.Workbench` 是 Agentic OS 的应用编排层，负责 Agent 任务编排、知识用例编排、运行时事件与拓扑投影。
+> `Dna.Workbench` 是 Agentic OS 的能力中台，不负责替 Agent 思考，只负责把项目能力稳定地提供给 Agent 和宿主使用。
 
 ## 分层位置
 
-目标分层如下：
+### 当前实现层级
 
 ```text
 App
+  ->
+Dna.Agent
   ->
 Dna.Workbench
   ->
@@ -29,163 +31,192 @@ Dna.Knowledge
 Dna.Core
 ```
 
-其中：
+### 核心职责分工
 
 - `App`
-  - 负责桌面宿主、HTTP / MCP / CLI 适配、Avalonia UI
+  - 负责桌面宿主、UI、CLI / MCP / HTTP 适配
+- `Dna.Agent`
+  - 负责内置 Agent 的任务编排、执行循环、模型调用、工具调用策略与会话生命周期
 - `Dna.Workbench`
-  - 负责应用级编排与运行时
+  - 负责统一项目能力入口、知识用例封装、运行时观测入口
 - `Dna.Knowledge`
-  - 负责知识域能力
+  - 负责知识域能力本身
 - `Dna.Core`
   - 负责底层基础设施
 
 ## 为什么需要这个模块
 
-当前仓库里已经存在以下趋势：
+无论是：
 
-- `App` 中有本地 API / CLI / MCP 适配层
-- `App.Services.Pipeline` 中已经出现了初步的 Agent 编排代码
-- 桌面端后续会支持内置 Agent 编排
-- 拓扑图后续要实时显示 Agent 在各知识节点之间的进入、查询、协作和工作链路
-- 同一套运行时能力还要服务外部 Agent
+- 桌面内置 Chat
+- 未来自带的本地 Agent Runtime
+- Cursor / Codex / Claude Code 这类外置 Agent
+- 本地 CLI
 
-如果继续把这些逻辑堆在 `App` 里，会导致：
+它们都不该直接操作底层知识实现细节，也不该各自维护一套“如何读工作区、如何查模块、如何写记忆”的逻辑。
 
-- 宿主层与应用层混在一起
-- 桌面 UI、HTTP、MCP、CLI 都各自编排知识域对象
-- 后续很难把“内部桌面直连”和“外部协议适配”区分清楚
+它们真正需要的是一套统一的项目能力面，包括：
 
-因此需要新增一个单独模块，把“应用服务”和“Agent 运行时”正式提炼出来。
+- 工作区目录与文件语义
+- 模块拓扑与关系查询
+- 模块知识读写
+- 记忆读写与召回
+- 统一的运行时状态上报与拓扑投影
+- 后续统一的工具能力注册与调用入口
 
-## 模块职责
+这些能力应由 `Dna.Workbench` 统一提供。
+
+## 核心职责
 
 `Dna.Workbench` 负责：
 
-- 统一桌面端与外部 Agent 的应用服务入口
-- 编排 `Workspace / TopoGraph / Memory / Governance` 的组合用例
-- 提供知识查询、知识写入、记忆读写等高层能力
-- 提供任务会话、步骤推进、执行状态等 Agent 运行时能力
-- 发布统一运行时事件
-- 将运行时事件投影为拓扑图所需的实时状态
+- 为桌面 UI、内置 Agent、外置 Agent、CLI 提供统一的项目能力入口
+- 组合 `Dna.Knowledge` 的领域能力，形成可直接消费的应用用例
+- 封装“查工作区、查拓扑、查模块知识、写记忆、召回记忆”等高层能力
+- 提供统一的运行时观测入口，让任意 Agent 都能把运行事件投影到拓扑图
+- 为后续工具调用内核预留稳定的能力边界
 
 ## 非职责范围
 
 `Dna.Workbench` 不负责：
 
-- 直接渲染桌面 UI
-- 直接承载 HTTP 协议细节
-- 直接定义 MCP 工具协议
-- 直接处理 CLI 参数解析
-- 直接实现文件扫描、记忆存储或图谱存储
+- 任务规划
+- 步骤拆解
+- 多轮执行循环
+- 大模型会话管理
+- 工具选择策略
+- 自动重试与恢复策略
+- 对话策略与提示词编排
 
-这些能力分别属于：
+这些职责属于 `Dna.Agent`，或属于外置 Agent 自身。
 
-- `App`
-  - 宿主与适配层
-- `Dna.Knowledge`
-  - 底层知识域引擎
+## 当前稳定能力面
+
+当前 `Dna.Workbench` 已收口为三大能力面：
+
+- `IKnowledgeWorkbenchService`
+  - 提供工作区、拓扑、模块知识、记忆相关能力
+- `IWorkbenchToolService`
+  - 提供统一工具目录、工具调用入口与后续内外 Agent 共用的能力语义
+- `IWorkbenchRuntimeService`
+  - 提供统一运行时事件写入与拓扑运行态读取能力
+
+而 `IWorkbenchFacade` 当前只聚合：
+
+- `Knowledge`
+- `Tools`
+- `Runtime`
+
+这意味着 `Workbench` 已经不再直接聚合 Agent 编排接口。
+
+## 设计原则
+
+### 1. Agent 负责编排，Workbench 负责供能
+
+无论 Agent 是内置还是外置：
+
+- Agent 决定“下一步做什么”
+- Workbench 决定“在这个项目里能做什么”
+
+### 2. 内外能力面一致
+
+内置 Agent 与外置 Agent 不应看到两套不同的项目能力。
+
+理想状态下，二者都通过同一套 Workbench 能力访问：
+
+- Workspace
+- TopoGraph
+- Memory
+- Governance
+- Runtime
+
+区别只在于：
+
+- 内置 Agent 通过进程内调用接入
+- 外置 Agent 通过 MCP / CLI / HTTP 适配层接入
+
+### 3. UI 不承载应用编排
+
+桌面 UI 负责展示与交互，不应自己拼装知识域调用链。  
+真正的用例组织应该沉到 Workbench。
+
+### 4. 运行时观测与任务编排解耦
+
+拓扑图上的实时运行状态，不依赖某一个具体 Agent 实现。  
+任何 Agent 只要能上报统一运行时事件，Workbench 就能投影出统一的运行态视图。
 
 ## 内部子域
 
-第一阶段将 `Dna.Workbench` 内部划分为 4 个子域：
+当前 `Dna.Workbench` 主要包含这些子域：
 
 - `Contracts`
-  - 对外门面与应用层接口
+  - 对外稳定接口
 - `Knowledge`
-  - 高层知识用例编排
-- `Agent`
-  - 任务会话、步骤、编排、执行状态
+  - 知识、工作区、记忆等高层能力封装
 - `Runtime`
-  - 事件总线与拓扑运行时投影
+  - 运行时事件接收、事件流管理、拓扑投影
+- `Tooling`
+  - 后续统一工具能力注册与调用入口
 
-当前阶段先建立接口与模型基线，不急于一次性完成实现。
+## 当前过渡实现说明
 
-## 第一批稳定接口
+当前代码里仍有一部分历史遗留内容尚未完全迁干净：
 
-当前先定 5 个关键接口，作为后续实现基线：
+- `src/Dna.Workbench/Agent/Pipeline/*`
 
-- `IWorkbenchFacade`
-  - 总门面
-  - 聚合知识服务与 Agent 服务
-- `IKnowledgeWorkbenchService`
-  - 面向桌面端和外部适配层的高层知识入口
-- `IAgentOrchestrationService`
-  - 负责任务启动、取消、会话状态读取
-- `IAgentRuntimeEventBus`
-  - 负责运行时事件发布与订阅
-- `ITopologyRuntimeProjectionService`
-  - 负责把运行时事件投影成拓扑图实时视图
+这部分更接近早期内置 Agent / 执行管线试验代码，已经不再是 `Dna.Workbench` 的长期边界。  
+后续要么迁到 `Dna.Agent`，要么按新的 Agent Runtime 方案重构后替换。
 
-## 目标调用方式
+约束如下：
 
-后续目标是把当前“桌面内部也走本地 HTTP”的模式，逐步收敛为：
+- 不再把新的任务编排职责继续加进 `Dna.Workbench`
+- 如需继续补 Workbench，只补“能力接口”与“运行时观测”
+- 历史管线代码不再作为新增功能的落点
+
+## 典型调用链
+
+### 桌面 UI
 
 ```text
 Desktop UI
   ->
-Workbench Facade / Application Service
-  ->
-Dna.Knowledge
-
-CLI / MCP / HTTP
-  ->
-Adapter
-  ->
-Workbench Facade / Application Service
+Workbench
   ->
 Dna.Knowledge
 ```
 
-也就是：
+桌面内部优先走进程内调用，不应长期依赖本地 HTTP 作为内部主路径。
 
-- 桌面内部直接调用 `Dna.Workbench`
-- 外部入口通过适配层调用 `Dna.Workbench`
-- 双方共用同一套应用层
+### 外置 Agent / CLI / MCP
 
-## 运行时事件原则
+```text
+External Agent / CLI / MCP
+  ->
+Adapter
+  ->
+Workbench
+  ->
+Dna.Knowledge
+```
 
-`Dna.Workbench` 还要承担未来的 Agent 运行时观测职责。
+适配层只负责协议、参数与输出格式，不负责真正的业务编排。
 
-后续事件流至少需要覆盖：
+### 内置 Agent
 
-- `TaskStarted`
-- `TaskCompleted`
-- `TaskFailed`
-- `NodeEntered`
-- `NodeExited`
-- `KnowledgeQueried`
-- `KnowledgeUpdated`
-- `MemoryRead`
-- `MemoryWritten`
-- `ToolInvoked`
-- `RelationTraversed`
-- `CollaborationTriggered`
+```text
+Built-in Agent Runtime
+  ->
+Dna.Agent
+  ->
+Workbench
+  ->
+Dna.Knowledge
+```
 
-拓扑图不应区分“这是桌面内置 Agent 还是外部 Agent”，而应统一消费这套运行时事件。
+内置 Agent 负责规划与执行，Workbench 负责能力供给。
 
-## 与现有代码的迁移关系
+## 当前结论
 
-当前迁移方向如下：
+`Dna.Workbench` 的正确定位不是“Agent 编排层”，而是：
 
-1. `App.Services.Pipeline`
-   - 后续迁入 `Dna.Workbench.Agent`
-2. `App.Interfaces.Api`
-   - 后续只保留 HTTP 适配，不继续承载应用编排
-3. `App.Interfaces.Mcp`
-   - 后续只保留 MCP 工具适配，业务逻辑收口到 `Dna.Workbench`
-4. `App.Interfaces.Cli`
-   - 后续只保留命令行解析与结果输出
-5. 桌面 ViewModel
-   - 后续逐步改为直接依赖 `Dna.Workbench` 对外接口
-
-## 当前阶段结论
-
-当前 `Dna.Workbench` 的第一阶段目标不是“立刻重写全部逻辑”，而是：
-
-- 先把应用层边界定清楚
-- 先把接口命名定稳
-- 先把架构文档和类图立起来
-- 为后续迁移提供明确落点
-
-只有这一步完成后，后面的 Agent Runtime、拓扑实时投影和桌面直连应用服务，才不会反复返工。
+> 一个位于 `Dna.Knowledge` 之上的能力中台模块，负责把项目知识能力整理成统一、稳定、可复用的工作台能力，并同时服务内置 Agent、外置 Agent、CLI 与桌面宿主。

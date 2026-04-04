@@ -1,6 +1,9 @@
 using Dna.App.Interfaces.Api;
 using Dna.App.Services;
+using Dna.App.Services.Agent;
 using Dna.App.Services.Tooling;
+using Dna.Agent.Contracts;
+using Dna.Agent.DependencyInjection;
 using Dna.Core.Config;
 using Dna.Knowledge;
 using Dna.Workbench.DependencyInjection;
@@ -31,9 +34,11 @@ internal static class AppHostComposition
         services.AddSingleton<ProjectConfig>();
         services.AddKnowledgeGraph();
         services.AddWorkbench();
+        services.AddAgent();
         services.AddHostedService<AppLocalRuntimeInitializer>();
         services.AddSingleton<AppWorkspaceStore>();
         services.AddSingleton<AppProjectLlmConfigService>();
+        services.AddSingleton<IAgentProviderCatalog, AppAgentProviderCatalog>();
 
         services.AddHttpClient<DnaServerApi>((_, app) =>
         {

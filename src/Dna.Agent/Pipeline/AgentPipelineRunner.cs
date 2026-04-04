@@ -1,7 +1,7 @@
 using Dna.Knowledge;
 using Dna.Memory.Models;
 
-namespace Dna.Workbench.Agent.Pipeline;
+namespace Dna.Agent.Pipeline;
 
 public sealed class AgentPipelineRunner(
     ITopoGraphApplicationService topology,

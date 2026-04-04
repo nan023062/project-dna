@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dna.App.Desktop.Services;
@@ -9,7 +7,7 @@ namespace Dna.App.Desktop.ViewModels;
 
 public partial class ChatViewModel : ObservableObject
 {
-    private readonly IDnaApiClient _apiClient;
+    private readonly IDesktopLocalAgentClient _localAgentClient;
 
     [ObservableProperty]
     private string _chatSubtitleText = "加载项目后可在这里直接与本地 Agent Shell 对话。";
@@ -65,9 +63,9 @@ public partial class ChatViewModel : ObservableObject
     public bool IsChatMessagesVisible => !IsViewingChatSessions;
     public bool IsChatSessionsVisible => IsViewingChatSessions;
 
-    public ChatViewModel(IDnaApiClient apiClient)
+    public ChatViewModel(IDesktopLocalAgentClient localAgentClient)
     {
-        _apiClient = apiClient;
+        _localAgentClient = localAgentClient;
     }
 
     partial void OnIsViewingChatSessionsChanged(bool value)
@@ -104,19 +102,7 @@ public partial class ChatViewModel : ObservableObject
 
     public void ApplyConnectionState(MainWindow.ConnectionAccessState access)
     {
-        if (!access.HasProject)
-        {
-            IsChatReady = false;
-            return;
-        }
-
-        if (!access.RuntimeOnline)
-        {
-            IsChatReady = false;
-            return;
-        }
-
-        IsChatReady = true;
+        IsChatReady = access.HasProject && access.RuntimeOnline;
     }
 
     [RelayCommand]
@@ -138,7 +124,7 @@ public partial class ChatViewModel : ObservableObject
 
         if (!IsChatReady)
         {
-            ChatStatusText = "本地 5052 运行时未连接，聊天暂不可用。";
+            ChatStatusText = "本地运行时未连接，聊天暂不可用。";
             ChatProviders.Clear();
             SelectedChatProvider = null;
             ActiveChatProviderLabel = "未连接";
@@ -148,37 +134,23 @@ public partial class ChatViewModel : ObservableObject
 
         try
         {
-            var providerState = await _apiClient.GetAsync("/agent/providers");
-            var activeProviderId = GetString(providerState, "activeProviderId", null);
-            
-            ChatProviders.Clear();
-            if (providerState.TryGetProperty("providers", out var providers) &&
-                providers.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var provider in providers.EnumerateArray())
-                {
-                    var id = GetString(provider, "id", string.Empty) ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(id))
-                        continue;
+            var providerState = await _localAgentClient.GetChatProviderStateAsync();
 
-                    var label = BuildChatProviderLabel(provider);
-                    ChatProviders.Add(new ChatProviderOption(id, label));
-                }
-            }
+            ChatProviders.Clear();
+            foreach (var provider in providerState.Providers.Where(static provider => provider.Enabled))
+                ChatProviders.Add(new ChatProviderOption(provider.Id, provider.Label));
 
             SelectedChatProvider = ChatProviders.FirstOrDefault(item =>
-                string.Equals(item.Id, activeProviderId, StringComparison.OrdinalIgnoreCase))
+                string.Equals(item.Id, providerState.ActiveProviderId, StringComparison.OrdinalIgnoreCase))
                 ?? ChatProviders.FirstOrDefault();
 
-            ActiveChatProviderLabel = SelectedChatProvider?.Label ?? (ChatProviders.Count == 0 ? "未配置" : ChatProviders[0].Label);
-
+            ActiveChatProviderLabel = SelectedChatProvider?.Label ?? "未配置";
             UpdateChatSubtitle();
+
             if (IsViewingChatSessions)
                 await ShowChatSessionsAsync();
-            else
-            {
-                if (ChatMessages.Count == 0) RenderChatWelcome();
-            }
+            else if (ChatMessages.Count == 0)
+                RenderChatWelcome();
 
             if (!IsChatStreaming)
                 ChatStatusText = ChatProviders.Count == 0 ? "当前没有可用模型。" : "本地 Agent Shell 已就绪。";
@@ -191,15 +163,16 @@ public partial class ChatViewModel : ObservableObject
 
     partial void OnSelectedChatProviderChanged(ChatProviderOption? value)
     {
-        if (value is null) return;
+        if (value is null)
+            return;
 
         Task.Run(async () =>
         {
             try
             {
-                await _apiClient.PostAsync("/agent/providers/active", new { id = value.Id });
-                ActiveChatProviderLabel = value.Label;
-                ChatStatusText = $"已切换模型：{value.Label}";
+                var provider = await _localAgentClient.SetActiveChatProviderAsync(value.Id);
+                ActiveChatProviderLabel = provider?.Label ?? value.Label;
+                ChatStatusText = $"已切换模型：{ActiveChatProviderLabel}";
                 UpdateChatSubtitle();
             }
             catch (Exception ex)
@@ -260,15 +233,12 @@ public partial class ChatViewModel : ObservableObject
         StopChatStreaming();
         IsViewingChatSessions = false;
 
-        // Remove welcome message if present
         if (ChatMessages.Count == 1 && ChatMessages[0].IsWelcome)
-        {
             ChatMessages.Clear();
-        }
 
         ChatMessages.Add(new ChatMessageViewModel("user", prompt));
         ChatInputBoxText = string.Empty;
-        ChatStatusText = $"正在以 {GetChatModeLabel(ChatMode)} 模式发送…";
+        ChatStatusText = $"正在以 {GetChatModeLabel(ChatMode)} 模式发送...";
         IsChatStreaming = true;
 
         _chatStreamingCts = new CancellationTokenSource();
@@ -276,47 +246,22 @@ public partial class ChatViewModel : ObservableObject
 
         try
         {
-            var content = new StringContent(JsonSerializer.Serialize(new
-            {
-                id = ChatSessionId,
-                mode = ChatMode,
-                prompt
-            }), Encoding.UTF8, "application/json");
+            var result = await _localAgentClient.SendChatAsync(new DesktopLocalChatSendRequest(
+                SessionId: ChatSessionId,
+                Mode: ChatMode,
+                Prompt: prompt,
+                ProjectRoot: _projectRoot,
+                ProviderId: SelectedChatProvider?.Id), token);
 
-            var request = new HttpRequestMessage(HttpMethod.Post, "/agent/chat") { Content = content };
-            using var response = await _apiClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
+            ChatSessionId = result.SessionId;
+            ActiveChatProviderLabel = string.IsNullOrWhiteSpace(result.ActiveProviderLabel)
+                ? ActiveChatProviderLabel
+                : result.ActiveProviderLabel;
 
-            using var stream = await response.Content.ReadAsStreamAsync(token);
-            using var reader = new StreamReader(stream);
-            var chunk = string.Empty;
-
-            while (!reader.EndOfStream && !token.IsCancellationRequested)
-            {
-                var line = await reader.ReadLineAsync(token);
-                if (line is null) break;
-
-                if (line.StartsWith("data: "))
-                {
-                    var data = line["data: ".Length..];
-                    if (data == "[DONE]") break;
-
-                    chunk += data;
-                    
-                    var lastMsg = ChatMessages.LastOrDefault();
-                    if (lastMsg != null && lastMsg.Role == "assistant")
-                    {
-                        lastMsg.Content = chunk;
-                    }
-                    else
-                    {
-                        ChatMessages.Add(new ChatMessageViewModel("assistant", chunk));
-                    }
-                }
-            }
-
+            ChatMessages.Add(new ChatMessageViewModel("assistant", result.AssistantMessage));
             ChatStatusText = "本轮对话已完成。";
             await SaveCurrentChatSessionAsync();
+            UpdateChatSubtitle();
         }
         catch (OperationCanceledException)
         {
@@ -351,28 +296,26 @@ public partial class ChatViewModel : ObservableObject
     {
         try
         {
-            var session = await _apiClient.GetAsync($"/agent/sessions/{Uri.EscapeDataString(sessionId)}");
-            
-            ChatMessages.Clear();
-            if (session.TryGetProperty("messages", out var messages) && messages.ValueKind == JsonValueKind.Array)
+            var session = await _localAgentClient.GetChatSessionAsync(sessionId);
+            if (session is null)
             {
-                foreach (var item in messages.EnumerateArray())
-                {
-                    var role = NormalizeChatRole(GetString(item, "role", "assistant"));
-                    var content = GetString(item, "content", string.Empty) ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(content))
-                        continue;
-
-                    ChatMessages.Add(new ChatMessageViewModel(role, content));
-                }
+                ChatStatusText = $"未找到会话：{sessionId}";
+                return;
             }
 
-            ChatSessionId = GetString(session, "id", sessionId) ?? sessionId;
-            ChatMode = NormalizeChatMode(GetString(session, "mode", "agent"));
-            
+            ChatMessages.Clear();
+            foreach (var item in session.Messages)
+            {
+                if (string.IsNullOrWhiteSpace(item.Content))
+                    continue;
+
+                ChatMessages.Add(new ChatMessageViewModel(NormalizeChatRole(item.Role), item.Content));
+            }
+
+            ChatSessionId = session.Id;
             IsViewingChatSessions = false;
-            SetChatMode(ChatMode);
-            ChatStatusText = $"已加载会话：{GetString(session, "title", "未命名会话")}";
+            SetChatMode(session.Mode);
+            ChatStatusText = $"已加载会话：{session.Title}";
         }
         catch (Exception ex)
         {
@@ -386,30 +329,20 @@ public partial class ChatViewModel : ObservableObject
         ChatSessions.Clear();
 
         if (string.IsNullOrWhiteSpace(_projectRoot) || !IsChatReady)
-        {
             return;
-        }
 
         try
         {
-            var data = await _apiClient.GetAsync("/agent/sessions");
-
-            if (data.TryGetProperty("sessions", out var array) && array.ValueKind == JsonValueKind.Array)
+            var sessions = await _localAgentClient.ListChatSessionsAsync();
+            foreach (var item in sessions)
             {
-                foreach (var item in array.EnumerateArray())
-                {
-                    var id = GetString(item, "id", string.Empty) ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(id))
-                        continue;
-
-                    ChatSessions.Add(new ChatSessionViewModel(
-                        id,
-                        GetString(item, "title", "未命名会话") ?? "未命名会话",
-                        NormalizeChatMode(GetString(item, "mode", "agent")),
-                        ParseDate(item, "updatedAt").ToLocalTime().ToString("MM-dd HH:mm"),
-                        ParseNullableInt(item, "messageCount") ?? 0,
-                        string.Equals(id, ChatSessionId, StringComparison.OrdinalIgnoreCase)));
-                }
+                ChatSessions.Add(new ChatSessionViewModel(
+                    item.Id,
+                    item.Title,
+                    NormalizeChatMode(item.Mode),
+                    item.UpdatedAtUtc.ToLocalTime().ToString("MM-dd HH:mm"),
+                    item.MessageCount,
+                    string.Equals(item.Id, ChatSessionId, StringComparison.OrdinalIgnoreCase)));
             }
         }
         catch (Exception ex)
@@ -425,17 +358,24 @@ public partial class ChatViewModel : ObservableObject
 
         try
         {
-            await _apiClient.PostAsync("/agent/sessions/save", new
-            {
-                id = ChatSessionId,
-                mode = ChatMode,
-                title = BuildChatSessionTitle(),
-                messages = ChatMessages.Select(m => new { role = m.Role, content = m.Content }).ToList()
-            });
+            var messages = ChatMessages
+                .Where(message => !message.IsWelcome)
+                .Select(message => new DesktopLocalChatMessage(
+                    message.Role,
+                    message.Content,
+                    DateTime.UtcNow))
+                .ToList();
+
+            await _localAgentClient.SaveChatSessionAsync(new DesktopLocalChatSession(
+                Id: ChatSessionId,
+                Title: BuildChatSessionTitle(),
+                Mode: ChatMode,
+                CreatedAtUtc: DateTime.UtcNow,
+                UpdatedAtUtc: DateTime.UtcNow,
+                Messages: messages));
         }
         catch
         {
-            // Ignore save errors
         }
     }
 
@@ -446,6 +386,7 @@ public partial class ChatViewModel : ObservableObject
             _chatStreamingCts.Cancel();
             _chatStreamingCts.Dispose();
         }
+
         _chatStreamingCts = null;
         IsChatStreaming = false;
     }
@@ -469,12 +410,16 @@ public partial class ChatViewModel : ObservableObject
     private void RenderChatWelcome()
     {
         ChatMessages.Clear();
-        ChatMessages.Add(new ChatMessageViewModel("assistant", "你好！我是 Agentic OS 本地 Agent。请问有什么我可以帮你的？\n\n你可以：\n- 询问关于当前项目架构的问题\n- 让我帮你规划重构方案\n- 直接让我执行代码修改或终端命令") { IsWelcome = true });
+        ChatMessages.Add(new ChatMessageViewModel(
+            "assistant",
+            "你好！我是 Agentic OS 本地 Agent。\n\n你可以：\n- 询问当前项目结构\n- 让它先做计划\n- 让它基于本地知识和记忆给出下一步建议")
+        { IsWelcome = true });
     }
 
     private string BuildChatSessionTitle()
     {
-        var firstUser = ChatMessages.FirstOrDefault(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));
+        var firstUser = ChatMessages.FirstOrDefault(message =>
+            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase));
         if (firstUser is null || string.IsNullOrWhiteSpace(firstUser.Content))
             return "新会话";
 
@@ -486,21 +431,10 @@ public partial class ChatViewModel : ObservableObject
         return text.Length > 20 ? text[..20] + "..." : text;
     }
 
-    private static string BuildChatProviderLabel(JsonElement provider)
-    {
-        var label = GetString(provider, "label", null);
-        if (!string.IsNullOrWhiteSpace(label))
-            return label;
-
-        var name = GetString(provider, "name", "Unknown");
-        var model = GetString(provider, "model", "default");
-        return $"{name} ({model})";
-    }
-
     private static string NormalizeChatMode(string? mode)
     {
-        var m = (mode ?? string.Empty).Trim().ToLowerInvariant();
-        return m switch
+        var value = (mode ?? string.Empty).Trim().ToLowerInvariant();
+        return value switch
         {
             "ask" => "ask",
             "plan" => "plan",
@@ -512,8 +446,8 @@ public partial class ChatViewModel : ObservableObject
 
     private static string NormalizeChatRole(string? role)
     {
-        var r = (role ?? string.Empty).Trim().ToLowerInvariant();
-        return r switch
+        var value = (role ?? string.Empty).Trim().ToLowerInvariant();
+        return value switch
         {
             "user" => "user",
             "assistant" => "assistant",
@@ -532,31 +466,6 @@ public partial class ChatViewModel : ObservableObject
             "chat" => "Chat",
             _ => "Agent"
         };
-    }
-
-    private static string? GetString(JsonElement element, string propertyName, string? fallback = null)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return fallback;
-
-        if (value.ValueKind == JsonValueKind.String)
-            return value.GetString();
-
-        return fallback;
-    }
-
-    private static DateTime ParseDate(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
-            return date;
-        return DateTime.MinValue;
-    }
-
-    private static int? ParseNullableInt(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
-            return number;
-        return null;
     }
 }
 

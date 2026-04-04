@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Dna.Core.Config;
 
-namespace Dna.Workbench.Agent.Pipeline;
+namespace Dna.Agent.Pipeline;
 
 public sealed class AgentPipelineStore
 {

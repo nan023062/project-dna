@@ -1,5 +1,3 @@
-using Dna.Workbench.Models.Agent;
-
 namespace Dna.Workbench.Runtime;
 
 internal sealed class TopologyRuntimeProjectionService : ITopologyRuntimeProjectionService
@@ -15,7 +13,7 @@ internal sealed class TopologyRuntimeProjectionService : ITopologyRuntimeProject
         }
     }
 
-    public void Apply(AgentTimelineEvent runtimeEvent)
+    public void Apply(WorkbenchRuntimeEvent runtimeEvent)
     {
         ArgumentNullException.ThrowIfNull(runtimeEvent);
 
@@ -78,11 +76,11 @@ internal sealed class TopologyRuntimeProjectionService : ITopologyRuntimeProject
     {
         return eventType switch
         {
-            WorkbenchAgentConstants.EventTypes.TaskCompleted => 0.35,
-            WorkbenchAgentConstants.EventTypes.TaskFailed => 1.0,
-            WorkbenchAgentConstants.EventTypes.MemoryRead => 0.4,
-            WorkbenchAgentConstants.EventTypes.MemoryWritten => 0.6,
-            WorkbenchAgentConstants.EventTypes.KnowledgeUpdated => 0.75,
+            WorkbenchRuntimeConstants.EventTypes.TaskCompleted => 0.35,
+            WorkbenchRuntimeConstants.EventTypes.TaskFailed => 1.0,
+            WorkbenchRuntimeConstants.EventTypes.MemoryRead => 0.4,
+            WorkbenchRuntimeConstants.EventTypes.MemoryWritten => 0.6,
+            WorkbenchRuntimeConstants.EventTypes.KnowledgeUpdated => 0.75,
             _ => 0.5
         };
     }

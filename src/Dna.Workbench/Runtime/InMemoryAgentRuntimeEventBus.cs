@@ -1,17 +1,15 @@
-using Dna.Workbench.Models.Agent;
-
 namespace Dna.Workbench.Runtime;
 
 internal sealed class InMemoryAgentRuntimeEventBus : IAgentRuntimeEventBus
 {
     private readonly object _gate = new();
-    private readonly List<Action<AgentTimelineEvent>> _handlers = [];
+    private readonly List<Action<WorkbenchRuntimeEvent>> _handlers = [];
 
-    public void Publish(AgentTimelineEvent runtimeEvent)
+    public void Publish(WorkbenchRuntimeEvent runtimeEvent)
     {
         ArgumentNullException.ThrowIfNull(runtimeEvent);
 
-        Action<AgentTimelineEvent>[] handlers;
+        Action<WorkbenchRuntimeEvent>[] handlers;
         lock (_gate)
         {
             handlers = _handlers.ToArray();
@@ -21,7 +19,7 @@ internal sealed class InMemoryAgentRuntimeEventBus : IAgentRuntimeEventBus
             handler(runtimeEvent);
     }
 
-    public IDisposable Subscribe(Action<AgentTimelineEvent> handler)
+    public IDisposable Subscribe(Action<WorkbenchRuntimeEvent> handler)
     {
         ArgumentNullException.ThrowIfNull(handler);
 
@@ -33,7 +31,7 @@ internal sealed class InMemoryAgentRuntimeEventBus : IAgentRuntimeEventBus
         return new Subscription(this, handler);
     }
 
-    private void Unsubscribe(Action<AgentTimelineEvent> handler)
+    private void Unsubscribe(Action<WorkbenchRuntimeEvent> handler)
     {
         lock (_gate)
         {
@@ -43,7 +41,7 @@ internal sealed class InMemoryAgentRuntimeEventBus : IAgentRuntimeEventBus
 
     private sealed class Subscription(
         InMemoryAgentRuntimeEventBus owner,
-        Action<AgentTimelineEvent> handler) : IDisposable
+        Action<WorkbenchRuntimeEvent> handler) : IDisposable
     {
         private int _disposed;
 

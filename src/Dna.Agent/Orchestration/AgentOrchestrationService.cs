@@ -1,25 +1,15 @@
+using Dna.Agent.Contracts;
+using Dna.Agent.Models;
 using Dna.Workbench.Contracts;
-using Dna.Workbench.Models.Agent;
 using Dna.Workbench.Runtime;
 
-namespace Dna.Workbench.Agent;
+namespace Dna.Agent.Orchestration;
 
-internal sealed class AgentOrchestrationService : IAgentOrchestrationService, IDisposable
+internal sealed class AgentOrchestrationService(
+    IWorkbenchRuntimeService runtimeService) : IAgentOrchestrationService
 {
     private readonly object _gate = new();
     private readonly Dictionary<string, AgentSessionSnapshot> _sessions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly IAgentRuntimeEventBus _eventBus;
-    private readonly ITopologyRuntimeProjectionService _projectionService;
-    private readonly IDisposable _subscription;
-
-    public AgentOrchestrationService(
-        IAgentRuntimeEventBus eventBus,
-        ITopologyRuntimeProjectionService projectionService)
-    {
-        _eventBus = eventBus;
-        _projectionService = projectionService;
-        _subscription = _eventBus.Subscribe(HandleRuntimeEvent);
-    }
 
     public Task<AgentSessionSnapshot> StartSessionAsync(
         AgentTaskRequest request,
@@ -30,7 +20,7 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
         var session = new AgentSessionSnapshot
         {
             SessionId = Guid.NewGuid().ToString("N"),
-            Status = WorkbenchAgentConstants.SessionStatus.Pending,
+            Status = AgentSessionConstants.SessionStatus.Pending,
             StartedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow,
             Task = CloneRequest(request),
@@ -42,20 +32,20 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
             _sessions[session.SessionId] = session;
         }
 
-        PublishAndProject(new AgentTimelineEvent
+        Publish(new AgentTimelineEvent
         {
             SessionId = session.SessionId,
-            EventType = WorkbenchAgentConstants.EventTypes.TaskStarted,
+            EventType = WorkbenchRuntimeConstants.EventTypes.TaskStarted,
             Message = string.IsNullOrWhiteSpace(request.Title) ? "Agent session started." : request.Title,
             Metadata = CloneMetadata(request.Metadata)
         });
 
         foreach (var nodeId in request.TargetNodeIds.Where(static nodeId => !string.IsNullOrWhiteSpace(nodeId)))
         {
-            PublishAndProject(new AgentTimelineEvent
+            Publish(new AgentTimelineEvent
             {
                 SessionId = session.SessionId,
-                EventType = WorkbenchAgentConstants.EventTypes.NodeEntered,
+                EventType = WorkbenchRuntimeConstants.EventTypes.NodeEntered,
                 NodeId = nodeId,
                 Message = $"Entered node {nodeId}.",
                 Metadata = CloneMetadata(request.Metadata)
@@ -98,7 +88,7 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
             _sessions[sessionId] = new AgentSessionSnapshot
             {
                 SessionId = session.SessionId,
-                Status = WorkbenchAgentConstants.SessionStatus.Cancelled,
+                Status = AgentSessionConstants.SessionStatus.Cancelled,
                 StartedAtUtc = session.StartedAtUtc,
                 UpdatedAtUtc = DateTime.UtcNow,
                 Task = session.Task,
@@ -108,7 +98,7 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
                         new AgentTimelineEvent
                         {
                             SessionId = sessionId,
-                            EventType = WorkbenchAgentConstants.EventTypes.TaskFailed,
+                            EventType = WorkbenchRuntimeConstants.EventTypes.TaskFailed,
                             Message = "Agent session cancelled."
                         }
                     ])
@@ -116,38 +106,29 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
             };
         }
 
-        _projectionService.Reset(sessionId);
+        runtimeService.ResetProjection(sessionId);
         return Task.FromResult(true);
     }
 
-    public void Dispose()
-    {
-        _subscription.Dispose();
-    }
-
-    private void HandleRuntimeEvent(AgentTimelineEvent runtimeEvent)
+    private void Publish(AgentTimelineEvent agentEvent)
     {
         lock (_gate)
         {
-            if (!_sessions.TryGetValue(runtimeEvent.SessionId, out var session))
-                return;
-
-            _sessions[runtimeEvent.SessionId] = new AgentSessionSnapshot
+            if (_sessions.TryGetValue(agentEvent.SessionId, out var session))
             {
-                SessionId = session.SessionId,
-                Status = ResolveStatus(session.Status, runtimeEvent.EventType),
-                StartedAtUtc = session.StartedAtUtc,
-                UpdatedAtUtc = runtimeEvent.OccurredAtUtc,
-                Task = session.Task,
-                Timeline = session.Timeline.Concat([runtimeEvent]).ToList()
-            };
+                _sessions[agentEvent.SessionId] = new AgentSessionSnapshot
+                {
+                    SessionId = session.SessionId,
+                    Status = ResolveStatus(session.Status, agentEvent.EventType),
+                    StartedAtUtc = session.StartedAtUtc,
+                    UpdatedAtUtc = agentEvent.OccurredAtUtc,
+                    Task = session.Task,
+                    Timeline = session.Timeline.Concat([agentEvent]).ToList()
+                };
+            }
         }
-    }
 
-    private void PublishAndProject(AgentTimelineEvent runtimeEvent)
-    {
-        _eventBus.Publish(runtimeEvent);
-        _projectionService.Apply(runtimeEvent);
+        runtimeService.Publish(ToRuntimeEvent(agentEvent));
     }
 
     private AgentSessionSnapshot GetRequiredSession(string sessionId)
@@ -156,16 +137,33 @@ internal sealed class AgentOrchestrationService : IAgentOrchestrationService, ID
                ?? throw new InvalidOperationException($"Agent session not found: {sessionId}");
     }
 
+    private static WorkbenchRuntimeEvent ToRuntimeEvent(AgentTimelineEvent agentEvent)
+    {
+        return new WorkbenchRuntimeEvent
+        {
+            EventId = agentEvent.EventId,
+            SessionId = agentEvent.SessionId,
+            SourceKind = WorkbenchRuntimeConstants.SourceKinds.BuiltInAgent,
+            SourceId = "agent-orchestrator",
+            EventType = agentEvent.EventType,
+            NodeId = agentEvent.NodeId,
+            Relation = agentEvent.Relation,
+            Message = agentEvent.Message,
+            OccurredAtUtc = agentEvent.OccurredAtUtc,
+            Metadata = CloneMetadata(agentEvent.Metadata)
+        };
+    }
+
     private static string ResolveStatus(string currentStatus, string eventType)
     {
-        if (string.Equals(currentStatus, WorkbenchAgentConstants.SessionStatus.Cancelled, StringComparison.Ordinal))
+        if (string.Equals(currentStatus, AgentSessionConstants.SessionStatus.Cancelled, StringComparison.Ordinal))
             return currentStatus;
 
         return eventType switch
         {
-            WorkbenchAgentConstants.EventTypes.TaskStarted => WorkbenchAgentConstants.SessionStatus.Running,
-            WorkbenchAgentConstants.EventTypes.TaskCompleted => WorkbenchAgentConstants.SessionStatus.Completed,
-            WorkbenchAgentConstants.EventTypes.TaskFailed => WorkbenchAgentConstants.SessionStatus.Failed,
+            WorkbenchRuntimeConstants.EventTypes.TaskStarted => AgentSessionConstants.SessionStatus.Running,
+            WorkbenchRuntimeConstants.EventTypes.TaskCompleted => AgentSessionConstants.SessionStatus.Completed,
+            WorkbenchRuntimeConstants.EventTypes.TaskFailed => AgentSessionConstants.SessionStatus.Failed,
             _ => currentStatus
         };
     }

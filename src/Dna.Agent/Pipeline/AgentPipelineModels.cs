@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Dna.Workbench.Agent.Pipeline;
+namespace Dna.Agent.Pipeline;
 
 public sealed class AgentExecutionPipelineConfig
 {

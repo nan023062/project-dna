@@ -1,6 +1,6 @@
-using Dna.Workbench.Models.Agent;
+using Dna.Agent.Models;
 
-namespace Dna.Workbench.Contracts;
+namespace Dna.Agent.Contracts;
 
 public interface IAgentOrchestrationService
 {

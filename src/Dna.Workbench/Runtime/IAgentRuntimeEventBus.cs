@@ -1,10 +1,8 @@
-using Dna.Workbench.Models.Agent;
-
 namespace Dna.Workbench.Runtime;
 
 public interface IAgentRuntimeEventBus
 {
-    void Publish(AgentTimelineEvent runtimeEvent);
+    void Publish(WorkbenchRuntimeEvent runtimeEvent);
 
-    IDisposable Subscribe(Action<AgentTimelineEvent> handler);
+    IDisposable Subscribe(Action<WorkbenchRuntimeEvent> handler);
 }

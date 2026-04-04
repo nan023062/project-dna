@@ -105,13 +105,14 @@ public partial class MainWindowViewModel : ObservableObject
 
     public MainWindowViewModel(
         IDnaApiClient apiClient,
-        IDesktopLocalWorkbenchClient localWorkbenchClient)
+        IDesktopLocalWorkbenchClient localWorkbenchClient,
+        IDesktopLocalAgentClient localAgentClient)
     {
         _apiClient = apiClient;
         WorkspaceExplorer = new WorkspaceExplorerViewModel(localWorkbenchClient);
         Topology = new TopologyViewModel(localWorkbenchClient);
         Memory = new MemoryViewModel(localWorkbenchClient);
-        Chat = new ChatViewModel(apiClient);
+        Chat = new ChatViewModel(localAgentClient);
         Tooling = new ToolingViewModel(apiClient);
     }
 

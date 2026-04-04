@@ -1,4 +1,4 @@
-namespace Dna.Workbench.Agent.Pipeline;
+namespace Dna.Agent.Pipeline;
 
 public static class AgentPipelineConstants
 {

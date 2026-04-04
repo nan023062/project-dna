@@ -1,4 +1,4 @@
-namespace Dna.Workbench.Models.Agent;
+namespace Dna.Agent.Models;
 
 public sealed class AgentTaskRequest
 {
@@ -15,7 +15,7 @@ public sealed class AgentSessionSnapshot
 {
     public string SessionId { get; init; } = Guid.NewGuid().ToString("N");
 
-    public string Status { get; init; } = WorkbenchAgentConstants.SessionStatus.Pending;
+    public string Status { get; init; } = AgentSessionConstants.SessionStatus.Pending;
 
     public DateTime StartedAtUtc { get; init; } = DateTime.UtcNow;
 
@@ -32,7 +32,7 @@ public sealed class AgentTimelineEvent
 
     public string SessionId { get; init; } = string.Empty;
 
-    public string EventType { get; init; } = WorkbenchAgentConstants.EventTypes.TaskStarted;
+    public string EventType { get; init; } = string.Empty;
 
     public string? NodeId { get; init; }
 

@@ -1,21 +1,21 @@
 # Dna.Workbench 类图
 
-> 状态：第一阶段目标类图
+> 状态：目标类图（按 2026-04-04 架构决策收口）
 > 最后更新：2026-04-04
 > 适用范围：`src/Dna.Workbench`
 
-本文档只描述 `Dna.Workbench` 作为应用层模块的目标类图，不展开 `Dna.Knowledge` 内部实现细节。
+本文档描述 `Dna.Workbench` 的长期稳定边界。  
+当前代码中真正属于长期边界的，是 `Knowledge`、`Runtime` 与 `Tooling` 三个能力面。
 
 ## 模块定位
 
-`Dna.Workbench` 是位于 `App` 与 `Dna.Knowledge` 之间的应用层 `Technical` 模块。
+`Dna.Workbench` 是位于 `App` / `Dna.Agent` 与 `Dna.Knowledge` 之间的应用服务模块。
 
-它的目标不是重新实现知识域，而是：
+它的目标不是管理任务执行过程，而是统一提供：
 
-- 定义稳定应用服务接口
-- 统一桌面端与外部 Agent 的用例编排
-- 定义 Agent 运行时会话和事件模型
-- 定义拓扑图实时投影的上层接口
+- 项目知识能力
+- 运行时观测能力
+- 后续统一工具能力入口
 
 ## 目标类图
 
@@ -24,7 +24,8 @@ classDiagram
     class IWorkbenchFacade {
         <<interface>>
         +IKnowledgeWorkbenchService Knowledge
-        +IAgentOrchestrationService Agent
+        +IWorkbenchToolService Tools
+        +IWorkbenchRuntimeService Runtime
     }
 
     class IKnowledgeWorkbenchService {
@@ -37,46 +38,62 @@ classDiagram
         +RecallAsync(query, cancellationToken) RecallResult
     }
 
-    class IAgentOrchestrationService {
+    class IWorkbenchToolService {
         <<interface>>
-        +StartSessionAsync(request, cancellationToken) AgentSessionSnapshot
-        +GetSession(sessionId) AgentSessionSnapshot
-        +ListSessions() IReadOnlyList~AgentSessionSnapshot~
-        +CancelSessionAsync(sessionId, cancellationToken) bool
+        +ListTools() IReadOnlyList~WorkbenchToolDescriptor~
+        +FindTool(name) WorkbenchToolDescriptor
+        +InvokeAsync(request, cancellationToken) WorkbenchToolInvocationResult
     }
 
-    class IAgentRuntimeEventBus {
+    class IWorkbenchRuntimeService {
         <<interface>>
         +Publish(runtimeEvent)
-        +Subscribe(handler) IDisposable
+        +GetProjectionSnapshot() TopologyRuntimeProjectionSnapshot
+        +ResetProjection(sessionId)
     }
 
-    class ITopologyRuntimeProjectionService {
-        <<interface>>
-        +GetSnapshot() TopologyRuntimeProjectionSnapshot
-        +Apply(runtimeEvent)
-        +Reset(sessionId)
+    class WorkbenchToolDescriptor {
+        +string Name
+        +string Group
+        +string Description
+        +bool ReadOnly
+        +IReadOnlyList~WorkbenchToolParameterDescriptor~ Parameters
     }
 
-    class AgentTaskRequest {
-        +string Title
-        +string Objective
-        +List~string~ TargetNodeIds
+    class WorkbenchToolParameterDescriptor {
+        +string Name
+        +string Type
+        +bool Required
+        +string Description
+    }
+
+    class WorkbenchToolInvocationRequest {
+        +string Name
+        +JsonElement Arguments
+        +WorkbenchToolInvocationContext Context
+    }
+
+    class WorkbenchToolInvocationContext {
+        +string SourceKind
+        +string SourceId
+        +string SessionId
+        +string WorkspaceRoot
         +Dictionary~string,string~ Metadata
     }
 
-    class AgentSessionSnapshot {
-        +string SessionId
-        +string Status
-        +DateTime StartedAtUtc
-        +DateTime UpdatedAtUtc
-        +AgentTaskRequest Task
-        +List~AgentTimelineEvent~ Timeline
+    class WorkbenchToolInvocationResult {
+        +string ToolName
+        +bool Success
+        +JsonElement Payload
+        +string Error
+        +DateTime ExecutedAtUtc
     }
 
-    class AgentTimelineEvent {
+    class WorkbenchRuntimeEvent {
         +string EventId
         +string SessionId
+        +string SourceKind
+        +string SourceId
         +string EventType
         +string NodeId
         +string Relation
@@ -116,17 +133,8 @@ classDiagram
     class RememberRequest
 
     IWorkbenchFacade o-- IKnowledgeWorkbenchService : aggregates
-    IWorkbenchFacade o-- IAgentOrchestrationService : aggregates
-
-    IAgentOrchestrationService --> AgentTaskRequest : consumes
-    IAgentOrchestrationService --> AgentSessionSnapshot : returns
-    AgentSessionSnapshot *-- AgentTimelineEvent : contains
-
-    IAgentRuntimeEventBus --> AgentTimelineEvent : publishes
-    ITopologyRuntimeProjectionService --> AgentTimelineEvent : consumes
-    ITopologyRuntimeProjectionService --> TopologyRuntimeProjectionSnapshot : returns
-    TopologyRuntimeProjectionSnapshot *-- TopologyRuntimeNodeState : contains
-    TopologyRuntimeProjectionSnapshot *-- TopologyRuntimeEdgeState : contains
+    IWorkbenchFacade o-- IWorkbenchToolService : aggregates
+    IWorkbenchFacade o-- IWorkbenchRuntimeService : aggregates
 
     IKnowledgeWorkbenchService --> TopologyWorkbenchSnapshot : returns
     IKnowledgeWorkbenchService --> WorkspaceDirectorySnapshot : returns
@@ -135,31 +143,63 @@ classDiagram
     IKnowledgeWorkbenchService --> MemoryEntry : returns
     IKnowledgeWorkbenchService --> RecallResult : returns
     IKnowledgeWorkbenchService --> RememberRequest : consumes
+
+    IWorkbenchToolService --> WorkbenchToolDescriptor : returns
+    IWorkbenchToolService --> WorkbenchToolInvocationRequest : consumes
+    IWorkbenchToolService --> WorkbenchToolInvocationResult : returns
+    WorkbenchToolDescriptor *-- WorkbenchToolParameterDescriptor : contains
+    WorkbenchToolInvocationRequest o-- WorkbenchToolInvocationContext : contains
+
+    IWorkbenchRuntimeService --> WorkbenchRuntimeEvent : consumes
+    IWorkbenchRuntimeService --> TopologyRuntimeProjectionSnapshot : returns
+    TopologyRuntimeProjectionSnapshot *-- TopologyRuntimeNodeState : contains
+    TopologyRuntimeProjectionSnapshot *-- TopologyRuntimeEdgeState : contains
 ```
 
 ## 类图说明
 
 - `IWorkbenchFacade`
-  - 应用层总门面
-  - 给桌面端或适配层提供一个统一入口
+  - Workbench 总入口
+  - 给桌面宿主、内置 Agent、CLI、MCP 提供统一能力面
 - `IKnowledgeWorkbenchService`
-  - 负责高层知识用例
-  - 依赖 `Dna.Knowledge`，但不暴露底层引擎组合细节
+  - 封装工作区、拓扑图、模块知识、记忆等项目能力
+  - 对上提供稳定用例，对下依赖 `Dna.Knowledge`
+- `IWorkbenchToolService`
+  - 把 Workbench 能力整理成统一工具目录与调用入口
+  - 供内置 Agent、MCP、CLI 逐步收敛到同一套能力语义
+- `IWorkbenchRuntimeService`
+  - 接收任意 Agent 的运行时事件
+  - 把事件投影成拓扑图可消费的实时状态
+- `WorkbenchRuntimeEvent`
+  - 不表达“如何规划任务”，只表达“发生了什么运行事件”
+  - 适用于内置 Agent 与外置 Agent 的统一观测模型
+
+## 与 Dna.Agent 的边界
+
+下列职责不属于 `Dna.Workbench`，而属于 `Dna.Agent`：
+
+- 启动任务会话
+- 任务计划生成
+- 步骤推进
+- 工具调用策略
+- 大模型响应循环
+- 失败恢复与重试
+
+当前已经迁出的典型内容包括：
+
 - `IAgentOrchestrationService`
-  - 负责任务会话生命周期
-  - 是后续 Agent 编排系统的主入口
-- `IAgentRuntimeEventBus`
-  - 负责统一运行时事件流
-  - 内置 Agent 与外部 Agent 都应往这里发事件
-- `ITopologyRuntimeProjectionService`
-  - 负责把运行时事件变成拓扑图可直接消费的实时状态
+- `AgentSessionSnapshot`
+- `AgentTaskRequest`
+
+仍留在 `Dna.Workbench` 下的 `Agent/Pipeline/*` 仅视为历史遗留，不代表长期边界。
 
 ## 第一阶段实现约束
 
 后续开发时应遵守：
 
-1. `App` 不要直接依赖 `Dna.Knowledge` 继续新增应用层编排逻辑
+1. `App` 不要继续新增直接拼装 `Dna.Knowledge` 的应用层逻辑
 2. 新增知识用例优先落到 `IKnowledgeWorkbenchService`
-3. 新增 Agent 流程优先落到 `IAgentOrchestrationService`
-4. 拓扑实时状态优先围绕 `AgentTimelineEvent` 和 `TopologyRuntimeProjectionSnapshot` 建模
-5. HTTP / MCP / CLI 只做适配，不承载真实业务编排
+3. 新增统一工具能力优先落到 `IWorkbenchToolService`
+4. 新增运行时观测能力优先落到 `IWorkbenchRuntimeService`
+5. 不再把新的任务编排职责加进 `Dna.Workbench`
+6. HTTP / MCP / CLI 只做适配，不承载真正的知识编排逻辑

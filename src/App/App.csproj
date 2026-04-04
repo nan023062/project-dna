@@ -13,6 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\\Dna.Agent\\Dna.Agent.csproj" />
     <ProjectReference Include="..\Dna.Core\Dna.Core.csproj" />
     <ProjectReference Include="..\Dna.Knowledge\Dna.Knowledge.csproj" />
     <ProjectReference Include="..\Dna.Workbench\Dna.Workbench.csproj" />

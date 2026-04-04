@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly EmbeddedAppHost _host;
     private readonly IDnaApiClient _apiClient;
     private readonly IDesktopLocalWorkbenchClient _localWorkbenchClient;
+    private readonly IDesktopLocalAgentClient _localAgentClient;
     private readonly DispatcherTimer _statusTimer;
     private readonly DesktopRecentProjectsStore _recentProjectsStore;
 
@@ -44,7 +45,8 @@ public partial class MainWindow : Window
         _host = host;
         _apiClient = App.Current?.Services?.GetService<IDnaApiClient>() ?? new DnaApiClient();
         _localWorkbenchClient = new DesktopLocalWorkbenchClient(_host);
-        ViewModel = new MainWindowViewModel(_apiClient, _localWorkbenchClient);
+        _localAgentClient = new DesktopLocalAgentClient(_host);
+        ViewModel = new MainWindowViewModel(_apiClient, _localWorkbenchClient, _localAgentClient);
         DataContext = ViewModel;
         _recentProjectsStore = DesktopRecentProjectsStore.CreateDefault();
 
