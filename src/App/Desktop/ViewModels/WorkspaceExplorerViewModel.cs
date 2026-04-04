@@ -1,118 +1,124 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
-using Avalonia.Controls;
-using Avalonia.Input;
-using Avalonia.Interactivity;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Dna.App.Desktop.Services;
 
-namespace Dna.App.Desktop;
+namespace Dna.App.Desktop.ViewModels;
 
-public partial class MainWindow
+public partial class WorkspaceExplorerViewModel : ObservableObject
 {
-    private string? _selectedWorkspaceEntryPath;
+    private readonly IDnaApiClient _apiClient;
 
-    private void InitializeWorkspaceExplorer()
+    [ObservableProperty]
+    private ObservableCollection<WorkspaceTreeItemViewModel> _items = new();
+
+    [ObservableProperty]
+    private WorkspaceTreeItemViewModel? _selectedItem;
+
+    [ObservableProperty]
+    private string _summaryText = "WorkspaceEngine Snapshot";
+
+    [ObservableProperty]
+    private string _projectPathText = "No workspace selected.";
+
+    [ObservableProperty]
+    private string _selectionTitle = "Nothing selected";
+
+    [ObservableProperty]
+    private string _selectionMeta = "Select a folder or file from the WorkspaceEngine tree.";
+
+    [ObservableProperty]
+    private string _selectionPath = "-";
+
+    [ObservableProperty]
+    private string _selectionBadge = string.Empty;
+
+    [ObservableProperty]
+    private string _selectionAction = string.Empty;
+
+    public WorkspaceExplorerViewModel(IDnaApiClient apiClient)
     {
-        ResetWorkspaceExplorer();
+        _apiClient = apiClient;
     }
 
-    private async void RefreshWorkspaceTree_OnClick(object? sender, RoutedEventArgs e)
+    public void Reset()
     {
-        await RefreshWorkspaceTreeAsync();
+        Items.Clear();
+        SummaryText = "WorkspaceEngine Snapshot";
+        ProjectPathText = "No workspace selected.";
+        SelectedItem = null;
+        ResetSelectionDetails("Select a project to load the physical folder tree.");
     }
 
-    private async Task RefreshWorkspaceTreeAsync()
+    private void ResetSelectionDetails(string meta)
     {
-        if (_project is null)
+        SelectionTitle = "Nothing selected";
+        SelectionMeta = meta;
+        SelectionPath = "-";
+        SelectionBadge = string.Empty;
+        SelectionAction = string.Empty;
+    }
+
+    partial void OnSelectedItemChanged(WorkspaceTreeItemViewModel? value)
+    {
+        if (value is null)
         {
-            ResetWorkspaceExplorer();
+            ResetSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
             return;
         }
 
-        WorkspaceTreeSummaryText.Text = "Loading WorkspaceEngine tree...";
-        WorkspaceProjectPathText.Text = _project.ProjectRoot;
-        WorkspaceExplorerWindow.Title = "Workspace Tree";
+        SelectionTitle = value.DisplayName;
+        SelectionMeta = value.MetaLine;
+        SelectionPath = string.IsNullOrWhiteSpace(value.Path) ? value.FullPath : value.Path;
+        SelectionBadge = value.BadgeLine ?? string.Empty;
+        SelectionAction = value.ActionLine ?? string.Empty;
+    }
+
+    [RelayCommand]
+    public async Task RefreshAsync(string projectRoot)
+    {
+        if (string.IsNullOrWhiteSpace(projectRoot))
+        {
+            Reset();
+            return;
+        }
+
+        SummaryText = "Loading WorkspaceEngine tree...";
+        ProjectPathText = projectRoot;
 
         try
         {
-            var tree = await GetJsonAsync(BuildLocalUrl("/api/workspace/tree?maxDepth=6"));
+            var tree = await _apiClient.GetAsync("/api/workspace/tree?maxDepth=6");
             var root = ParseWorkspaceDirectoryTree(tree);
-            var items = root.Children;
-
-            WorkspaceTreeView.ItemsSource = items;
-            WorkspaceTreeSummaryText.Text =
-                $"{root.Name}  |  {root.DirectoryCount} dirs  |  {root.FileCount} files  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
-            WorkspaceProjectPathText.Text = root.FullPath;
-            WorkspaceExplorerWindow.Title = "Workspace Tree";
-
-            var preferred = FindWorkspaceTreeItem(items, _selectedWorkspaceEntryPath);
-            if (preferred is not null)
+            
+            Items.Clear();
+            foreach (var item in root.Children)
             {
-                WorkspaceTreeView.SelectedItem = preferred;
-                ApplyWorkspaceSelection(preferred);
-                return;
+                Items.Add(item);
             }
 
-            ResetWorkspaceSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
+            SummaryText = $"{root.Name}  |  {root.DirectoryCount} dirs  |  {root.FileCount} files  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
+            ProjectPathText = root.FullPath;
+
+            var preferredPath = SelectedItem?.Path;
+            var preferred = FindWorkspaceTreeItem(Items, preferredPath);
+            SelectedItem = preferred;
+            
+            if (preferred is null)
+            {
+                ResetSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
+            }
         }
         catch (Exception ex)
         {
-            WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
-            WorkspaceTreeSummaryText.Text = "Workspace tree unavailable";
-            WorkspaceProjectPathText.Text = ex.Message;
-            WorkspaceExplorerWindow.Title = "Workspace Tree";
-            ResetWorkspaceSelectionDetails($"Workspace tree load failed: {ex.Message}");
+            Items.Clear();
+            SummaryText = "Workspace tree unavailable";
+            ProjectPathText = ex.Message;
+            SelectedItem = null;
+            ResetSelectionDetails($"Workspace tree load failed: {ex.Message}");
         }
-    }
-
-    private void WorkspaceTreeView_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (WorkspaceTreeView.SelectedItem is not WorkspaceTreeItemViewModel item)
-        {
-            _selectedWorkspaceEntryPath = null;
-            ResetWorkspaceSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
-            return;
-        }
-
-        _selectedWorkspaceEntryPath = item.Path;
-        ApplyWorkspaceSelection(item);
-    }
-
-    private void WorkspaceTreeNode_OnTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is not Control { DataContext: WorkspaceTreeItemViewModel item })
-            return;
-
-        WorkspaceTreeView.SelectedItem = item;
-        _selectedWorkspaceEntryPath = item.Path;
-        ApplyWorkspaceSelection(item);
-        e.Handled = true;
-    }
-
-    private void ResetWorkspaceExplorer()
-    {
-        WorkspaceTreeView.ItemsSource = Array.Empty<WorkspaceTreeItemViewModel>();
-        WorkspaceTreeSummaryText.Text = "WorkspaceEngine Snapshot";
-        WorkspaceProjectPathText.Text = "No workspace selected.";
-        WorkspaceExplorerWindow.Title = "Workspace Tree";
-        ResetWorkspaceSelectionDetails("Select a project to load the physical folder tree.");
-    }
-
-    private void ResetWorkspaceSelectionDetails(string meta)
-    {
-        WorkspaceSelectionTitleText.Text = "Nothing selected";
-        WorkspaceSelectionMetaText.Text = meta;
-        WorkspaceSelectionPathText.Text = "-";
-        WorkspaceSelectionBadgeText.Text = string.Empty;
-        WorkspaceSelectionActionText.Text = string.Empty;
-    }
-
-    private void ApplyWorkspaceSelection(WorkspaceTreeItemViewModel item)
-    {
-        WorkspaceSelectionTitleText.Text = item.DisplayName;
-        WorkspaceSelectionMetaText.Text = item.MetaLine;
-        WorkspaceSelectionPathText.Text = string.IsNullOrWhiteSpace(item.Path) ? item.FullPath : item.Path;
-        WorkspaceSelectionBadgeText.Text = item.BadgeLine ?? string.Empty;
-        WorkspaceSelectionActionText.Text = item.ActionLine ?? string.Empty;
     }
 
     private static WorkspaceTreeRootViewModel ParseWorkspaceDirectoryTree(JsonElement element)
@@ -288,24 +294,45 @@ public partial class MainWindow
         return null;
     }
 
-    private sealed record WorkspaceTreeRootViewModel(
-        string Name,
-        string FullPath,
-        int DirectoryCount,
-        int FileCount,
-        DateTime ScannedAtUtc,
-        List<WorkspaceTreeItemViewModel> Children);
+    private static string? GetString(JsonElement element, string propertyName, string? defaultValue)
+    {
+        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String)
+            return value.GetString();
+        return defaultValue;
+    }
 
-    private sealed record WorkspaceTreeItemViewModel(
-        string Name,
-        string DisplayName,
-        string Path,
-        string FullPath,
-        bool IsDirectory,
-        string MetaLine,
-        string Caption,
-        string? BadgeLine,
-        string? ActionLine,
-        string Icon,
-        List<WorkspaceTreeItemViewModel> Children);
+    private static int? ParseNullableInt(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
+            return number;
+        return null;
+    }
+
+    private static DateTime ParseDate(JsonElement element, string propertyName)
+    {
+        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
+            return date;
+        return DateTime.MinValue;
+    }
 }
+
+public sealed record WorkspaceTreeRootViewModel(
+    string Name,
+    string FullPath,
+    int DirectoryCount,
+    int FileCount,
+    DateTime ScannedAtUtc,
+    List<WorkspaceTreeItemViewModel> Children);
+
+public sealed record WorkspaceTreeItemViewModel(
+    string Name,
+    string DisplayName,
+    string Path,
+    string FullPath,
+    bool IsDirectory,
+    string MetaLine,
+    string Caption,
+    string? BadgeLine,
+    string? ActionLine,
+    string Icon,
+    List<WorkspaceTreeItemViewModel> Children);

@@ -57,6 +57,184 @@
             <Setter Property="CornerRadius" Value="10" />
         </Style>
 
+        <Style Selector="Border.agentHeaderSurface">
+            <Setter Property="Background" Value="#1D1E20" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="Border.agentPaneSurface">
+            <Setter Property="Background" Value="#181818" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="CornerRadius" Value="0" />
+        </Style>
+
+        <Style Selector="Border.agentTopBarSurface">
+            <Setter Property="Background" Value="#181818" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+        </Style>
+
+        <Style Selector="Border.agentSessionStrip">
+            <Setter Property="Background" Value="#1B1C1F" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="Border.agentConversationSurface">
+            <Setter Property="Background" Value="#181A1D" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+        </Style>
+
+        <Style Selector="Border.agentComposerSurface">
+            <Setter Property="Background" Value="#1D1E20" />
+            <Setter Property="BorderBrush" Value="#313337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="12" />
+        </Style>
+
+        <Style Selector="Border.agentPaneBadge">
+            <Setter Property="Background" Value="#252526" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+
+        <Style Selector="TextBlock.agentPaneBadgeText">
+            <Setter Property="Foreground" Value="#9CDCFE" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentPaneTitle">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentSidebarLabel">
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentSidebarTitle">
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentMetaLabel">
+            <Setter Property="Foreground" Value="#8B8B8B" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentSectionLabel">
+            <Setter Property="Foreground" Value="#D0D0D0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="TextBlock.agentSessionPath">
+            <Setter Property="Foreground" Value="#8B8B8B" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="TextBlock.agentConversationMeta">
+            <Setter Property="Foreground" Value="#6F7681" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="TextBlock.agentComposerHint">
+            <Setter Property="Foreground" Value="#7A7F89" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="TextBlock.agentComposerStatus">
+            <Setter Property="Foreground" Value="#7A7F89" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="Border.agentFooterBadge">
+            <Setter Property="Background" Value="#1F2124" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+
+        <Style Selector="TextBlock.agentFooterBadgeText">
+            <Setter Property="Foreground" Value="#B9B9B9" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="Border.agentWelcomeBadge">
+            <Setter Property="Background" Value="#1F3A4A" />
+            <Setter Property="BorderBrush" Value="#0E639C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="8,4" />
+        </Style>
+
+        <Style Selector="TextBlock.agentWelcomeBadgeText">
+            <Setter Property="Foreground" Value="#9CDCFE" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#1F2124" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="Border.cardSoft">
+            <Setter Property="Background" Value="#1A1C1F" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+        </Style>
+
+        <Style Selector="Border.moduleTypeLegend">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
+
+        <Style Selector="Border.moduleTypeLegend.project">
+            <Setter Property="Background" Value="#1F3A4A" />
+            <Setter Property="BorderBrush" Value="#4FC1FF" />
+        </Style>
+
+        <Style Selector="Border.moduleTypeLegend.department">
+            <Setter Property="Background" Value="#213229" />
+            <Setter Property="BorderBrush" Value="#73C991" />
+        </Style>
+
+        <Style Selector="Border.moduleTypeLegend.technical">
+            <Setter Property="Background" Value="#3A2B22" />
+            <Setter Property="BorderBrush" Value="#D19A66" />
+        </Style>
+
+        <Style Selector="Border.moduleTypeLegend.team">
+            <Setter Property="Background" Value="#3B3221" />
+            <Setter Property="BorderBrush" Value="#D7BA7D" />
+        </Style>
+
+        <Style Selector="TextBlock.moduleTypeLegendText">
+            <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
         <Style Selector="Border.sidebarPanel">
             <Setter Property="MinWidth" Value="240" />
         </Style>
@@ -234,6 +412,81 @@
             <Setter Property="Foreground" Value="#FFFFFF" />
         </Style>
 
+        <Style Selector="Button.agentToolbarButton">
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Background" Value="#252526" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="#D4D4D4" />
+        </Style>
+
+        <Style Selector="Button.agentIconButton">
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Foreground" Value="#8B8B8B" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="Button.agentIconButton:pointerover">
+            <Setter Property="Background" Value="#2A2D2E" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.agentComposerToolButton">
+            <Setter Property="MinWidth" Value="28" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="8,4" />
+            <Setter Property="Background" Value="#222427" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Foreground" Value="#C8C8C8" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="Button.agentComposerToolButton:pointerover">
+            <Setter Property="Background" Value="#2C2F34" />
+            <Setter Property="BorderBrush" Value="#45454A" />
+        </Style>
+
+        <Style Selector="Button.agentToolbarButton:pointerover">
+            <Setter Property="Background" Value="#2F3237" />
+            <Setter Property="BorderBrush" Value="#45454A" />
+        </Style>
+
+        <Style Selector="Button.agentToolbarButton.primaryAction">
+            <Setter Property="Background" Value="#0E639C" />
+            <Setter Property="BorderBrush" Value="#1177BB" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.agentModePill">
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Background" Value="#222427" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
+        <Style Selector="Button.agentSendButton">
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="Padding" Value="14,4" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+
         <Style Selector="TextBox">
             <Setter Property="MinHeight" Value="34" />
             <Setter Property="Background" Value="#1E1E1E" />
@@ -243,12 +496,29 @@
             <Setter Property="CornerRadius" Value="8" />
         </Style>
 
+        <Style Selector="TextBox.agentComposerInput">
+            <Setter Property="Background" Value="#151618" />
+            <Setter Property="BorderBrush" Value="#2D2D30" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="12" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
         <Style Selector="ComboBox">
             <Setter Property="MinHeight" Value="34" />
             <Setter Property="Background" Value="#1E1E1E" />
             <Setter Property="BorderBrush" Value="#3C3C3C" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="#D4D4D4" />
+            <Setter Property="CornerRadius" Value="8" />
+        </Style>
+
+        <Style Selector="ComboBox.agentModelPicker">
+            <Setter Property="Background" Value="#1A1C1F" />
+            <Setter Property="BorderBrush" Value="#333337" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="8" />
         </Style>
 
@@ -324,28 +594,63 @@
 
         <Style Selector="TabControl.workspaceTabs">
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Background" Value="#252526" />
-            <Setter Property="TabStripPlacement" Value="Top" />
+            <Setter Property="Background" Value="#1E1E1E" />
+            <Setter Property="TabStripPlacement" Value="Left" />
         </Style>
 
         <Style Selector="TabControl.workspaceTabs TabItem">
-            <Setter Property="MinWidth" Value="104" />
-            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="MaxWidth" Value="44" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Margin" Value="6,6,6,0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="#8B8B8B" />
         </Style>
 
-        <Style Selector="TabItem">
-            <Setter Property="Background" Value="#1F1F22" />
-            <Setter Property="BorderBrush" Value="#2D2D30" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="#9D9D9D" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="Padding" Value="14,9" />
-            <Setter Property="CornerRadius" Value="8,8,0,0" />
+        <Style Selector="TabControl.workspaceTabs TabItem:pointerover">
+            <Setter Property="Background" Value="#2A2D2E" />
         </Style>
 
-        <Style Selector="TabItem:selected">
-            <Setter Property="Background" Value="#252526" />
-            <Setter Property="BorderBrush" Value="#3C3C3C" />
+        <Style Selector="TabControl.workspaceTabs TabItem:selected">
+            <Setter Property="Background" Value="#2A2D2E" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="PathIcon.workspaceTabIcon">
+            <Setter Property="Foreground" Value="#8B8B8B" />
+        </Style>
+
+        <Style Selector="TabControl.workspaceTabs TabItem:selected PathIcon.workspaceTabIcon">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.activityBarButton">
+            <Setter Property="MinWidth" Value="44" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Foreground" Value="#8B8B8B" />
+            <Setter Property="FontSize" Value="18" />
+        </Style>
+
+        <Style Selector="Button.activityBarButton:pointerover">
+            <Setter Property="Background" Value="#2A2D2E" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+        </Style>
+
+        <Style Selector="PathIcon.activityBarIcon">
+            <Setter Property="Foreground" Value="#8B8B8B" />
+        </Style>
+
+        <Style Selector="Button.activityBarButton:pointerover PathIcon.activityBarIcon">
             <Setter Property="Foreground" Value="#FFFFFF" />
         </Style>
 

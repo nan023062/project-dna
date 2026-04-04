@@ -373,6 +373,7 @@ public sealed class GovernanceRefactorTests
 
         public TopologySnapshot GetTopology() => new();
         public TopologyWorkbenchSnapshot GetWorkbenchSnapshot() => new();
+        public McdpProjectGraph GetMcdpProjection(string? projectRoot = null) => new() { ProjectRoot = projectRoot };
 
         public TopologyManagementSnapshot GetManagementSnapshot()
             => new()

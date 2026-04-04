@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Dna.App.Services;
 using Dna.Core.Config;
 
@@ -7,14 +6,7 @@ namespace Dna.App.Desktop;
 public sealed class DesktopProjectConfig
 {
     private const string MetadataDirectoryName = ".agentic-os";
-    private const string ProjectConfigFileName = "project.json";
     private const string LlmConfigFileName = "llm.json";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true
-    };
 
     public required string ProjectRoot { get; init; }
     public required string ProjectName { get; init; }
@@ -23,7 +15,6 @@ public sealed class DesktopProjectConfig
     public required string MemoryRootPath { get; init; }
     public required string SessionRootPath { get; init; }
     public required string KnowledgeRootPath { get; init; }
-    public required string ConfigPath { get; init; }
     public required string LlmConfigPath { get; init; }
     public required string LogDirectoryPath { get; init; }
 
@@ -34,9 +25,7 @@ public sealed class DesktopProjectConfig
             throw new InvalidOperationException($"Project directory does not exist: {normalizedRoot}");
 
         var metadataRootPath = ResolveMetadataRootPath(normalizedRoot);
-        var configPath = ResolveProjectConfigPath(normalizedRoot);
-        var dto = TryReadOptionalConfig(configPath);
-        var projectName = ResolveProjectName(dto, normalizedRoot);
+        var projectName = ResolveProjectName(normalizedRoot);
 
         return new DesktopProjectConfig
         {
@@ -47,7 +36,6 @@ public sealed class DesktopProjectConfig
             MemoryRootPath = ResolveMemoryRootPath(normalizedRoot),
             SessionRootPath = ResolveSessionRootPath(normalizedRoot),
             KnowledgeRootPath = ResolveKnowledgeRootPath(normalizedRoot),
-            ConfigPath = configPath,
             LlmConfigPath = ResolveLlmConfigPath(normalizedRoot),
             LogDirectoryPath = ResolveLogDirectoryPath(normalizedRoot)
         };
@@ -84,9 +72,6 @@ public sealed class DesktopProjectConfig
     public static string ResolveKnowledgeRootPath(string projectRoot)
         => ProjectConfig.ResolveKnowledgeStorePath(ResolveMetadataRootPath(projectRoot));
 
-    public static string ResolveProjectConfigPath(string projectRoot)
-        => Path.Combine(ResolveMetadataRootPath(projectRoot), ProjectConfigFileName);
-
     public static string ResolveLogDirectoryPath(string projectRoot)
         => Path.Combine(ResolveMetadataRootPath(projectRoot), "logs");
 
@@ -96,37 +81,11 @@ public sealed class DesktopProjectConfig
         return Path.Combine(userProfile, MetadataDirectoryName, LlmConfigFileName);
     }
 
-    private static AgenticOsConfig? TryReadOptionalConfig(string configPath)
+    private static string ResolveProjectName(string projectRoot)
     {
-        if (!File.Exists(configPath))
-            return null;
-
-        try
-        {
-            var json = File.ReadAllText(configPath);
-            return JsonSerializer.Deserialize<AgenticOsConfig>(json, JsonOptions);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static string ResolveProjectName(AgenticOsConfig? dto, string projectRoot)
-    {
-        var projectName = (dto?.ProjectName ?? string.Empty).Trim();
-        if (!string.IsNullOrWhiteSpace(projectName))
-            return projectName;
-
         var directoryName = new DirectoryInfo(projectRoot).Name.Trim();
         return string.IsNullOrWhiteSpace(directoryName)
             ? "workspace"
             : directoryName;
-    }
-
-    private sealed class AgenticOsConfig
-    {
-        public string? ProjectName { get; init; }
-        public string? ServerBaseUrl { get; init; }
     }
 }

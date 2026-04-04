@@ -24,7 +24,6 @@ public sealed class WorkspaceEngineTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_workspaceRoot, "src"));
         Directory.CreateDirectory(Path.Combine(_workspaceRoot, ".agentic-os"));
         File.WriteAllText(Path.Combine(_workspaceRoot, "README.md"), "# test");
-        File.WriteAllText(Path.Combine(_workspaceRoot, ".agentic-os", "project.json"), "{}");
 
         var snapshot = _engine.GetRootSnapshot(_workspaceRoot, new WorkspaceTopologyContext());
 

@@ -34,6 +34,20 @@ public sealed class KnowledgeTools(DnaServerApi api)
         }
     }
 
+    [McpServerTool, Description("导出模块类图描述协议（MCDP）投影视图。")]
+    public async Task<string> export_mcdp()
+    {
+        try
+        {
+            var result = await api.GetAsync("/api/mcdp");
+            return JsonSerializer.Serialize(result, PrettyJson);
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
     [McpServerTool, Description("为一组模块生成依赖顺序。")]
     public async Task<string> get_dependency_order(
         [Description("模块名列表，逗号分隔。")] string moduleNames)

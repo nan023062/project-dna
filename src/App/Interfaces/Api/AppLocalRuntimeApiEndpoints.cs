@@ -3,6 +3,7 @@ using Dna.Core.Config;
 using Dna.Knowledge;
 using Dna.Knowledge.Workspace;
 using Dna.Knowledge.Workspace.Models;
+using Dna.Memory.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dna.App.Interfaces.Api;
@@ -42,11 +43,42 @@ public static class AppLocalRuntimeApiEndpoints
                 projectName = runtime.ProjectName,
                 moduleCount,
                 memoryCount = memory.MemoryCount(),
+                sessionCount = GetSessionEntries(memory, nodeId: null, limit: 5000).Count,
                 startedAt = runtime.StartedAtUtc,
                 uptime = (DateTime.UtcNow - runtime.StartedAtUtc).ToString(@"d\.hh\:mm\:ss"),
                 transport = "Local REST + MCP",
                 productMode = "single-user-local-app",
                 runtimeLlm = llm.GetSummary()
+            });
+        });
+
+        app.MapGet("/api/session", (
+            [FromServices] IMemoryEngine memory,
+            [FromQuery] string? nodeId,
+            [FromQuery] int? limit) =>
+        {
+            var effectiveLimit = Math.Clamp(limit ?? 50, 1, 500);
+            var items = GetSessionEntries(memory, nodeId, effectiveLimit)
+                .OrderByDescending(entry => entry.CreatedAt)
+                .Select(entry => new
+                {
+                    entry.Id,
+                    type = entry.Type.ToString(),
+                    stage = entry.Stage.ToString(),
+                    category = InferSessionCategory(entry),
+                    entry.NodeId,
+                    entry.Summary,
+                    entry.Content,
+                    entry.Tags,
+                    entry.CreatedAt
+                })
+                .ToList();
+
+            return Results.Ok(new
+            {
+                count = items.Count,
+                nodeId,
+                items
             });
         });
 
@@ -199,6 +231,28 @@ public static class AppLocalRuntimeApiEndpoints
         }
 
         return response;
+    }
+
+    private static List<MemoryEntry> GetSessionEntries(IMemoryEngine memory, string? nodeId, int limit)
+    {
+        return memory.QueryMemories(new MemoryFilter
+        {
+            NodeId = string.IsNullOrWhiteSpace(nodeId) ? null : nodeId,
+            Stages = [MemoryStage.ShortTerm],
+            Freshness = FreshnessFilter.FreshAndAging,
+            Limit = limit
+        });
+    }
+
+    private static string InferSessionCategory(MemoryEntry entry)
+    {
+        if (entry.Type == MemoryType.Working ||
+            entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+        {
+            return "tasks";
+        }
+
+        return "context";
     }
 
     private sealed class WorkspaceDirectoryTreeResponse

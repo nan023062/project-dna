@@ -19,6 +19,7 @@ public sealed class TopologyTheme
     public Color Composition { get; init; } = Color.Parse("#73C991");
     public Color Aggregation { get; init; } = Color.Parse("#D7BA7D");
     public Color ParentChild { get; init; } = Color.Parse("#7F848E");
+    public Color Technical { get; init; } = Color.Parse("#D19A66");
 
     public Color ResolveEdgeColor(string relationKey)
     {
@@ -39,6 +40,7 @@ public sealed class TopologyTheme
         {
             "project" => Dependency,
             "department" => Composition,
+            "technical" => Technical,
             "team" => Aggregation,
             _ => ParentChild
         };

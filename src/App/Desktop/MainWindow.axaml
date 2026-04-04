@@ -3,11 +3,14 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:desktop="clr-namespace:Dna.App.Desktop"
+        xmlns:viewModels="clr-namespace:Dna.App.Desktop.ViewModels"
         mc:Ignorable="d"
         d:DesignWidth="1520"
         d:DesignHeight="980"
         x:Class="Dna.App.Desktop.MainWindow"
-        Title="Agentic OS"
+        x:Name="MainWindowRoot"
+        x:DataType="viewModels:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
         MinWidth="1280"
         MinHeight="820">
     <Grid>
@@ -15,7 +18,7 @@
                 Classes="shellSurface"
                 Padding="28"
                 Margin="24"
-                IsVisible="True">
+                IsVisible="{Binding IsProjectLoadVisible}">
             <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="18">
                 <StackPanel Spacing="8">
                     <TextBlock Classes="heroTitle" Text="Open Workspace" />
@@ -27,7 +30,7 @@
                 <WrapPanel Grid.Row="1" Orientation="Horizontal">
                     <Button Classes="primaryAction"
                             Content="Open Folder..."
-                            Click="OpenProjectFolder_OnClick"
+                            Command="{Binding OpenProjectFolderCommand}"
                             Margin="0,0,8,0" />
                 </WrapPanel>
 
@@ -36,10 +39,11 @@
                         <Grid RowDefinitions="Auto,*" RowSpacing="12">
                             <TextBlock x:Name="RecentCountText"
                                        Classes="sectionTitle"
-                                       Text="Recent Projects" />
+                                       Text="{Binding RecentCountText}" />
                             <ListBox Grid.Row="1"
                                      x:Name="RecentProjectsListBox"
-                                     SelectionChanged="RecentProjectsListBox_OnSelectionChanged"
+                                     ItemsSource="{Binding RecentProjects}"
+                                     SelectedItem="{Binding SelectedRecentProject}"
                                      DoubleTapped="RecentProjectsListBox_OnDoubleTapped">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate x:CompileBindings="False">
@@ -55,9 +59,9 @@
                                                     Width="26"
                                                     Height="26"
                                                     Padding="0"
-                                                    Tag="{Binding ProjectRoot}"
                                                     Content="-"
-                                                    Click="RecentProjectRemoveButton_OnClick" />
+                                                    Command="{Binding #MainWindowRoot.DataContext.RemoveRecentProjectCommand}"
+                                                    CommandParameter="{Binding ProjectRoot}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -70,9 +74,11 @@
                             <TextBlock Classes="sectionTitle" Text="Project Summary" />
                             <TextBlock x:Name="RecentProjectHintText"
                                        Classes="secondaryText"
+                                       Text="{Binding RecentProjectHintText}"
                                        TextWrapping="Wrap" />
                             <TextBlock x:Name="LoaderStatusText"
                                        Classes="mutedText"
+                                       Text="{Binding LoaderStatusText}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -86,23 +92,23 @@
         </Border>
 
         <Grid x:Name="WorkspacePanel"
-              IsVisible="False"
+              IsVisible="{Binding IsWorkspaceVisible}"
               RowDefinitions="Auto,*">
             <Border Grid.Row="0" Classes="menuBarSurface" Padding="8,4">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
                     <Menu Classes="workspaceMenu">
                         <MenuItem Header="_Project">
-                            <MenuItem Header="Switch Workspace..." Click="MenuSwitchWorkspace_OnClick" />
-                            <MenuItem Header="Open Folder..." Click="OpenProjectFolder_OnClick" />
+                            <MenuItem Header="Switch Workspace..." Command="{Binding SwitchWorkspaceCommand}" />
+                            <MenuItem Header="Open Folder..." Command="{Binding OpenProjectFolderCommand}" />
                             <Separator />
-                            <MenuItem Header="Exit" Click="MenuExit_OnClick" />
+                            <MenuItem Header="Exit" Command="{Binding ExitCommand}" />
                         </MenuItem>
                         <MenuItem Header="_View">
-                            <MenuItem Header="Refresh Explorer" Click="RefreshWorkspaceTree_OnClick" />
-                            <MenuItem Header="Refresh Graph" Click="RefreshTopology_OnClick" />
-                            <MenuItem Header="Refresh Memory" Click="RefreshMemories_OnClick" />
+                                                    <MenuItem Header="Refresh Explorer" Command="{Binding WorkspaceExplorer.RefreshCommand}" CommandParameter="{Binding ProjectRoot}" />
+                            <MenuItem Header="Refresh Graph"  />
+                            <MenuItem Header="Refresh Memory" Command="{Binding Memory.RefreshMemoriesCommand}" CommandParameter="{Binding ProjectRoot}" />
                             <Separator />
-                            <MenuItem Header="Refresh Recent" Click="ReloadRecentProjects_OnClick" />
+                            <MenuItem Header="Refresh Recent" Command="{Binding ReloadRecentProjectsCommand}" />
                         </MenuItem>
                     </Menu>
 
@@ -112,12 +118,12 @@
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
                         <StackPanel IsVisible="False">
-                            <TextBlock x:Name="SelectedProjectText" />
-                            <TextBlock x:Name="LaunchModeText" />
+                            <TextBlock x:Name="SelectedProjectText" Text="{Binding SelectedProjectText}" />
+                            <TextBlock x:Name="LaunchModeText" Text="{Binding LaunchModeText}" />
                         </StackPanel>
-                        <Border Classes="statusPill"><TextBlock x:Name="AppStateText" Classes="statusPillText" Text="App: offline" /></Border>
-                        <Border Classes="statusPill"><TextBlock x:Name="ServerStateText" Classes="statusPillText" Text="Knowledge: -" /></Border>
-                        <Border Classes="statusPill"><TextBlock x:Name="AccessStateText" Classes="statusPillText" Text="Access: -" /></Border>
+                        <Border Classes="statusPill"><TextBlock x:Name="AppStateText" Classes="statusPillText" Text="{Binding AppStateText}" /></Border>
+                        <Border Classes="statusPill"><TextBlock x:Name="ServerStateText" Classes="statusPillText" Text="{Binding ServerStateText}" /></Border>
+                        <Border Classes="statusPill"><TextBlock x:Name="AccessStateText" Classes="statusPillText" Text="{Binding AccessStateText}" /></Border>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -134,20 +140,20 @@
                                 <desktop:WorkbenchWindow.WindowContent>
                                     <Grid RowDefinitions="Auto,*" RowSpacing="0">
                                         <StackPanel IsVisible="False">
-                                            <TextBlock x:Name="WorkspaceTreeSummaryText" Text="WorkspaceEngine Snapshot" />
-                                            <TextBlock x:Name="WorkspaceProjectPathText" Text="-" />
+                                            <TextBlock x:Name="WorkspaceTreeSummaryText" Text="{Binding WorkspaceExplorer.SummaryText}" />
+                                            <TextBlock x:Name="WorkspaceProjectPathText" Text="{Binding WorkspaceExplorer.ProjectPathText}" />
                                         </StackPanel>
 
                                         <Border Grid.Row="1" Background="Transparent" Padding="0">
                                             <TreeView x:Name="WorkspaceTreeView"
                                                       Classes="workspaceExplorer"
-                                                      SelectionChanged="WorkspaceTreeView_OnSelectionChanged">
+                                                      ItemsSource="{Binding WorkspaceExplorer.Items}"
+                                                      SelectedItem="{Binding WorkspaceExplorer.SelectedItem}">
                                                 <TreeView.ItemTemplate>
                                                     <TreeDataTemplate x:CompileBindings="False" ItemsSource="{Binding Children}">
                                                         <Grid ColumnDefinitions="Auto,*"
                                                               ColumnSpacing="8"
-                                                              Margin="6,1,8,1"
-                                                              Tapped="WorkspaceTreeNode_OnTapped">
+                                                              Margin="6,1,8,1">
                                                             <TextBlock Grid.Column="0" Classes="explorerGlyph" Text="{Binding Icon}" />
                                                             <TextBlock Grid.Column="1" Classes="explorerLabel" Text="{Binding DisplayName}" />
                                                         </Grid>
@@ -168,23 +174,23 @@
                                         <StackPanel Margin="12" Spacing="8">
                                             <TextBlock x:Name="WorkspaceSelectionTitleText"
                                                        Classes="cardTitle"
-                                                       Text="Nothing selected" />
+                                                       Text="{Binding WorkspaceExplorer.SelectionTitle}" />
                                             <TextBlock x:Name="WorkspaceSelectionMetaText"
                                                        Classes="secondaryText"
                                                        TextWrapping="Wrap"
-                                                       Text="Select a folder or file from the WorkspaceEngine tree." />
+                                                       Text="{Binding WorkspaceExplorer.SelectionMeta}" />
                                             <TextBlock x:Name="WorkspaceSelectionPathText"
                                                        Classes="mutedText"
                                                        TextWrapping="Wrap"
-                                                       Text="-" />
+                                                       Text="{Binding WorkspaceExplorer.SelectionPath}" />
                                             <TextBlock x:Name="WorkspaceSelectionBadgeText"
                                                        Classes="tertiaryText"
                                                        TextWrapping="Wrap"
-                                                       Text="" />
+                                                       Text="{Binding WorkspaceExplorer.SelectionBadge}" />
                                             <TextBlock x:Name="WorkspaceSelectionActionText"
                                                        Classes="tertiaryText"
                                                        TextWrapping="Wrap"
-                                                       Text="" />
+                                                       Text="{Binding WorkspaceExplorer.SelectionAction}" />
                                         </StackPanel>
                                     </ScrollViewer>
                                 </desktop:WorkbenchWindow.WindowContent>
@@ -207,17 +213,17 @@
                                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                         <StackPanel Margin="16" Spacing="14">
                                                             <StackPanel IsVisible="False">
-                                                                <TextBlock x:Name="OverviewModeText" />
-                                                                <TextBlock x:Name="StatusText" />
-                                                                <TextBlock x:Name="OverviewPrimaryActionText" />
-                                                                <TextBlock x:Name="OverviewWorkflowText" />
-                                                                <TextBlock x:Name="OverviewRecommendationText" />
-                                                                <TextBlock x:Name="ConnectionStatusText" />
-                                                                <TextBlock x:Name="ConnectionRoleText" />
-                                                                <TextBlock x:Name="ConnectionIpText" />
-                                                                <TextBlock x:Name="ConnectionServerText" />
-                                                                <TextBlock x:Name="ConnectionNoteText" />
-                                                                <TextBlock x:Name="ConnectionRecommendationText" />
+                                                                <TextBlock x:Name="OverviewModeText" Text="{Binding OverviewModeText}" />
+                                                                <TextBlock x:Name="StatusText" Text="{Binding StatusText}" />
+                                                                <TextBlock x:Name="OverviewPrimaryActionText" Text="{Binding OverviewPrimaryActionText}" />
+                                                                <TextBlock x:Name="OverviewWorkflowText" Text="{Binding OverviewWorkflowText}" />
+                                                                <TextBlock x:Name="OverviewRecommendationText" Text="{Binding OverviewRecommendationText}" />
+                                                                <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" />
+                                                                <TextBlock x:Name="ConnectionRoleText" Text="{Binding ConnectionRoleText}" />
+                                                                <TextBlock x:Name="ConnectionIpText" Text="{Binding ConnectionIpText}" />
+                                                                <TextBlock x:Name="ConnectionServerText" Text="{Binding ConnectionServerText}" />
+                                                                <TextBlock x:Name="ConnectionNoteText" Text="{Binding ConnectionNoteText}" />
+                                                                <TextBlock x:Name="ConnectionRecommendationText" Text="{Binding ConnectionRecommendationText}" />
                                                             </StackPanel>
 
                                                             <Border Classes="innerSurface" Padding="16">
@@ -236,12 +242,12 @@
                                                                         <WrapPanel Orientation="Horizontal">
                                                                             <Button Classes="primaryAction"
                                                                                     Content="Refresh Memory"
-                                                                                    Click="RefreshMemories_OnClick" />
+                                                                                    Command="{Binding Memory.RefreshMemoriesCommand}" CommandParameter="{Binding ProjectRoot}" />
                                                                         </WrapPanel>
 
                                                                         <Grid Grid.Row="1" ColumnDefinitions="Auto,120,Auto,*,Auto,120" ColumnSpacing="8">
                                                                             <TextBlock Grid.Column="0" Classes="formLabel" VerticalAlignment="Center" Text="Type" />
-                                                                            <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="2">
+                                                                            <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="{Binding Memory.MemoryTypeSelectedIndex}">
                                                                                 <ComboBoxItem Content="Structural" />
                                                                                 <ComboBoxItem Content="Semantic" />
                                                                                 <ComboBoxItem Content="Episodic" />
@@ -249,30 +255,31 @@
                                                                                 <ComboBoxItem Content="Procedural" />
                                                                             </ComboBox>
                                                                             <TextBlock Grid.Column="2" Classes="formLabel" VerticalAlignment="Center" Text="Tags" />
-                                                                            <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Watermark="#desktop-note,#decision" />
+                                                                            <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Text="{Binding Memory.MemoryTags}" Watermark="#desktop-note,#decision" />
                                                                             <TextBlock Grid.Column="4" Classes="formLabel" VerticalAlignment="Center" Text="Discipline" />
-                                                                            <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="engineering" />
+                                                                            <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="{Binding Memory.MemoryDiscipline}" />
                                                                         </Grid>
 
                                                                         <TextBox Grid.Row="2"
                                                                                  x:Name="MemoryContentBox"
                                                                                  AcceptsReturn="True"
                                                                                  Height="96"
+                                                                                 Text="{Binding Memory.MemoryContent}"
                                                                                  TextWrapping="Wrap"
                                                                                  Watermark="Write a short-term memory..." />
 
                                                                         <WrapPanel Grid.Row="3" Orientation="Horizontal">
-                                                                            <Button x:Name="AddMemoryButton" Classes="primaryAction" Content="Remember" Click="AddMemory_OnClick" />
+                                                                            <Button x:Name="AddMemoryButton" Classes="primaryAction" Content="Remember" Command="{Binding Memory.AddMemoryCommand}" CommandParameter="{Binding ProjectRoot}" />
                                                                         </WrapPanel>
 
-                                                                        <TextBlock Grid.Row="4" x:Name="MemoryStatusText" Classes="mutedText" TextWrapping="Wrap" Text="Memory area ready." />
+                                                                        <TextBlock Grid.Row="4" x:Name="MemoryStatusText" Classes="mutedText" TextWrapping="Wrap" Text="{Binding Memory.MemoryStatusText}" />
                                                                     </Grid>
                                                                 </Border>
 
                                                                 <Border Grid.Column="1" Classes="innerSurface" Padding="16">
                                                                     <StackPanel Spacing="8">
                                                                         <TextBlock Classes="sectionTitle" Text="Recent Memory" />
-                                                                        <ListBox x:Name="MemoryListBox" />
+                                                                        <ListBox x:Name="MemoryListBox" ItemsSource="{Binding Memory.Memories}" />
                                                                     </StackPanel>
                                                                 </Border>
                                                             </Grid>
@@ -285,79 +292,80 @@
                                                             <WrapPanel Orientation="Horizontal">
                                                                 <Button Classes="primaryAction"
                                                                         Content="Refresh Graph"
-                                                                        Click="RefreshTopology_OnClick"
+                                                                        Command="{Binding Topology.RefreshCommand}"
+                                                                        CommandParameter="{Binding ProjectRoot}"
                                                                         Margin="0,0,8,0" />
                                                                 <Button Content="Root View"
-                                                                        Click="TopologyNavigateRoot_OnClick"
+                                                                        Command="{Binding Topology.NavigateRootCommand}"
                                                                         Margin="0,0,12,0" />
                                                                 <CheckBox Classes="filterChip"
                                                                           x:Name="TopologyDependencyFilter"
-                                                                          IsChecked="True"
+                                                                          IsChecked="{Binding Topology.ShowDependency}"
                                                                           Content="Dependency"
                                                                           Margin="0,0,8,0"
-                                                                          Checked="TopologyFilter_OnChanged"
-                                                                          Unchecked="TopologyFilter_OnChanged" />
+                                                                          
+                                                                           />
                                                                 <CheckBox Classes="filterChip"
                                                                           x:Name="TopologyCompositionFilter"
-                                                                          IsChecked="True"
+                                                                          IsChecked="{Binding Topology.ShowComposition}"
                                                                           Content="Composition"
                                                                           Margin="0,0,8,0"
-                                                                          Checked="TopologyFilter_OnChanged"
-                                                                          Unchecked="TopologyFilter_OnChanged" />
+                                                                          
+                                                                           />
                                                                 <CheckBox Classes="filterChip"
                                                                           x:Name="TopologyAggregationFilter"
-                                                                          IsChecked="True"
+                                                                          IsChecked="{Binding Topology.ShowAggregation}"
                                                                           Content="Aggregation"
                                                                           Margin="0,0,8,0"
-                                                                          Checked="TopologyFilter_OnChanged"
-                                                                          Unchecked="TopologyFilter_OnChanged" />
+                                                                          
+                                                                           />
                                                                 <CheckBox Classes="filterChip"
                                                                           x:Name="TopologyParentChildFilter"
-                                                                          IsChecked="True"
+                                                                          IsChecked="{Binding Topology.ShowParentChild}"
                                                                           Content="Parent / Child"
                                                                           Margin="0,0,8,0"
-                                                                          Checked="TopologyFilter_OnChanged"
-                                                                          Unchecked="TopologyFilter_OnChanged" />
+                                                                          
+                                                                           />
                                                                 <CheckBox Classes="filterChip"
                                                                           x:Name="TopologyCollaborationFilter"
-                                                                          IsChecked="True"
+                                                                          IsChecked="{Binding Topology.ShowCollaboration}"
                                                                           Content="Collaboration"
-                                                                          Checked="TopologyFilter_OnChanged"
-                                                                          Unchecked="TopologyFilter_OnChanged" />
+                                                                          
+                                                                           />
                                                             </WrapPanel>
                                                             <TextBlock x:Name="TopologySummaryText"
                                                                        Classes="mutedText"
                                                                        TextWrapping="Wrap"
-                                                                       Text="Topology not loaded." />
+                                                                       Text="{Binding Topology.TopologySummaryText}" />
                                                             <TextBlock x:Name="TopologyScopeText"
                                                                        Classes="secondaryText"
                                                                        TextWrapping="Wrap"
-                                                                       Text="Current scope: root" />
+                                                                       Text="{Binding Topology.TopologyScopeText}" />
                                                         </StackPanel>
 
                                                         <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
                                                             <Border Classes="metricSurface" Padding="12">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBlock Classes="mutedText" Text="Nodes" />
-                                                                    <TextBlock x:Name="StatModulesText" Classes="metricValue" Text="-" />
+                                                                    <TextBlock x:Name="StatModulesText" Classes="metricValue" Text="{Binding Topology.StatModulesText}" />
                                                                 </StackPanel>
                                                             </Border>
                                                             <Border Grid.Column="1" Classes="metricSurface" Padding="12">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBlock Classes="mutedText" Text="Dependencies" />
-                                                                    <TextBlock x:Name="StatDependenciesText" Classes="metricValue" Text="-" />
+                                                                    <TextBlock x:Name="StatDependenciesText" Classes="metricValue" Text="{Binding Topology.StatDependenciesText}" />
                                                                 </StackPanel>
                                                             </Border>
                                                             <Border Grid.Column="2" Classes="metricSurface" Padding="12">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBlock Classes="mutedText" Text="Collaboration" />
-                                                                    <TextBlock x:Name="StatCollaborationText" Classes="metricValue" Text="-" />
+                                                                    <TextBlock x:Name="StatCollaborationText" Classes="metricValue" Text="{Binding Topology.StatCollaborationText}" />
                                                                 </StackPanel>
                                                             </Border>
                                                             <Border Grid.Column="3" Classes="metricSurface" Padding="12">
                                                                 <StackPanel Spacing="4">
                                                                     <TextBlock Classes="mutedText" Text="Disciplines" />
-                                                                    <TextBlock x:Name="StatDisciplinesText" Classes="metricValue" Text="-" />
+                                                                    <TextBlock x:Name="StatDisciplinesText" Classes="metricValue" Text="{Binding Topology.StatDisciplinesText}" />
                                                                 </StackPanel>
                                                             </Border>
                                                         </Grid>
@@ -374,15 +382,15 @@
                                                                             <TextBlock x:Name="TopologyDetailTitle"
                                                                                        Classes="cardTitle"
                                                                                        FontSize="18"
-                                                                                       Text="No node selected" />
+                                                                                       Text="{Binding Topology.DetailTitle}" />
                                                                             <TextBlock x:Name="TopologyDetailMeta"
                                                                                        Classes="mutedText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="-" />
+                                                                                       Text="{Binding Topology.DetailMeta}" />
                                                                             <TextBlock x:Name="TopologyDetailSummary"
                                                                                        Classes="secondaryText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Select a node in the graph." />
+                                                                                       Text="{Binding Topology.DetailSummary}" />
                                                                         </StackPanel>
                                                                     </Border>
 
@@ -392,32 +400,34 @@
                                                                             <TextBlock x:Name="TopologyEditHintText"
                                                                                        Classes="mutedText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Select a module node to edit its definition." />
+                                                                                       Text="{Binding Topology.EditHintText}" />
                                                                             <TextBlock x:Name="TopologyEditParallelHintText"
                                                                                        Classes="tertiaryText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Manual save and MCP upsert_module share the same write path." />
+                                                                                       Text="{Binding Topology.EditParallelHintText}" />
                                                                             <TextBlock Classes="formLabel" Text="Discipline" />
-                                                                            <ComboBox x:Name="TopologyEditDisciplineBox" />
+                                                                            <ComboBox x:Name="TopologyEditDisciplineBox" ItemsSource="{Binding Topology.DisciplineOptions}" SelectedItem="{Binding Topology.EditDiscipline}" />
                                                                             <TextBlock Classes="formLabel" Text="Layer" />
-                                                                            <TextBox x:Name="TopologyEditLayerBox" />
+                                                                            <TextBox x:Name="TopologyEditLayerBox" Text="{Binding Topology.EditLayer}" />
                                                                             <TextBlock Classes="formLabel" Text="Name" />
-                                                                            <TextBox x:Name="TopologyEditNameBox" />
+                                                                            <TextBox x:Name="TopologyEditNameBox" Text="{Binding Topology.EditName}" />
                                                                             <TextBlock Classes="formLabel" Text="Path" />
-                                                                            <TextBox x:Name="TopologyEditPathBox" />
+                                                                            <TextBox x:Name="TopologyEditPathBox" Text="{Binding Topology.EditPath}" />
                                                                             <TextBlock Classes="formLabel" Text="Parent Module" />
-                                                                            <ComboBox x:Name="TopologyEditParentBox" />
+                                                                            <ComboBox x:Name="TopologyEditParentBox" ItemsSource="{Binding Topology.ParentOptions}" SelectedItem="{Binding Topology.SelectedParent}" />
                                                                             <TextBlock Classes="formLabel" Text="Managed Paths" />
                                                                             <TextBox x:Name="TopologyEditManagedPathsBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditManagedPaths}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Maintainer" />
-                                                                            <TextBox x:Name="TopologyEditMaintainerBox" />
+                                                                            <TextBox x:Name="TopologyEditMaintainerBox" Text="{Binding Topology.EditMaintainer}" />
                                                                             <TextBlock Classes="formLabel" Text="Summary" />
                                                                             <TextBox x:Name="TopologyEditSummaryBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditSummary}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Boundary" />
                                                                             <ComboBox x:Name="TopologyEditBoundaryBox" SelectedIndex="0">
@@ -430,64 +440,72 @@
                                                                             <TextBox x:Name="TopologyEditDependenciesBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditDependencies}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Public API" />
                                                                             <TextBox x:Name="TopologyEditPublicApiBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditPublicApi}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Constraints" />
                                                                             <TextBox x:Name="TopologyEditConstraintsBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditConstraints}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Workflow" />
                                                                             <TextBox x:Name="TopologyEditWorkflowBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditWorkflow}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Rules" />
                                                                             <TextBox x:Name="TopologyEditRulesBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditRules}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Prohibitions" />
                                                                             <TextBox x:Name="TopologyEditProhibitionsBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="56"
+                                                                                     Text="{Binding Topology.EditProhibitions}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Metadata JSON" />
                                                                             <TextBox x:Name="TopologyEditMetadataBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="88"
+                                                                                     Text="{Binding Topology.EditMetadata}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="MCP Preview" />
                                                                             <TextBox x:Name="TopologyMcpPreviewBox"
                                                                                      AcceptsReturn="True"
                                                                                      IsReadOnly="True"
                                                                                      Height="138"
+                                                                                     Text="{Binding Topology.McpPreview}"
                                                                                      TextWrapping="Wrap" />
                                                                             <WrapPanel Orientation="Horizontal">
                                                                                 <Button x:Name="TopologySaveModuleButton"
                                                                                         Classes="primaryAction"
                                                                                         Content="Save Module"
-                                                                                        Click="SaveTopologyModule_OnClick"
+                                                                                        Command="{Binding Topology.SaveModuleCommand}"
                                                                                         Margin="0,0,8,0" />
                                                                                 <Button x:Name="TopologyReloadLatestModuleButton"
                                                                                         Content="Reload Latest"
-                                                                                        Click="RefreshTopologyModuleEditorFromServer_OnClick"
+                                                                                        Command="{Binding Topology.ReloadModuleCommand}"
                                                                                         Margin="0,0,8,0" />
                                                                                 <Button Content="Reset"
-                                                                                        Click="ReloadTopologyModuleEditor_OnClick"
+                                                                                        
                                                                                         Margin="0,0,8,0" />
                                                                                 <Button x:Name="CopyTopologyMcpPreviewButton"
                                                                                         Content="Copy MCP"
-                                                                                        Click="CopyTopologyMcpPreview_OnClick" />
+                                                                                        Command="{Binding Topology.CopyMcpPreviewCommand}" />
                                                                             </WrapPanel>
                                                                             <TextBlock x:Name="TopologyEditStatusText"
                                                                                        Classes="mutedText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Module editor ready." />
+                                                                                       Text="{Binding Topology.EditStatusText}" />
                                                                         </StackPanel>
                                                                     </Border>
 
@@ -497,49 +515,53 @@
                                                                             <TextBlock x:Name="TopologyKnowledgeHintText"
                                                                                        Classes="mutedText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Select a real module to edit knowledge." />
+                                                                                       Text="{Binding Topology.KnowledgeHintText}" />
                                                                             <TextBlock x:Name="TopologyKnowledgeParallelHintText"
                                                                                        Classes="tertiaryText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Manual save and MCP/CLI writes share the same storage path." />
+                                                                                       Text="{Binding Topology.KnowledgeParallelHintText}" />
                                                                             <TextBlock Classes="formLabel" Text="Identity" />
                                                                             <TextBox x:Name="TopologyKnowledgeIdentityBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="80"
+                                                                                     Text="{Binding Topology.KnowledgeIdentity}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Lessons" />
                                                                             <TextBox x:Name="TopologyKnowledgeLessonsBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeLessons}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Active Tasks" />
                                                                             <TextBox x:Name="TopologyKnowledgeActiveTasksBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeActiveTasks}"
                                                                                      TextWrapping="Wrap" />
                                                                             <TextBlock Classes="formLabel" Text="Facts" />
                                                                             <TextBox x:Name="TopologyKnowledgeFactsBox"
                                                                                      AcceptsReturn="True"
                                                                                      Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeFacts}"
                                                                                      TextWrapping="Wrap" />
                                                                             <WrapPanel Orientation="Horizontal">
                                                                                 <Button x:Name="TopologySaveKnowledgeButton"
                                                                                         Classes="primaryAction"
                                                                                         Content="Save Knowledge"
-                                                                                        Click="SaveTopologyKnowledge_OnClick"
+                                                                                        Command="{Binding Topology.SaveKnowledgeCommand}"
                                                                                         Margin="0,0,8,0" />
                                                                                 <Button x:Name="TopologyReloadKnowledgeButton"
                                                                                         Content="Reload Latest"
-                                                                                        Click="RefreshTopologyKnowledge_OnClick"
+                                                                                        Command="{Binding Topology.ReloadKnowledgeCommand}"
                                                                                         Margin="0,0,8,0" />
                                                                                 <Button x:Name="TopologyResetKnowledgeButton"
                                                                                         Content="Reset Form"
-                                                                                        Click="ResetTopologyKnowledgeEditor_OnClick" />
+                                                                                        Command="{Binding Topology.ResetKnowledgeCommand}" />
                                                                             </WrapPanel>
                                                                             <TextBlock x:Name="TopologyKnowledgeStatusText"
                                                                                        Classes="mutedText"
                                                                                        TextWrapping="Wrap"
-                                                                                       Text="Knowledge editor ready." />
+                                                                                       Text="{Binding Topology.KnowledgeStatusText}" />
                                                                         </StackPanel>
                                                                     </Border>
 
@@ -548,14 +570,14 @@
                                                                             <TextBlock Classes="sectionTitle" Text="Visible Nodes" />
                                                                             <ListBox x:Name="TopologyListBox"
                                                                                      MaxHeight="220"
-                                                                                     SelectionChanged="TopologyListBox_OnSelectionChanged" />
+                                                                                     ItemsSource="{Binding Topology.VisibleNodeLines}" />
                                                                         </StackPanel>
                                                                     </Border>
 
                                                                     <Border Classes="innerSurface" Padding="14">
                                                                         <StackPanel Spacing="8">
                                                                             <TextBlock Classes="sectionTitle" Text="Relations" />
-                                                                            <ListBox x:Name="TopologyRelationListBox" MaxHeight="220" />
+                                                                            <ListBox x:Name="TopologyRelationListBox" MaxHeight="220" ItemsSource="{Binding Topology.RelationLines}" />
                                                                         </StackPanel>
                                                                     </Border>
                                                                 </StackPanel>
@@ -572,34 +594,37 @@
                                                                     <TextBlock x:Name="ToolingHubText"
                                                                                Classes="secondaryText"
                                                                                TextWrapping="Wrap"
-                                                                               Text="Connect Cursor, Codex and other tools through local REST + MCP." />
+                                                                               Text="{Binding Tooling.ToolingHubText}" />
                                                                 </StackPanel>
                                                             </Border>
 
                                                             <WrapPanel Orientation="Horizontal">
                                                                 <Button Classes="primaryAction"
                                                                         Content="Install Cursor"
-                                                                        Click="InstallCursor_OnClick"
+                                                                        Command="{Binding Tooling.InstallToolingCommand}"
+                                                                        CommandParameter="cursor"
                                                                         Margin="0,0,8,0" />
                                                                 <Button Content="Install Codex"
-                                                                        Click="InstallCodex_OnClick"
+                                                                        Command="{Binding Tooling.InstallToolingCommand}"
+                                                                        CommandParameter="codex"
                                                                         Margin="0,0,8,0" />
                                                                 <Button Content="Refresh"
-                                                                        Click="RefreshTooling_OnClick"
+                                                                        Command="{Binding Tooling.RefreshToolingStatusCommand}"
+                                                                        CommandParameter="{Binding ProjectRoot}"
                                                                         Margin="0,0,8,0" />
                                                                 <Button Content="Refresh MCP"
-                                                                        Click="RefreshMcpTools_OnClick" />
+                                                                        Command="{Binding Tooling.RefreshMcpToolsCommand}" />
                                                             </WrapPanel>
 
                                                             <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
                                                                 <Border Classes="innerSurface" Padding="16">
                                                                     <StackPanel Spacing="8">
-                                                                        <TextBlock x:Name="CursorStateText" Classes="cardTitle" Text="Cursor: -" />
-                                                                        <TextBlock x:Name="CodexStateText" Classes="cardTitle" Text="Codex: -" />
+                                                                        <TextBlock x:Name="CursorStateText" Classes="cardTitle" Text="{Binding Tooling.CursorStateText}" />
+                                                                        <TextBlock x:Name="CodexStateText" Classes="cardTitle" Text="{Binding Tooling.CodexStateText}" />
                                                                         <TextBlock x:Name="ToolingStatusText"
                                                                                    Classes="mutedText"
                                                                                    TextWrapping="Wrap"
-                                                                                   Text="Tooling status pending." />
+                                                                                   Text="{Binding Tooling.ToolingStatusText}" />
                                                                     </StackPanel>
                                                                 </Border>
 
@@ -609,8 +634,8 @@
                                                                         <TextBlock x:Name="McpSummaryText"
                                                                                    Classes="mutedText"
                                                                                    TextWrapping="Wrap"
-                                                                                   Text="MCP catalog not loaded." />
-                                                                        <ListBox x:Name="McpToolListBox" MaxHeight="280" />
+                                                                                   Text="{Binding Tooling.McpSummaryText}" />
+                                                                        <ListBox x:Name="McpToolListBox" MaxHeight="280" ItemsSource="{Binding Tooling.McpTools}" />
                                                                     </StackPanel>
                                                                 </Border>
                                                             </Grid>
@@ -637,30 +662,61 @@
                                                     <Button Grid.Column="1"
                                                             x:Name="ChatSessionsToggleButton"
                                                             Content="Sessions"
-                                                            Click="ToggleChatSessions_OnClick" />
+                                                            Command="{Binding Chat.ToggleChatSessionsCommand}" />
                                                     <Button Grid.Column="2"
                                                             x:Name="ChatNewButton"
                                                             Classes="primaryAction"
                                                             Content="New"
-                                                            Click="NewChat_OnClick" />
+                                                            Command="{Binding Chat.StartNewChatCommand}" />
                                                 </Grid>
 
                                                 <Border Grid.Row="1" Margin="12,12,12,0" Classes="innerSurface" Padding="10">
                                                     <Grid ColumnDefinitions="*">
                                                         <ComboBox x:Name="ChatProviderBox"
-                                                                  SelectionChanged="ChatProviderBox_OnSelectionChanged" />
+                                                                  ItemsSource="{Binding Chat.ChatProviders}"
+                                                                  SelectedItem="{Binding Chat.SelectedChatProvider}" />
                                                     </Grid>
                                                 </Border>
 
                                                 <Border Grid.Row="2" Margin="12" Classes="innerSurface" Padding="8">
                                                     <Grid>
-                                                        <ScrollViewer x:Name="ChatMessagesScrollViewer" VerticalScrollBarVisibility="Auto">
-                                                            <StackPanel x:Name="ChatMessagesHost" Spacing="10" />
+                                                        <ScrollViewer x:Name="ChatMessagesScrollViewer"
+                                                                      VerticalScrollBarVisibility="Auto"
+                                                                      IsVisible="{Binding Chat.IsChatMessagesVisible}">
+                                                            <ItemsControl ItemsSource="{Binding Chat.ChatMessages}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:CompileBindings="False">
+                                                                        <Border Classes="innerSurface" Padding="10" Margin="0,0,0,8">
+                                                                            <StackPanel Spacing="6">
+                                                                                <TextBlock Classes="tertiaryText" Text="{Binding Role}" />
+                                                                                <TextBlock TextWrapping="Wrap" Text="{Binding Content}" />
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
                                                         </ScrollViewer>
                                                         <ScrollViewer x:Name="ChatSessionsScrollViewer"
                                                                       VerticalScrollBarVisibility="Auto"
-                                                                      IsVisible="False">
-                                                            <StackPanel x:Name="ChatSessionsHost" Spacing="8" />
+                                                                      IsVisible="{Binding Chat.IsChatSessionsVisible}">
+                                                            <ItemsControl ItemsSource="{Binding Chat.ChatSessions}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:CompileBindings="False">
+                                                                        <Button Classes="quietButton"
+                                                                                HorizontalContentAlignment="Left"
+                                                                                Padding="10"
+                                                                                Margin="0,0,0,8"
+                                                                                Command="{Binding #MainWindowRoot.DataContext.Chat.LoadChatSessionCommand}"
+                                                                                CommandParameter="{Binding Id}">
+                                                                            <StackPanel Spacing="4">
+                                                                                <TextBlock Classes="cardTitle" Text="{Binding Title}" />
+                                                                                <TextBlock Classes="tertiaryText" Text="{Binding Mode}" />
+                                                                                <TextBlock Classes="mutedText" Text="{Binding UpdatedAtLabel}" />
+                                                                            </StackPanel>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
                                                         </ScrollViewer>
                                                     </Grid>
                                                 </Border>
@@ -670,40 +726,41 @@
                                                            Margin="12,0"
                                                            Classes="mutedText"
                                                            TextWrapping="Wrap"
-                                                           Text="Chat ready." />
+                                                           Text="{Binding Chat.ChatStatusText}" />
 
                                                 <Grid Grid.Row="4" Margin="12" RowDefinitions="Auto,Auto" RowSpacing="10">
                                                     <TextBox x:Name="ChatInputBox"
                                                              AcceptsReturn="True"
                                                              Height="92"
+                                                             Text="{Binding Chat.ChatInputBoxText}"
                                                              TextWrapping="Wrap"
                                                              Watermark="Type a message..."
-                                                             KeyDown="ChatInputBox_OnKeyDown" />
+                                                              />
                                                     <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                                             <Button x:Name="ChatModeAskButton"
                                                                     Classes="chatModeButton"
                                                                     Content="Ask"
-                                                                    Click="SwitchChatModeAsk_OnClick" />
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="ask" />
                                                             <Button x:Name="ChatModePlanButton"
                                                                     Classes="chatModeButton"
                                                                     Content="Plan"
-                                                                    Click="SwitchChatModePlan_OnClick" />
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="plan" />
                                                             <Button x:Name="ChatModeAgentButton"
                                                                     Classes="chatModeButton"
                                                                     Content="Agent"
-                                                                    Click="SwitchChatModeAgent_OnClick" />
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="agent" />
                                                         </StackPanel>
                                                         <Button Grid.Column="1"
                                                                 x:Name="ChatStopButton"
                                                                 Content="Stop"
-                                                                Click="StopChat_OnClick"
-                                                                IsVisible="False" />
+                                                                Command="{Binding Chat.StopChatCommand}"
+                                                                IsVisible="{Binding Chat.IsChatStreaming}" />
                                                         <Button Grid.Column="2"
                                                                 x:Name="ChatSendButton"
                                                                 Classes="primaryAction"
                                                                 Content="Send"
-                                                                Click="SendChatMessage_OnClick" />
+                                                                Command="{Binding Chat.SendChatMessageCommand}" />
                                                     </Grid>
                                                 </Grid>
                                             </Grid>

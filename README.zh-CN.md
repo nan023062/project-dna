@@ -70,23 +70,12 @@ publish/agentic-os.exe
 
 ### 3. 准备项目目录
 
-桌面 App 需要加载一个包含下列文件的项目目录：
-
-```text
-.agentic-os/project.json
-```
-
-最小示例：
-
-```json
-{
-  "projectName": "agentic-os"
-}
-```
+桌面 App 可以直接加载任意项目目录。
 
 说明：
 
-- 历史文件里如果仍有 `serverBaseUrl` 字段，可以保留，但当前单 App 运行时并不依赖它
+- 如果目录下已经存在 `.agentic-os/`，App 会直接复用
+- 如果目录下还没有 `.agentic-os/`，App 会在首次加载时自动创建
 - 只有在桌面 App 成功加载项目后，本地 `5052` 运行时才会真正对外可用
 
 ### 4. 接入 Cursor / Codex
@@ -105,15 +94,14 @@ publish/agentic-os.exe
 
 ## 项目级状态目录
 
-当前 App 把项目级状态存放在 `.agentic-os/` 下：
+当前 App 主要把项目知识与本地运行时相关文件放在 `.agentic-os/` 下：
 
-- `project.json`：项目身份信息
-- `llm.json`：App 运行时大模型配置预留
+- `knowledge/`：知识图谱真相源（模块身份、层级、依赖）
+- `memory/`：长期记忆（决策、约定、教训、摘要）
+- `session/`：短期工作记忆（任务、上下文）
 - `logs/`：App 日志
-- `app-workspaces.json`：工作区状态
-- `agent-shell/agent-shell-state.json`：本地 agent shell 状态
 
-当前本地知识库也基于这个项目级元数据根目录初始化。
+当前本地知识库与桌面运行时都围绕这个目录初始化；其中工作区配置等用户级状态已迁移到用户目录，不再作为项目真相源的一部分。
 
 ## App 本地运行时接口
 

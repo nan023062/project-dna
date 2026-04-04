@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dna.Core.Config;
 using Dna.Knowledge;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,6 +24,12 @@ public static class AppLocalTopologyApiEndpoints
         {
             topology.BuildTopology();
             return Results.Json(topology.GetWorkbenchSnapshot(), JsonOpts);
+        });
+
+        api.MapGet("/mcdp", ([FromServices] ITopoGraphApplicationService topology, [FromServices] ProjectConfig config) =>
+        {
+            topology.BuildTopology();
+            return Results.Json(topology.GetMcdpProjection(config.DefaultProjectRoot), JsonOpts);
         });
 
         api.MapGet("/plan", ([FromQuery] string modules, [FromServices] ITopoGraphApplicationService topology) =>

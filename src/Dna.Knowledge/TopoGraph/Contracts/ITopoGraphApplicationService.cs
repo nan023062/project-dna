@@ -7,6 +7,7 @@ public interface ITopoGraphApplicationService
     TopologySnapshot BuildTopology();
     TopologySnapshot GetTopology();
     TopologyWorkbenchSnapshot GetWorkbenchSnapshot();
+    McdpProjectGraph GetMcdpProjection(string? projectRoot = null);
     TopologyManagementSnapshot GetManagementSnapshot();
     TopologyModuleKnowledgeView? GetModuleKnowledge(string nodeIdOrName);
     IReadOnlyList<TopologyModuleKnowledgeView> ListModuleKnowledge();

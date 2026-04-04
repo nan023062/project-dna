@@ -301,11 +301,15 @@ public sealed class TopoGraphApplicationServiceTests : IDisposable
         Assert.Equal("Program", core.DisciplineDisplayName);
         Assert.Equal("govern", core.FileAuthority);
         Assert.Equal("semi-open", core.Boundary);
+        Assert.Equal(0, core.StructureDepth);
+        Assert.Equal(10, core.ArchitectureLayerScore);
 
         var combat = Assert.Single(workbench.Modules, module => module.NodeId == "AgenticOs/Program/Combat");
         Assert.Equal("Combat", combat.Name);
         Assert.Equal("AgenticOs/Program/Core", combat.ParentModuleId);
         Assert.Contains("Core", combat.Dependencies);
+        Assert.Equal(1, combat.StructureDepth);
+        Assert.Equal(90, combat.ArchitectureLayerScore);
 
         Assert.Contains(workbench.ContainmentEdges, edge =>
             edge.From == "project" &&
@@ -323,6 +327,23 @@ public sealed class TopoGraphApplicationServiceTests : IDisposable
             edge.Relation == "collaboration" &&
             ((edge.From == "Combat" && edge.To == "Core") ||
              (edge.From == "Core" && edge.To == "Combat")));
+
+        var mcdp = service.GetMcdpProjection("/tmp/agentic-os");
+        Assert.Equal("1.0", mcdp.ProtocolVersion);
+        Assert.Equal("/tmp/agentic-os", mcdp.ProjectRoot);
+        Assert.Equal("Agentic OS", mcdp.ProjectName);
+
+        var mcdpCore = Assert.Single(mcdp.Modules, module => module.Uid == "AgenticOs/Program/Core");
+        Assert.Equal("Technical", mcdpCore.Type);
+        Assert.Equal(10, mcdpCore.LayerScore);
+        Assert.Null(mcdpCore.Relationships.Parent);
+        Assert.Contains(mcdpCore.Relationships.Children, child => child == "AgenticOs/Program/Combat");
+
+        var mcdpCombat = Assert.Single(mcdp.Modules, module => module.Uid == "AgenticOs/Program/Combat");
+        Assert.Equal(90, mcdpCombat.LayerScore);
+        Assert.Equal("AgenticOs/Program/Core", mcdpCombat.Relationships.Parent);
+        Assert.Contains(mcdpCombat.Relationships.Dependencies, dependency =>
+            dependency.Target == "AgenticOs/Program/Core");
     }
 
     private TopoGraphApplicationService CreateService()

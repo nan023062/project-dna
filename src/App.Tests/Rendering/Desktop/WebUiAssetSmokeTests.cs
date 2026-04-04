@@ -19,6 +19,18 @@ public sealed class WebUiAssetSmokeTests
         Assert.Contains("ChatMessagesHost", axaml);
         Assert.Contains("ChatInputBox", axaml);
         Assert.Contains("ChatProviderBox", axaml);
+        Assert.Contains("SelectionChanged=\"MemoryListBox_OnSelectionChanged\"", axaml);
+        Assert.Contains("x:Name=\"UpdateMemoryButton\"", axaml);
+        Assert.Contains("x:Name=\"DeleteMemoryButton\"", axaml);
+        Assert.Contains("x:Name=\"ResetMemoryButton\"", axaml);
+        Assert.Contains("x:Name=\"WorkbenchFeedbackSummaryText\"", axaml);
+        Assert.Contains("x:Name=\"WorkbenchFeedbackListBox\"", axaml);
+        Assert.Contains("Click=\"ValidateWorkbench_OnClick\"", axaml);
+        Assert.Contains("Module Types", axaml);
+        Assert.Contains("Project: 项目根模块与总边界", axaml);
+        Assert.Contains("Department: 领域/职能作用域", axaml);
+        Assert.Contains("Technical: 技术能力模块", axaml);
+        Assert.Contains("Team: 执行/协作单元", axaml);
     }
 
     [Fact]

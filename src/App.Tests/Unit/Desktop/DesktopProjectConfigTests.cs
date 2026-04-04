@@ -11,26 +11,16 @@ public sealed class DesktopProjectConfigTests
         var projectRoot = CreateProjectRoot();
         var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
-        File.WriteAllText(
-            Path.Combine(metadataRoot, "project.json"),
-            """
-            {
-              "projectName": "agentic-os",
-              "serverBaseUrl": "http://127.0.0.1:5051"
-            }
-            """);
 
         var config = DesktopProjectConfig.Load(projectRoot);
 
         Assert.Equal(metadataRoot, config.MetadataRootPath);
         Assert.Equal(Path.Combine(metadataRoot, "memory"), config.MemoryRootPath);
         Assert.Equal(Path.Combine(metadataRoot, "knowledge"), config.KnowledgeRootPath);
-        Assert.Equal(Path.Combine(metadataRoot, "project.json"), config.ConfigPath);
-        
         var expectedLlmPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".agentic-os", "llm.json");
         Assert.Equal(expectedLlmPath, config.LlmConfigPath);
-        
         Assert.Equal(Path.Combine(metadataRoot, "logs"), config.LogDirectoryPath);
+        Assert.Equal(new DirectoryInfo(projectRoot).Name, config.ProjectName);
     }
 
     [Fact]
@@ -39,14 +29,6 @@ public sealed class DesktopProjectConfigTests
         var projectRoot = CreateProjectRoot();
         var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
-        File.WriteAllText(
-            Path.Combine(metadataRoot, "project.json"),
-            """
-            {
-              "projectName": "agentic-os",
-              "serverBaseUrl": "http://127.0.0.1:5051"
-            }
-            """);
 
         var config = DesktopProjectConfig.Load(projectRoot);
         config.EnsureLlmConfig();
@@ -63,14 +45,6 @@ public sealed class DesktopProjectConfigTests
         var projectRoot = CreateProjectRoot();
         var metadataRoot = Path.Combine(projectRoot, ".agentic-os");
         Directory.CreateDirectory(metadataRoot);
-        File.WriteAllText(
-            Path.Combine(metadataRoot, "project.json"),
-            """
-            {
-              "projectName": "agentic-os",
-              "serverBaseUrl": "http://127.0.0.1:5051"
-            }
-            """);
         File.WriteAllText(
             Path.Combine(metadataRoot, "app-workspaces.snapshot.json"),
             """
@@ -107,7 +81,6 @@ public sealed class DesktopProjectConfigTests
         config.EnsureProjectScopedAppState();
 
         Assert.Equal(new DirectoryInfo(projectRoot).Name, config.ProjectName);
-        Assert.False(File.Exists(config.ConfigPath));
         Assert.True(Directory.Exists(config.MemoryRootPath));
         Assert.True(Directory.Exists(config.KnowledgeRootPath));
         Assert.True(Directory.Exists(config.SessionRootPath));

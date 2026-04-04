@@ -14,14 +14,30 @@ public sealed partial class TopoGraphApplicationService
         }
     }
 
+    public McdpProjectGraph GetMcdpProjection(string? projectRoot = null)
+    {
+        lock (_lock)
+        {
+            EnsureTopologyReadyLocked();
+            return BuildMcdpProjectionLocked(projectRoot);
+        }
+    }
+
     private TopologyWorkbenchSnapshot BuildWorkbenchSnapshotLocked()
     {
         var facadeSnapshot = _facade.GetSnapshot();
         var management = BuildManagementSnapshot(facadeSnapshot);
         var disciplineNames = BuildDisciplineDisplayNames(management, _topology.Nodes);
+        var structureDepthMap = BuildStructureDepthMap(_topology.Nodes);
+        var architectureLayerScoreMap = BuildArchitectureLayerScoreMap(_topology.Nodes, _topology.DependencyRelations);
 
         var modules = _topology.Nodes
-            .Select(node => ToWorkbenchModuleView(node, _topology.Nodes, disciplineNames))
+            .Select(node => ToWorkbenchModuleView(
+                node,
+                _topology.Nodes,
+                disciplineNames,
+                structureDepthMap,
+                architectureLayerScoreMap))
             .ToList();
         var modulesByNodeId = modules
             .Where(module => !string.IsNullOrWhiteSpace(module.NodeId))
@@ -73,6 +89,61 @@ public sealed partial class TopoGraphApplicationService
         };
     }
 
+    private McdpProjectGraph BuildMcdpProjectionLocked(string? projectRoot)
+    {
+        var facadeSnapshot = _facade.GetSnapshot();
+        var structureDepthMap = BuildStructureDepthMap(_topology.Nodes);
+        var architectureLayerScoreMap = BuildArchitectureLayerScoreMap(_topology.Nodes, _topology.DependencyRelations);
+        var dependencyLookup = _topology.DependencyRelations
+            .GroupBy(relation => relation.FromId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderBy(item => item.ToId, StringComparer.OrdinalIgnoreCase)
+                    .Select(item => new McdpDependencyView
+                    {
+                        Target = item.ToId,
+                        Type = string.IsNullOrWhiteSpace(item.Label) ? "Association" : item.Label!,
+                        IsComputed = item.IsComputed
+                    })
+                    .ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var modules = _topology.Nodes
+            .OrderBy(node => structureDepthMap.GetValueOrDefault(node.Id, 0))
+            .ThenBy(node => node.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(node => new McdpModuleView
+            {
+                Uid = node.Id,
+                Name = node.Name,
+                LayerScore = architectureLayerScoreMap.GetValueOrDefault(node.Id, 10),
+                Type = ResolveWorkbenchNodeTypeName(node),
+                Dna = new McdpDnaView
+                {
+                    Summary = node.Summary,
+                    Keywords = [.. node.Keywords.OrderBy(item => item, StringComparer.OrdinalIgnoreCase)],
+                    Contract = [.. (node.PublicApi ?? []).OrderBy(item => item, StringComparer.OrdinalIgnoreCase)]
+                },
+                Relationships = new McdpRelationshipsView
+                {
+                    Parent = node.ParentId,
+                    Children = [.. node.ChildIds.OrderBy(item => item, StringComparer.OrdinalIgnoreCase)],
+                    Dependencies = dependencyLookup.GetValueOrDefault(node.Id, [])
+                }
+            })
+            .ToList();
+
+        var projectName = string.IsNullOrWhiteSpace(facadeSnapshot.Project?.Name)
+            ? "Project"
+            : facadeSnapshot.Project!.Name;
+        return new McdpProjectGraph
+        {
+            ProjectRoot = projectRoot,
+            ProjectName = projectName,
+            Modules = modules
+        };
+    }
+
     private static TopologyWorkbenchProjectView BuildWorkbenchProject(ProjectNode? project)
     {
         return new TopologyWorkbenchProjectView
@@ -91,7 +162,9 @@ public sealed partial class TopoGraphApplicationService
     private static TopologyWorkbenchModuleView ToWorkbenchModuleView(
         KnowledgeNode node,
         List<KnowledgeNode> allNodes,
-        Dictionary<string, string> disciplineNames)
+        Dictionary<string, string> disciplineNames,
+        IReadOnlyDictionary<string, int> structureDepthMap,
+        IReadOnlyDictionary<string, int> architectureLayerScoreMap)
     {
         var sameNameCount = allNodes.Count(other =>
             other.Name.Equals(node.Name, StringComparison.OrdinalIgnoreCase));
@@ -118,6 +191,8 @@ public sealed partial class TopoGraphApplicationService
             NodeId = node.Id,
             RelativePath = node.RelativePath,
             Layer = node.Layer,
+            StructureDepth = structureDepthMap.GetValueOrDefault(node.Id, 0),
+            ArchitectureLayerScore = architectureLayerScoreMap.GetValueOrDefault(node.Id, 10),
             Discipline = disciplineId,
             DisciplineDisplayName = disciplineNames.GetValueOrDefault(disciplineId, disciplineId),
             Type = typeName,
@@ -146,6 +221,100 @@ public sealed partial class TopoGraphApplicationService
             IsCrossWorkModule = node.IsCrossWorkModule,
             CanEdit = true
         };
+    }
+
+    private static Dictionary<string, int> BuildStructureDepthMap(IEnumerable<KnowledgeNode> nodes)
+    {
+        var nodeMap = nodes.ToDictionary(node => node.Id, StringComparer.OrdinalIgnoreCase);
+        var cache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var nodeId in nodeMap.Keys)
+            ResolveStructureDepth(nodeId, nodeMap, cache, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        return cache;
+    }
+
+    private static int ResolveStructureDepth(
+        string nodeId,
+        IReadOnlyDictionary<string, KnowledgeNode> nodeMap,
+        Dictionary<string, int> cache,
+        HashSet<string> visiting)
+    {
+        if (cache.TryGetValue(nodeId, out var depth))
+            return depth;
+
+        if (!nodeMap.TryGetValue(nodeId, out var node))
+            return 0;
+
+        if (!visiting.Add(nodeId))
+            return 0;
+
+        depth = string.IsNullOrWhiteSpace(node.ParentId)
+            ? 0
+            : ResolveStructureDepth(node.ParentId, nodeMap, cache, visiting) + 1;
+
+        visiting.Remove(nodeId);
+        cache[nodeId] = depth;
+        return depth;
+    }
+
+    private static Dictionary<string, int> BuildArchitectureLayerScoreMap(
+        IReadOnlyCollection<KnowledgeNode> nodes,
+        IEnumerable<TopologyRelation> dependencyRelations)
+    {
+        var dependencyMap = nodes.ToDictionary(
+            node => node.Id,
+            _ => new List<string>(),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var relation in dependencyRelations)
+        {
+            if (!dependencyMap.TryGetValue(relation.FromId, out var targets))
+                continue;
+
+            targets.Add(relation.ToId);
+        }
+
+        var depthCache = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+            ResolveArchitectureDepth(node.Id, dependencyMap, depthCache, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var maxDepth = depthCache.Count == 0 ? 0 : depthCache.Values.Max();
+        var scores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (nodeId, depth) in depthCache)
+        {
+            scores[nodeId] = maxDepth <= 0
+                ? 10
+                : 10 + (int)Math.Round((double)depth / maxDepth * 80);
+        }
+
+        return scores;
+    }
+
+    private static int ResolveArchitectureDepth(
+        string nodeId,
+        IReadOnlyDictionary<string, List<string>> dependencyMap,
+        Dictionary<string, int> cache,
+        HashSet<string> visiting)
+    {
+        if (cache.TryGetValue(nodeId, out var depth))
+            return depth;
+
+        if (!visiting.Add(nodeId))
+            return 0;
+
+        if (!dependencyMap.TryGetValue(nodeId, out var dependencies) || dependencies.Count == 0)
+        {
+            visiting.Remove(nodeId);
+            cache[nodeId] = 0;
+            return 0;
+        }
+
+        depth = 1 + dependencies.Max(depId => ResolveArchitectureDepth(depId, dependencyMap, cache, visiting));
+        visiting.Remove(nodeId);
+        cache[nodeId] = depth;
+        return depth;
     }
 
     private static List<TopologyWorkbenchRelationEdgeView> BuildWorkbenchContainmentEdges(

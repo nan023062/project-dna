@@ -2,11 +2,16 @@ using Dna.Core.Config;
 
 namespace Dna.App.Services;
 
-public sealed class AppProjectLlmConfigService(AppRuntimeOptions runtimeOptions)
+public sealed class AppProjectLlmConfigService
 {
-    public string FilePath => string.IsNullOrWhiteSpace(runtimeOptions.MetadataRootPath)
-        ? Path.Combine(runtimeOptions.WorkspaceRoot, ".agentic-os", "llm.json")
-        : Path.Combine(Path.GetFullPath(runtimeOptions.MetadataRootPath), "llm.json");
+    public string FilePath
+    {
+        get
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(userProfile, ".agentic-os", "llm.json");
+        }
+    }
 
     public RuntimeLlmConfigDocument Load()
         => RuntimeLlmConfigStore.LoadOrCreate(FilePath);

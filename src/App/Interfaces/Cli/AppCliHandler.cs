@@ -22,7 +22,11 @@ internal static class AppCliHandler
             {
                 "status" => await RunStatusAsync(settings),
                 "topology" or "topo" => await RunTopologyAsync(settings),
+                "plan" => await RunPlanAsync(settings),
+                "mcdp" => await RunMcdpAsync(settings),
                 "search" => await RunSearchAsync(settings),
+                "context" => await RunContextAsync(settings),
+                "session" => await RunSessionAsync(settings),
                 "recall" => await RunRecallAsync(settings),
                 "memory" or "memories" => await RunMemoriesAsync(settings),
                 "tools" or "mcp" => await RunToolsAsync(settings),
@@ -60,6 +64,7 @@ internal static class AppCliHandler
         Console.WriteLine($"  MCP:            {settings.BaseUrl}/mcp");
         Console.WriteLine($"  Modules:        {GetInt(runtime, "moduleCount")}");
         Console.WriteLine($"  Memories:       {GetInt(runtime, "memoryCount")}");
+        Console.WriteLine($"  Sessions:       {GetInt(runtime, "sessionCount")}");
         Console.WriteLine($"  Uptime:         {GetString(runtime, "uptime", "-")}");
 
         if (app.TryGetProperty("currentWorkspace", out var workspace))
@@ -99,6 +104,165 @@ internal static class AppCliHandler
         var count = modules.GetArrayLength();
         if (count > 20)
             Console.WriteLine($"  ... {count - 20} more modules are available via API or UI.");
+
+        return 0;
+    }
+
+    private static async Task<int> RunPlanAsync(AppCliSettings settings)
+    {
+        var modules = settings.Args.Count > 1
+            ? SplitModules(settings.Args.Skip(1))
+            : [];
+        if (modules.Count == 0)
+        {
+            WriteError("Usage: agentic-os cli plan <moduleA,moduleB,...>");
+            return 1;
+        }
+
+        var joined = string.Join(",", modules);
+        var json = await GetJsonAsync(settings.BaseUrl, $"/api/plan?modules={Uri.EscapeDataString(joined)}");
+
+        WriteHeader($"Dependency Plan: {joined}");
+        Console.WriteLine($"  Order:  {GetString(json, "executionOrder", "(empty)")}");
+
+        var hasCycle = json.TryGetProperty("hasCycle", out var cycleFlag) && cycleFlag.ValueKind == JsonValueKind.True;
+        if (hasCycle)
+            Console.WriteLine($"  Cycle:  {GetString(json, "cycleDescription", "Detected")}");
+
+        return 0;
+    }
+
+    private static async Task<int> RunMcdpAsync(AppCliSettings settings)
+    {
+        var json = await GetJsonAsync(settings.BaseUrl, "/api/mcdp");
+        WriteHeader("MCDP Projection");
+        Console.WriteLine($"  Protocol: {GetString(json, "protocolVersion", "1.0")}");
+        Console.WriteLine($"  Project:  {GetString(json, "projectName", "-")}");
+        Console.WriteLine($"  Root:     {GetString(json, "projectRoot", "-")}");
+
+        if (!json.TryGetProperty("modules", out var modules) || modules.ValueKind != JsonValueKind.Array)
+        {
+            Console.WriteLine("  No modules returned.");
+            return 0;
+        }
+
+        Console.WriteLine($"  Modules:  {modules.GetArrayLength()}");
+        foreach (var module in modules.EnumerateArray().Take(10))
+        {
+            var uid = GetString(module, "uid", "-");
+            var type = GetString(module, "type", "-");
+            var score = GetInt(module, "layerScore");
+            Console.WriteLine($"  - {uid} [{type}] score={score}");
+        }
+
+        if (modules.GetArrayLength() > 10)
+            Console.WriteLine($"  ... {modules.GetArrayLength() - 10} more modules are available.");
+
+        return 0;
+    }
+
+    private static async Task<int> RunContextAsync(AppCliSettings settings)
+    {
+        var modules = SplitModules(settings.Args.Skip(1));
+        if (modules.Count == 0)
+        {
+            var quickView = await PostJsonAsync(settings.BaseUrl, "/api/graph/begin-task", new { });
+            WriteHeader("Module Quick View");
+            Console.WriteLine($"  Modules:    {GetInt(quickView, "moduleCount")}");
+            Console.WriteLine($"  Edges:      {GetInt(quickView, "edgeCount")}");
+            Console.WriteLine($"  CrossWorks: {GetInt(quickView, "crossWorkCount")}");
+
+            if (quickView.TryGetProperty("modules", out var quickModules) && quickModules.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var module in quickModules.EnumerateArray().Take(12))
+                    Console.WriteLine($"  - {GetString(module, "name", "-")} ({GetString(module, "discipline", "generic")})");
+            }
+
+            return 0;
+        }
+
+        if (modules.Count == 1)
+        {
+            var target = modules[0];
+            var encodedTarget = Uri.EscapeDataString(target);
+            var encodedCurrent = Uri.EscapeDataString(target);
+            var json = await GetJsonAsync(settings.BaseUrl, $"/api/graph/context?target={encodedTarget}&current={encodedCurrent}");
+
+            WriteHeader($"Context: {target}");
+
+            if (json.TryGetProperty("context", out var context))
+            {
+                Console.WriteLine($"  Summary:   {GetString(context, "summary", "-")}");
+                Console.WriteLine($"  Boundary:  {GetString(context, "boundary", "-")}");
+                PrintArray("Constraints", context, "constraints");
+            }
+
+            if (json.TryGetProperty("session", out var session))
+            {
+                Console.WriteLine($"  Session:   {GetInt(session, "count")} item(s)");
+                if (session.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in items.EnumerateArray().Take(5))
+                    {
+                        var summary = GetString(item, "summary", GetString(item, "content", "(empty)"));
+                        Console.WriteLine($"    - {summary}");
+                    }
+                }
+            }
+
+            return 0;
+        }
+
+        var task = await PostJsonAsync(settings.BaseUrl, "/api/graph/begin-task", new { moduleNames = modules });
+        WriteHeader($"Task Context: {string.Join(", ", modules)}");
+
+        if (task.TryGetProperty("contexts", out var contexts) && contexts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in contexts.EnumerateArray())
+            {
+                Console.WriteLine($"  - {GetString(item, "module", "-")}");
+                if (item.TryGetProperty("context", out var context))
+                {
+                    Console.WriteLine($"    Summary:  {GetString(context, "summary", "-")}");
+                    Console.WriteLine($"    Boundary: {GetString(context, "boundary", "-")}");
+                }
+
+                if (item.TryGetProperty("session", out var session))
+                    Console.WriteLine($"    Session:  {GetInt(session, "count")} item(s)");
+            }
+        }
+
+        if (task.TryGetProperty("crossWorks", out var crossWorks) && crossWorks.ValueKind == JsonValueKind.Array)
+            Console.WriteLine($"  CrossWorks: {crossWorks.GetArrayLength()}");
+
+        return 0;
+    }
+
+    private static async Task<int> RunSessionAsync(AppCliSettings settings)
+    {
+        var nodeId = settings.Args.Count > 1 ? settings.Args[1].Trim() : null;
+        var path = string.IsNullOrWhiteSpace(nodeId)
+            ? "/api/session?limit=10"
+            : $"/api/session?nodeId={Uri.EscapeDataString(nodeId)}&limit=10";
+        var json = await GetJsonAsync(settings.BaseUrl, path);
+
+        WriteHeader(string.IsNullOrWhiteSpace(nodeId) ? "Session" : $"Session: {nodeId}");
+        Console.WriteLine($"  Count: {GetInt(json, "count")}");
+
+        if (json.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+            foreach (var item in items.EnumerateArray())
+            {
+                index++;
+                var summary = GetString(item, "summary", GetString(item, "content", "(empty)"));
+                var category = GetString(item, "category", "-");
+                Console.WriteLine($"  {index}. ({category}) {summary}");
+            }
+
+            if (index == 0)
+                Console.WriteLine("  No active session items.");
+        }
 
         return 0;
     }
@@ -229,7 +393,11 @@ internal static class AppCliHandler
         Console.WriteLine("Commands:");
         Console.WriteLine("  status            Show runtime, project, and storage status");
         Console.WriteLine("  topology          Show topology summary");
+        Console.WriteLine("  plan <modules>    Show dependency execution order");
+        Console.WriteLine("  mcdp              Show MCDP projection summary");
         Console.WriteLine("  search <query>    Search modules");
+        Console.WriteLine("  context [mods]    Show quick view, single-module context, or multi-module task context");
+        Console.WriteLine("  session [nodeId]  Show short-term session items");
         Console.WriteLine("  recall <question> Recall memories");
         Console.WriteLine("  memories          Show recent memories");
         Console.WriteLine("  tools             Show MCP tool list");
@@ -305,6 +473,33 @@ internal static class AppCliHandler
             return number;
 
         return int.TryParse(value.ToString(), out number) ? number : 0;
+    }
+
+    private static void PrintArray(string label, JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
+            return;
+
+        var items = value.EnumerateArray()
+            .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToList();
+
+        if (items.Count == 0)
+            return;
+
+        Console.WriteLine($"  {label}:");
+        foreach (var item in items)
+            Console.WriteLine($"    - {item}");
+    }
+
+    private static List<string> SplitModules(IEnumerable<string> args)
+    {
+        return args
+            .SelectMany(arg => arg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static void WriteHeader(string title)

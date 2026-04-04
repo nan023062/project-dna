@@ -260,6 +260,8 @@ public sealed class TopologyWorkbenchModuleView
     public string NodeId { get; init; } = string.Empty;
     public string? RelativePath { get; init; }
     public int Layer { get; init; }
+    public int StructureDepth { get; init; }
+    public int ArchitectureLayerScore { get; init; }
     public string Discipline { get; init; } = "root";
     public string DisciplineDisplayName { get; init; } = "root";
     public string Type { get; init; } = "Technical";
@@ -323,6 +325,45 @@ public sealed class TopologyWorkbenchDisciplineView
     public int ModuleCount { get; init; }
     public List<string> Modules { get; init; } = [];
     public int CrossWorkCount { get; init; }
+}
+
+public sealed class McdpProjectGraph
+{
+    public string ProtocolVersion { get; init; } = "1.0";
+    public string? ProjectRoot { get; init; }
+    public string ProjectName { get; init; } = "Project";
+    public List<McdpModuleView> Modules { get; init; } = [];
+}
+
+public sealed class McdpModuleView
+{
+    public string Uid { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public int LayerScore { get; init; }
+    public string Type { get; init; } = "Technical";
+    public McdpDnaView Dna { get; init; } = new();
+    public McdpRelationshipsView Relationships { get; init; } = new();
+}
+
+public sealed class McdpDnaView
+{
+    public string? Summary { get; init; }
+    public List<string> Keywords { get; init; } = [];
+    public List<string> Contract { get; init; } = [];
+}
+
+public sealed class McdpRelationshipsView
+{
+    public string? Parent { get; init; }
+    public List<string> Children { get; init; } = [];
+    public List<McdpDependencyView> Dependencies { get; init; } = [];
+}
+
+public sealed class McdpDependencyView
+{
+    public string Target { get; init; } = string.Empty;
+    public string Type { get; init; } = "Association";
+    public bool IsComputed { get; init; }
 }
 
 public sealed class TopologyModuleRelationView

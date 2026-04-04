@@ -7,6 +7,6 @@ public sealed class WorkbenchTabLayout : TabControl
     public WorkbenchTabLayout()
     {
         Classes.Add("workspaceTabs");
-        TabStripPlacement = Dock.Top;
+        TabStripPlacement = Dock.Left;
     }
 }

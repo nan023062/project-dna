@@ -51,7 +51,6 @@ public sealed class DesktopRecentProjectsStore
             ProjectRoot = project.ProjectRoot,
             ProjectName = project.ProjectName,
             ServerBaseUrl = project.ServerBaseUrl,
-            ConfigPath = project.ConfigPath,
             LastOpenedAtUtc = DateTime.UtcNow
         });
 
@@ -113,7 +112,6 @@ public sealed class DesktopRecentProjectsStore
             var root = (item.ProjectRoot ?? string.Empty).Trim();
             var projectName = (item.ProjectName ?? string.Empty).Trim();
             var serverBaseUrl = (item.ServerBaseUrl ?? string.Empty).Trim();
-            var configPath = (item.ConfigPath ?? string.Empty).Trim();
 
             if (string.IsNullOrWhiteSpace(root) ||
                 string.IsNullOrWhiteSpace(projectName) ||
@@ -131,7 +129,6 @@ public sealed class DesktopRecentProjectsStore
                 ProjectRoot = normalizedRoot,
                 ProjectName = projectName,
                 ServerBaseUrl = serverBaseUrl,
-                ConfigPath = configPath,
                 LastOpenedAtUtc = item.LastOpenedAtUtc == default ? DateTime.UtcNow : item.LastOpenedAtUtc
             });
 
@@ -161,6 +158,5 @@ public sealed class DesktopRecentProjectEntry
     public required string ProjectRoot { get; init; }
     public required string ProjectName { get; init; }
     public required string ServerBaseUrl { get; init; }
-    public required string ConfigPath { get; init; }
     public DateTime LastOpenedAtUtc { get; init; }
 }

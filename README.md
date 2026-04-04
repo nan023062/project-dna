@@ -66,23 +66,12 @@ publish/agentic-os.exe
 
 ### 3. Prepare a Project
 
-The desktop App loads a target project folder that contains:
-
-```text
-.agentic-os/project.json
-```
-
-Minimal example:
-
-```json
-{
-  "projectName": "agentic-os"
-}
-```
+The desktop App can load any project folder directly.
 
 Notes:
 
-- the legacy `serverBaseUrl` field may still appear in old files, but the current App-only runtime does not require it
+- if `.agentic-os/` already exists, the App reuses it
+- if `.agentic-os/` does not exist yet, the App creates it on first load
 - the App opens its local runtime only after the project is loaded
 
 ### 4. Connect IDE Agents
@@ -101,15 +90,14 @@ After the desktop App has loaded a project, point your IDE MCP config to:
 
 ## Project-Scoped State
 
-The App stores project-scoped state under `.agentic-os/`:
+The App primarily stores project knowledge and local runtime files under `.agentic-os/`:
 
-- `project.json`: project identity
-- `llm.json`: App runtime LLM config reservation
+- `knowledge/`: knowledge graph source of truth (module identity, hierarchy, dependencies)
+- `memory/`: long-term memory (decisions, conventions, lessons, summaries)
+- `session/`: short-term working memory (tasks, context)
 - `logs/`: App logs
-- `app-workspaces.json`: workspace state
-- `agent-shell/agent-shell-state.json`: local agent shell state
 
-The current local knowledge store is also initialized from the project-scoped metadata root.
+The local knowledge store and desktop runtime are initialized around this directory. User-scoped settings such as workspace preferences are no longer treated as project truth.
 
 ## App Runtime Surface
 
