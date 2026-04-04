@@ -4,6 +4,9 @@ using Dna.Core.Config;
 using Dna.Knowledge;
 using Dna.Memory.Models;
 using Dna.Knowledge.Workspace.Models;
+using Dna.Workbench.Contracts;
+using Dna.Workbench.Governance;
+using Dna.Workbench.Tasks;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dna.App.Interfaces.Api;
@@ -23,6 +26,7 @@ public static class AppLocalKnowledgeManagementApiEndpoints
         MapGraphEndpoints(app);
         MapGovernanceEndpoints(app);
         MapModuleManagementEndpoints(app);
+        MapWorkbenchEndpoints(app);
     }
 
     private static void MapGraphEndpoints(IEndpointRouteBuilder app)
@@ -450,6 +454,64 @@ public static class AppLocalKnowledgeManagementApiEndpoints
             if (!ok) return Results.NotFound(new { error = $"CrossWork not found: {id}" });
             topology.BuildTopology();
             return Results.Ok(new { message = $"CrossWork removed: {id}" });
+        });
+    }
+
+    private static void MapWorkbenchEndpoints(IEndpointRouteBuilder app)
+    {
+        var api = app.MapGroup("/api/workbench");
+
+        api.MapPost("/tasks/resolve-support", async (
+            [FromBody] WorkbenchRequirementRequest request,
+            [FromServices] IWorkbenchTaskService tasks,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await tasks.ResolveRequirementSupportAsync(request, cancellationToken);
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapPost("/tasks/start", async (
+            [FromBody] WorkbenchTaskRequest request,
+            [FromServices] IWorkbenchTaskService tasks,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await tasks.StartTaskAsync(request, cancellationToken);
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapPost("/tasks/end", async (
+            [FromBody] WorkbenchTaskResult request,
+            [FromServices] IWorkbenchTaskService tasks,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await tasks.EndTaskAsync(request, cancellationToken);
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapGet("/tasks/active", async (
+            [FromServices] IWorkbenchTaskService tasks,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await tasks.ListActiveTasksAsync(cancellationToken);
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapGet("/tasks/completed", async (
+            [FromQuery] int? limit,
+            [FromServices] IWorkbenchTaskService tasks,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await tasks.ListCompletedTasksAsync(limit is > 0 ? limit.Value : 50, cancellationToken);
+            return Results.Json(result, JsonOpts);
+        });
+
+        api.MapPost("/governance/resolve", async (
+            [FromBody] WorkbenchGovernanceRequest request,
+            [FromServices] IWorkbenchGovernanceService governance,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await governance.ResolveGovernanceAsync(request, cancellationToken);
+            return Results.Json(result, JsonOpts);
         });
     }
 

@@ -5,7 +5,7 @@
 > 适用范围：`src/Dna.Agent`
 
 本文档描述 `Dna.Agent` 的目标职责边界。  
-它只关心需求拆解后的任务编排与执行，不直接承载知识域实现。
+它只关心需求收口辅助后的任务编排与执行，不直接承载知识域实现。
 
 ## 目标类图
 
@@ -132,7 +132,7 @@ classDiagram
   - 内置 Agent 的总入口
   - 管理任务生命周期与会话状态
 - `IAgentPlanner`
-  - 消费 Workbench 提供的需求拆解结果
+  - 消费 Workbench 提供的模块候选与上下文提示
   - 决定如何形成真正执行计划
 - `IAgentExecutor`
   - 负责驱动执行循环
@@ -149,7 +149,7 @@ classDiagram
 后续实现时应坚持：
 
 1. `Dna.Agent` 只依赖 `Dna.Workbench`，不反向依赖 `Dna.Knowledge`
-2. 需求拆解支持、任务上下文、模块租约都属于 `Dna.Workbench`
+2. 需求收口辅助、任务上下文、模块租约都属于 `Dna.Workbench`
 3. `Dna.Agent` 只决定任务编排顺序，不生成越权上下文
 4. 工具调用策略在 `Dna.Agent`，工具能力定义与项目能力面在 `Dna.Workbench`
 5. 运行时事件由 `Dna.Agent` 产生，再写入 `Dna.Workbench` 的运行时观测入口

@@ -1,6 +1,8 @@
 using Dna.Knowledge;
 using Dna.Knowledge.Workspace.Models;
 using Dna.Memory.Models;
+using Dna.Workbench.Governance;
+using Dna.Workbench.Tasks;
 
 namespace Dna.App.Desktop.Services;
 
@@ -27,6 +29,29 @@ public interface IDesktopLocalWorkbenchClient
         CancellationToken cancellationToken = default);
 
     Task<TopologyModuleRelationsView?> GetModuleRelationsAsync(string nodeIdOrName, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<WorkbenchTaskCandidate>> ResolveRequirementSupportAsync(
+        WorkbenchRequirementRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<WorkbenchTaskStartResponse> StartTaskAsync(
+        WorkbenchTaskRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<WorkbenchTaskEndResponse> EndTaskAsync(
+        WorkbenchTaskResult request,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<WorkbenchActiveTaskSnapshot>> ListActiveTasksAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<WorkbenchCompletedTaskSnapshot>> ListCompletedTasksAsync(
+        int limit = 50,
+        CancellationToken cancellationToken = default);
+
+    Task<WorkbenchGovernanceContext> ResolveGovernanceAsync(
+        WorkbenchGovernanceRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed record DesktopLocalRuntimeSnapshot(

@@ -14,6 +14,8 @@ classDiagram
         +CheckFreshness() int
         +DetectMemoryConflicts() int
         +ArchiveStaleMemories(staleThreshold) int
+        +GetActiveModulesAsync(activeWindow, maxModules) Task~IReadOnlyList~GovernanceActiveModule~~
+        +ScanAsync(request) Task~GovernanceScanResult~
         +EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions) Task~KnowledgeEvolutionReport~
         +CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories) Task~KnowledgeCondenseResult~
         +CondenseAllNodesAsync(maxSourceMemories) Task~List~KnowledgeCondenseResult~~
@@ -36,9 +38,49 @@ classDiagram
         -ITopoGraphApplicationService topology
         +DetectConflicts() int
         +ArchiveStaleMemories(staleThreshold) int
+        +GetActiveModulesAsync(activeWindow, maxModules) Task~IReadOnlyList~GovernanceActiveModule~~
+        +ScanAsync(request) Task~GovernanceScanResult~
         +EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions) Task~KnowledgeEvolutionReport~
         +CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories) Task~KnowledgeCondenseResult~
         +CondenseAllNodesAsync(maxSourceMemories) Task~List~KnowledgeCondenseResult~~
+    }
+
+    class GovernanceScanRequest {
+        +GovernanceCadence Cadence
+        +GovernanceScopeKind Scope
+        +string? NodeIdOrName
+        +TimeSpan ActiveWindow
+        +bool IncludeDirectDependencies
+        +int MaxModules
+        +int MaxSuggestions
+    }
+
+    class GovernanceScanResult {
+        +DateTime GeneratedAt
+        +GovernanceCadence Cadence
+        +GovernanceScopeKind Scope
+        +string? ScopeNodeId
+        +string? ScopeNodeName
+        +List~GovernanceActiveModule~ ActiveModules
+        +List~GovernanceCandidateModule~ CandidateModules
+        +GovernanceReport ArchitectureReport
+        +KnowledgeEvolutionReport EvolutionReport
+    }
+
+    class GovernanceActiveModule {
+        +string ModuleId
+        +string ModuleName
+        +int RecentMemoryCount
+        +List~string~ RecentMemoryIds
+        +List~string~ Reasons
+    }
+
+    class GovernanceCandidateModule {
+        +string ModuleId
+        +string ModuleName
+        +bool IsDirectlyActive
+        +bool AddedByDependencyExpansion
+        +List~string~ Reasons
     }
 
     class KnowledgeEvolutionReport {
@@ -120,8 +162,11 @@ classDiagram
     MemoryMaintainer --> MemoryStore : reads / writes memories
     MemoryMaintainer --> ITopoGraphStore : resolves node ids / writes node knowledge
     MemoryMaintainer --> ITopoGraphApplicationService : reads management snapshot
+    MemoryMaintainer --> GovernanceScanResult : returns
     MemoryMaintainer --> KnowledgeEvolutionReport : returns
     MemoryMaintainer --> KnowledgeCondenseResult : returns
+    GovernanceScanResult *-- GovernanceActiveModule : contains
+    GovernanceScanResult *-- GovernanceCandidateModule : contains
     KnowledgeEvolutionReport *-- KnowledgeEvolutionSuggestion : contains
     ITopoGraphStore --> NodeKnowledge : persists
 ```
@@ -129,6 +174,7 @@ classDiagram
 ## 说明
 
 - `evolve` 是治理建议接口，只分析升级机会，不直接落库。
+- `scan` 是治理扫描接口，用于生成高频增量治理和低频全局治理的候选范围。
 - `condense` 是治理执行接口，负责真正生成 identity、upgrade trail，并归档已沉淀记忆。
 - `Governance` 不拥有拓扑定义，只消费 `ITopoGraphApplicationService` 与 `ITopoGraphStore`。
 - `NodeKnowledge` 已稳定持久化 `IdentityMemoryId` 与 `UpgradeTrailMemoryId`，用于 `.agentic-os/knowledge/modules/<uid>/identity.md` 回写。

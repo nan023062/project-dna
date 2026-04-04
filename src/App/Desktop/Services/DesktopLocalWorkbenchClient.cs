@@ -3,6 +3,8 @@ using Dna.Knowledge.Workspace;
 using Dna.Knowledge.Workspace.Models;
 using Dna.Memory.Models;
 using Dna.Workbench.Contracts;
+using Dna.Workbench.Governance;
+using Dna.Workbench.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Dna.App.Desktop.Services;
@@ -132,6 +134,59 @@ public sealed class DesktopLocalWorkbenchClient(EmbeddedAppHost host) : IDesktop
         var topology = GetRequiredService<ITopoGraphApplicationService>();
         EnsureReady(topology);
         return Task.FromResult(topology.GetModuleRelations(nodeIdOrName));
+    }
+
+    public Task<IReadOnlyList<WorkbenchTaskCandidate>> ResolveRequirementSupportAsync(
+        WorkbenchRequirementRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tasks = GetRequiredService<IWorkbenchTaskService>();
+        return tasks.ResolveRequirementSupportAsync(request, cancellationToken);
+    }
+
+    public Task<WorkbenchTaskStartResponse> StartTaskAsync(
+        WorkbenchTaskRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tasks = GetRequiredService<IWorkbenchTaskService>();
+        return tasks.StartTaskAsync(request, cancellationToken);
+    }
+
+    public Task<WorkbenchTaskEndResponse> EndTaskAsync(
+        WorkbenchTaskResult request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tasks = GetRequiredService<IWorkbenchTaskService>();
+        return tasks.EndTaskAsync(request, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<WorkbenchActiveTaskSnapshot>> ListActiveTasksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tasks = GetRequiredService<IWorkbenchTaskService>();
+        return tasks.ListActiveTasksAsync(cancellationToken);
+    }
+
+    public Task<IReadOnlyList<WorkbenchCompletedTaskSnapshot>> ListCompletedTasksAsync(
+        int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tasks = GetRequiredService<IWorkbenchTaskService>();
+        return tasks.ListCompletedTasksAsync(limit, cancellationToken);
+    }
+
+    public Task<WorkbenchGovernanceContext> ResolveGovernanceAsync(
+        WorkbenchGovernanceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var governance = GetRequiredService<IWorkbenchGovernanceService>();
+        return governance.ResolveGovernanceAsync(request, cancellationToken);
     }
 
     private T GetRequiredService<T>() where T : notnull

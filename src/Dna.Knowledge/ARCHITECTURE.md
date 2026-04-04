@@ -149,7 +149,7 @@ Workspace 事实
 
 上层的 `Dna.Workbench` 再在这个基础上组合出：
 
-- 基于 `TopoGraph + MCDP` 的需求拆解支持
+- 基于 `TopoGraph + MCDP` 的需求收口辅助与模块候选解析
 - 全局或指定模块范围的治理模块树生成
 - 模块级 task 的精准上下文
 - 项目级知识查询

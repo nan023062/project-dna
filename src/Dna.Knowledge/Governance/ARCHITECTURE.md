@@ -46,6 +46,19 @@ Workspace
 
 它不会直接写文件，也不会直接修改 `.agentic-os`。
 
+### 2.5 Scan
+
+`ScanAsync(...)` 是治理扫描接口，用于给 `Workbench.resolveGovernance(...)` 提供底层治理诊断数据。
+它负责：
+- 高频治理：基于时间窗口扫描近期记忆，提取发生变动的模块。
+- 高频治理：按需把这些活跃模块的直接依赖一并纳入候选治理范围。
+- 低频治理：支持全局扫描，返回全局候选模块集合。
+- 模块 / 子树治理：支持按单模块或父模块子树收口治理范围。
+- 对候选范围过滤架构报告，只返回与本次治理范围相关的漂移与坏味道。
+- 汇总范围内的 `session -> memory` / `memory -> knowledge` 升级建议。
+
+这里的 `scan` 仍然只负责“诊断与候选收口”，不直接启动 task，也不负责任务锁。
+
 ### 3. Condense
 
 `CondenseNodeKnowledgeAsync(...)` 是治理执行接口。
@@ -81,7 +94,9 @@ Workspace
 
 当前治理主链已经从旧架构切到新架构：
 - 治理目标节点来自 `ITopoGraphApplicationService.GetManagementSnapshot()`。
+- 高频治理目标可由近期 `Memory` 自动反推出活跃模块集合。
 - 模块知识落点来自 `ITopoGraphStore`，并以文件协议为准。
+- 治理扫描通过 `scan`。
 - 治理建议通过 `evolve`。
 - 治理执行通过 `condense`。
 

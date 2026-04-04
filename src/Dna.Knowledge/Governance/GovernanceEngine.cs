@@ -37,6 +37,12 @@ public sealed class GovernanceEngine : IGovernanceEngine
     public int ArchiveStaleMemories(TimeSpan staleThreshold)
         => _memoryMaintainer.ArchiveStaleMemories(staleThreshold);
 
+    public Task<IReadOnlyList<GovernanceActiveModule>> GetActiveModulesAsync(TimeSpan activeWindow, int maxModules = 50)
+        => _memoryMaintainer.GetActiveModulesAsync(activeWindow, maxModules);
+
+    public Task<GovernanceScanResult> ScanAsync(GovernanceScanRequest request)
+        => _memoryMaintainer.ScanAsync(request);
+
     public Task<KnowledgeEvolutionReport> EvolveKnowledgeAsync(string? nodeIdOrName = null, int maxSuggestions = 50)
         => _memoryMaintainer.EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions);
 

@@ -142,7 +142,7 @@ classDiagram
   - 负责把统一拓扑策略和任务闭环翻译成产品自己的配置与指令格式
 - `ExternalAgentTopologyPolicy`
   - Agentic OS 对外置 Agent 的硬约束
-  - 明确要求先做需求拆解，再 `startTask`，最后 `endTask`
+  - 明确要求先做需求收口辅助，再 `startTask`，最后 `endTask`
 - `ExternalAgentManagedFile`
   - 表示某个产品需要被管理或生成的文件产物
 - `ExternalAgentPackageResult`

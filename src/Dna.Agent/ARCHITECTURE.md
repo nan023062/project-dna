@@ -44,7 +44,7 @@ Dna.Core
 - `Dna.Agent`
   - 负责内置 Agent 的编排与执行
 - `Dna.Workbench`
-  - 负责项目能力供给、需求拆解支持、任务上下文供给、模块锁与任务闭环
+  - 负责项目能力供给、需求收口辅助、任务上下文供给、模块锁与任务闭环
 - `Dna.Knowledge`
   - 负责知识域实现
 
@@ -83,7 +83,7 @@ Dna.Core
 
 内置 Agent 在最终架构中的标准流程应为：
 
-1. 向 `Workbench` 请求需求拆解
+1. 向 `Workbench` 请求需求收口辅助
 2. 根据拆解结果生成多个单模块 task
 3. 为每个 task 调用 `startTask`
 4. 基于返回的模块知识、相关记忆与 workspace 边界执行任务
@@ -154,7 +154,7 @@ Dna.Core
 - `IAgentRuntimeService`
   - 启动、恢复、取消任务会话
 - `IAgentPlanner`
-  - 消费需求拆解结果并生成计划
+  - 消费模块候选与上下文提示并生成计划
 - `IAgentExecutor`
   - 驱动执行循环并协调 `startTask / endTask`
 - `IToolCallCoordinator`

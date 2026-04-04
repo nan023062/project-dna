@@ -95,6 +95,92 @@ internal class MemoryMaintainer
         return archivedCount;
     }
 
+    public Task<IReadOnlyList<GovernanceActiveModule>> GetActiveModulesAsync(
+        TimeSpan activeWindow,
+        int maxModules = 50)
+    {
+        var threshold = DateTime.UtcNow - NormalizeActiveWindow(activeWindow);
+        var modules = GetGovernanceTargets().ToList();
+        var activeMemories = _memoryStore.Query(new MemoryFilter
+        {
+            Freshness = FreshnessFilter.IncludeStale,
+            Limit = 5000
+        })
+        .Where(entry => entry.Freshness != FreshnessStatus.Archived)
+        .Where(entry => IsMemoryActiveSince(entry, threshold))
+        .ToList();
+
+        var aggregated = new Dictionary<string, GovernanceActiveModuleAccumulator>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in activeMemories)
+        {
+            var relatedModules = ResolveCandidateModules(entry, modules);
+            foreach (var module in relatedModules)
+            {
+                if (!aggregated.TryGetValue(module.Id, out var item))
+                {
+                    item = new GovernanceActiveModuleAccumulator(module.Id, module.Name);
+                    aggregated[module.Id] = item;
+                }
+
+                item.RecentMemoryIds.Add(entry.Id);
+                item.Reasons.Add(BuildActiveReason(entry, module));
+            }
+        }
+
+        var results = aggregated.Values
+            .Select(item => new GovernanceActiveModule
+            {
+                ModuleId = item.ModuleId,
+                ModuleName = item.ModuleName,
+                RecentMemoryCount = item.RecentMemoryIds.Count,
+                RecentMemoryIds = [.. item.RecentMemoryIds],
+                Reasons = [.. item.Reasons]
+            })
+            .OrderByDescending(item => item.RecentMemoryCount)
+            .ThenBy(item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Clamp(maxModules, 1, 500))
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<GovernanceActiveModule>>(results);
+    }
+
+    public async Task<GovernanceScanResult> ScanAsync(GovernanceScanRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var modules = GetGovernanceTargets().ToList();
+        var activeModules = request.Scope == GovernanceScopeKind.ActiveChanges
+            ? await GetActiveModulesAsync(request.ActiveWindow, request.MaxModules)
+            : [];
+
+        var candidates = ResolveGovernanceCandidates(request, modules, activeModules)
+            .Take(Math.Clamp(request.MaxModules, 1, 500))
+            .ToList();
+
+        var scopeNode = request.Scope is GovernanceScopeKind.Module or GovernanceScopeKind.Subtree
+            ? ResolveNode(request.NodeIdOrName?.Trim() ?? string.Empty)
+            : null;
+
+        var evolutionReport = await BuildScopedEvolutionReportAsync(candidates, request.MaxSuggestions);
+        var architectureReport = FilterGovernanceReport(
+            _topology.ValidateArchitecture(),
+            candidates,
+            _topology.GetCrossWorks());
+
+        return new GovernanceScanResult
+        {
+            GeneratedAt = DateTime.UtcNow,
+            Cadence = request.Cadence,
+            Scope = request.Scope,
+            ScopeNodeId = scopeNode?.Id,
+            ScopeNodeName = scopeNode?.Name,
+            ActiveModules = [.. activeModules],
+            CandidateModules = candidates,
+            ArchitectureReport = architectureReport,
+            EvolutionReport = evolutionReport
+        };
+    }
+
     public Task<KnowledgeEvolutionReport> EvolveKnowledgeAsync(
         string? nodeIdOrName = null,
         int maxSuggestions = 50)
@@ -318,6 +404,286 @@ internal class MemoryMaintainer
         return _topology.GetManagementSnapshot().Modules.Select(ToGovernanceTarget);
     }
 
+    private async Task<KnowledgeEvolutionReport> BuildScopedEvolutionReportAsync(
+        IReadOnlyList<GovernanceCandidateModule> candidates,
+        int maxSuggestions)
+    {
+        var limit = Math.Clamp(maxSuggestions, 1, 200);
+        if (candidates.Count == 0)
+            return new KnowledgeEvolutionReport { GeneratedAt = DateTime.UtcNow };
+
+        if (candidates.Count == 1 && candidates[0].IsDirectlyActive)
+            return await EvolveKnowledgeAsync(candidates[0].ModuleId, limit);
+
+        var suggestions = new Dictionary<string, KnowledgeEvolutionSuggestion>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in candidates)
+        {
+            var report = await EvolveKnowledgeAsync(candidate.ModuleId, limit);
+            foreach (var suggestion in report.Suggestions)
+            {
+                if (!suggestions.TryGetValue(suggestion.MemoryId, out var existing) ||
+                    suggestion.Confidence > existing.Confidence)
+                {
+                    suggestions[suggestion.MemoryId] = suggestion;
+                }
+            }
+        }
+
+        var ordered = suggestions.Values
+            .OrderByDescending(item => item.Confidence)
+            .ThenByDescending(item => item.TargetLayer)
+            .ThenBy(item => item.NodeName ?? item.NodeId ?? item.MemoryId, StringComparer.OrdinalIgnoreCase)
+            .Take(limit)
+            .ToList();
+
+        return new KnowledgeEvolutionReport
+        {
+            GeneratedAt = DateTime.UtcNow,
+            SessionToMemoryCount = ordered.Count(item =>
+                item.CurrentLayer == EvolutionKnowledgeLayer.Session &&
+                item.TargetLayer == EvolutionKnowledgeLayer.Memory),
+            MemoryToKnowledgeCount = ordered.Count(item =>
+                item.CurrentLayer == EvolutionKnowledgeLayer.Memory &&
+                item.TargetLayer == EvolutionKnowledgeLayer.Knowledge),
+            Suggestions = ordered
+        };
+    }
+
+    private List<GovernanceCandidateModule> ResolveGovernanceCandidates(
+        GovernanceScanRequest request,
+        IReadOnlyList<GovernanceTargetNode> modules,
+        IReadOnlyList<GovernanceActiveModule> activeModules)
+    {
+        var selected = new Dictionary<string, GovernanceCandidateModuleBuilder>(StringComparer.OrdinalIgnoreCase);
+
+        switch (request.Scope)
+        {
+            case GovernanceScopeKind.ActiveChanges:
+                foreach (var activeModule in activeModules)
+                {
+                    AddCandidate(selected, modules, activeModule.ModuleId, isDirectlyActive: true, addedByDependencyExpansion: false, activeModule.Reasons);
+
+                    if (!request.IncludeDirectDependencies)
+                        continue;
+
+                    foreach (var dependency in ResolveDirectDependencies(activeModule.ModuleId, modules))
+                    {
+                        AddCandidate(
+                            selected,
+                            modules,
+                            dependency.Id,
+                            isDirectlyActive: false,
+                            addedByDependencyExpansion: true,
+                            [$"作为活跃模块 {activeModule.ModuleName} 的直接依赖纳入治理"]);
+                    }
+                }
+                break;
+
+            case GovernanceScopeKind.Module:
+                AddExplicitScopeCandidate(request, modules, selected);
+                break;
+
+            case GovernanceScopeKind.Subtree:
+                AddSubtreeScopeCandidates(request, modules, selected);
+                break;
+
+            case GovernanceScopeKind.Global:
+                foreach (var module in modules)
+                {
+                    AddCandidate(selected, modules, module.Id, isDirectlyActive: false, addedByDependencyExpansion: false, ["全局治理扫描"]);
+                }
+                break;
+        }
+
+        return selected.Values
+            .Select(item => item.Build())
+            .OrderByDescending(item => item.IsDirectlyActive)
+            .ThenByDescending(item => item.AddedByDependencyExpansion)
+            .ThenBy(item => item.ModuleName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private void AddExplicitScopeCandidate(
+        GovernanceScanRequest request,
+        IReadOnlyList<GovernanceTargetNode> modules,
+        Dictionary<string, GovernanceCandidateModuleBuilder> selected)
+    {
+        if (string.IsNullOrWhiteSpace(request.NodeIdOrName))
+            throw new InvalidOperationException("模块治理扫描必须提供 NodeIdOrName。");
+
+        var scopeNode = ResolveNode(request.NodeIdOrName.Trim())
+            ?? throw new InvalidOperationException($"节点不存在: {request.NodeIdOrName}");
+
+        AddCandidate(selected, modules, scopeNode.Id, isDirectlyActive: true, addedByDependencyExpansion: false, ["指定模块治理"]);
+
+        if (!request.IncludeDirectDependencies)
+            return;
+
+        foreach (var dependency in ResolveDirectDependencies(scopeNode.Id, modules))
+        {
+            AddCandidate(selected, modules, dependency.Id, isDirectlyActive: false, addedByDependencyExpansion: true, [$"作为目标模块 {scopeNode.Name} 的直接依赖纳入治理"]);
+        }
+    }
+
+    private void AddSubtreeScopeCandidates(
+        GovernanceScanRequest request,
+        IReadOnlyList<GovernanceTargetNode> modules,
+        Dictionary<string, GovernanceCandidateModuleBuilder> selected)
+    {
+        if (string.IsNullOrWhiteSpace(request.NodeIdOrName))
+            throw new InvalidOperationException("子树治理扫描必须提供 NodeIdOrName。");
+
+        var managementModules = _topology.GetManagementSnapshot().Modules;
+        var scopeNode = ResolveNode(request.NodeIdOrName.Trim())
+            ?? throw new InvalidOperationException($"节点不存在: {request.NodeIdOrName}");
+
+        var subtreeIds = CollectSubtreeIds(scopeNode.Id, managementModules);
+        foreach (var subtreeId in subtreeIds)
+        {
+            AddCandidate(selected, modules, subtreeId, isDirectlyActive: true, addedByDependencyExpansion: false, [$"属于治理子树 {scopeNode.Name}"]);
+        }
+
+        if (!request.IncludeDirectDependencies)
+            return;
+
+        foreach (var subtreeId in subtreeIds)
+        {
+            var sourceName = modules.FirstOrDefault(item => string.Equals(item.Id, subtreeId, StringComparison.OrdinalIgnoreCase))?.Name ?? subtreeId;
+            foreach (var dependency in ResolveDirectDependencies(subtreeId, modules))
+            {
+                AddCandidate(selected, modules, dependency.Id, isDirectlyActive: false, addedByDependencyExpansion: true, [$"作为子树模块 {sourceName} 的直接依赖纳入治理"]);
+            }
+        }
+    }
+
+    private static HashSet<string> CollectSubtreeIds(string rootId, IReadOnlyList<TopologyModuleDefinition> modules)
+    {
+        var childrenMap = modules
+            .Where(module => !string.IsNullOrWhiteSpace(module.ParentModuleId))
+            .GroupBy(module => module.ParentModuleId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.Id).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { rootId };
+        var queue = new Queue<string>();
+        queue.Enqueue(rootId);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!childrenMap.TryGetValue(current, out var children))
+                continue;
+
+            foreach (var child in children)
+            {
+                if (results.Add(child))
+                    queue.Enqueue(child);
+            }
+        }
+
+        return results;
+    }
+
+    private static string BuildActiveReason(MemoryEntry entry, GovernanceTargetNode module)
+    {
+        if (string.Equals(entry.NodeId, module.Id, StringComparison.OrdinalIgnoreCase))
+            return "近期记忆直接绑定该模块";
+
+        if (entry.Tags.Contains(WellKnownTags.ActiveTask, StringComparer.OrdinalIgnoreCase))
+            return "近期活跃任务关联到该模块";
+
+        return "近期记忆关联到该模块";
+    }
+
+    private static TimeSpan NormalizeActiveWindow(TimeSpan activeWindow)
+        => activeWindow <= TimeSpan.Zero ? TimeSpan.FromDays(1) : activeWindow;
+
+    private static bool IsMemoryActiveSince(MemoryEntry entry, DateTime threshold)
+    {
+        var lastActive = entry.LastVerifiedAt ?? entry.CreatedAt;
+        return lastActive >= threshold;
+    }
+
+    private static GovernanceReport FilterGovernanceReport(
+        GovernanceReport source,
+        IReadOnlyList<GovernanceCandidateModule> candidates,
+        IReadOnlyList<CrossWork> crossWorks)
+    {
+        if (candidates.Count == 0)
+            return new GovernanceReport();
+
+        var moduleIds = new HashSet<string>(candidates.Select(item => item.ModuleId), StringComparer.OrdinalIgnoreCase);
+        var moduleNames = new HashSet<string>(candidates.Select(item => item.ModuleName), StringComparer.OrdinalIgnoreCase);
+        var crossWorkMap = crossWorks.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+
+        return new GovernanceReport
+        {
+            CycleSuggestions = source.CycleSuggestions
+                .Where(item => item.CycleMembers.Any(member => moduleNames.Contains(member) || moduleIds.Contains(member)))
+                .ToList(),
+            OrphanNodes = source.OrphanNodes
+                .Where(item => moduleIds.Contains(item.Id) || moduleNames.Contains(item.Name))
+                .ToList(),
+            CrossWorkIssues = source.CrossWorkIssues
+                .Where(item =>
+                    crossWorkMap.TryGetValue(item.CrossWorkId, out var crossWork) &&
+                    crossWork.Participants.Any(participant => moduleNames.Contains(participant.ModuleName)))
+                .ToList(),
+            DependencyDrifts = source.DependencyDrifts
+                .Where(item => moduleNames.Contains(item.ModuleName) || moduleIds.Contains(item.ModuleName))
+                .ToList(),
+            KeyNodeWarnings = source.KeyNodeWarnings
+                .Where(item => moduleNames.Contains(item.NodeName) || moduleIds.Contains(item.NodeName))
+                .ToList()
+        };
+    }
+
+    private static IReadOnlyList<GovernanceTargetNode> ResolveDirectDependencies(
+        string moduleId,
+        IReadOnlyList<GovernanceTargetNode> modules)
+    {
+        var managementModules = modules.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        var resolved = new List<GovernanceTargetNode>();
+        var source = managementModules.GetValueOrDefault(moduleId);
+        if (source == null)
+            return resolved;
+
+        foreach (var dependency in source.Dependencies)
+        {
+            var match = modules.FirstOrDefault(item =>
+                string.Equals(item.Id, dependency, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(item.Name, dependency, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                resolved.Add(match);
+        }
+
+        return resolved;
+    }
+
+    private static void AddCandidate(
+        IDictionary<string, GovernanceCandidateModuleBuilder> selected,
+        IReadOnlyList<GovernanceTargetNode> modules,
+        string moduleIdOrName,
+        bool isDirectlyActive,
+        bool addedByDependencyExpansion,
+        IEnumerable<string> reasons)
+    {
+        var module = modules.FirstOrDefault(item =>
+            string.Equals(item.Id, moduleIdOrName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(item.Name, moduleIdOrName, StringComparison.OrdinalIgnoreCase));
+        if (module == null)
+            return;
+
+        if (!selected.TryGetValue(module.Id, out var builder))
+        {
+            builder = new GovernanceCandidateModuleBuilder(module.Id, module.Name);
+            selected[module.Id] = builder;
+        }
+
+        builder.IsDirectlyActive |= isDirectlyActive;
+        builder.AddedByDependencyExpansion |= addedByDependencyExpansion;
+        builder.Reasons.UnionWith(reasons.Where(reason => !string.IsNullOrWhiteSpace(reason)));
+    }
+
     private KnowledgeEvolutionSuggestion? TryBuildSessionToMemorySuggestion(
         MemoryEntry entry,
         GovernanceTargetNode? filterNode,
@@ -526,7 +892,8 @@ internal class MemoryMaintainer
             nodeType,
             module.Discipline,
             module.Summary,
-            module.Boundary);
+            module.Boundary,
+            module.Dependencies ?? []);
     }
 
     private static IdentityPayload BuildIdentityPayload(GovernanceTargetNode node, List<MemoryEntry> source)
@@ -751,5 +1118,47 @@ internal class MemoryMaintainer
         NodeType Type,
         string? Discipline,
         string? Summary,
-        string? Contract);
+        string? Contract,
+        IReadOnlyList<string> Dependencies);
+
+    private sealed class GovernanceActiveModuleAccumulator
+    {
+        public GovernanceActiveModuleAccumulator(string moduleId, string moduleName)
+        {
+            ModuleId = moduleId;
+            ModuleName = moduleName;
+        }
+
+        public string ModuleId { get; }
+        public string ModuleName { get; }
+        public HashSet<string> RecentMemoryIds { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> Reasons { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class GovernanceCandidateModuleBuilder
+    {
+        public GovernanceCandidateModuleBuilder(string moduleId, string moduleName)
+        {
+            ModuleId = moduleId;
+            ModuleName = moduleName;
+        }
+
+        public string ModuleId { get; }
+        public string ModuleName { get; }
+        public bool IsDirectlyActive { get; set; }
+        public bool AddedByDependencyExpansion { get; set; }
+        public HashSet<string> Reasons { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public GovernanceCandidateModule Build()
+        {
+            return new GovernanceCandidateModule
+            {
+                ModuleId = ModuleId,
+                ModuleName = ModuleName,
+                IsDirectlyActive = IsDirectlyActive,
+                AddedByDependencyExpansion = AddedByDependencyExpansion,
+                Reasons = [.. Reasons]
+            };
+        }
+    }
 }

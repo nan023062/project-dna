@@ -67,6 +67,12 @@ public class AppEndpointRouteSmokeTests
         AssertRoute(routes, "/api/graph/search", "GET");
         AssertRoute(routes, "/api/graph/context", "GET");
         AssertRoute(routes, "/api/graph/begin-task", "POST");
+        AssertRoute(routes, "/api/workbench/tasks/resolve-support", "POST");
+        AssertRoute(routes, "/api/workbench/tasks/start", "POST");
+        AssertRoute(routes, "/api/workbench/tasks/end", "POST");
+        AssertRoute(routes, "/api/workbench/tasks/active", "GET");
+        AssertRoute(routes, "/api/workbench/tasks/completed", "GET");
+        AssertRoute(routes, "/api/workbench/governance/resolve", "POST");
         AssertRoute(routes, "/api/connection/access", "GET");
         AssertRoute(routes, "/api/workspace/tree", "GET");
 

@@ -191,6 +191,116 @@ public sealed class GovernanceRefactorTests
     }
 
     [Fact]
+    public async Task GetActiveModules_ShouldReturnRecentChangedModulesOnly()
+    {
+        using var harness = GovernanceTestHarness.Create();
+
+        harness.MemoryStore.Insert(new MemoryEntry
+        {
+            Id = "mem-active-core",
+            Type = MemoryType.Working,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "recent work",
+            Summary = "recent work",
+            NodeId = "tech-core",
+            Freshness = FreshnessStatus.Fresh,
+            Stage = MemoryStage.ShortTerm,
+            CreatedAt = DateTime.UtcNow.AddHours(-2)
+        });
+        harness.MemoryStore.Insert(new MemoryEntry
+        {
+            Id = "mem-old-foundation",
+            Type = MemoryType.Working,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "old work",
+            Summary = "old work",
+            NodeId = "tech-foundation",
+            Freshness = FreshnessStatus.Fresh,
+            Stage = MemoryStage.ShortTerm,
+            CreatedAt = DateTime.UtcNow.AddDays(-5)
+        });
+
+        var result = await harness.Engine.GetActiveModulesAsync(TimeSpan.FromDays(1));
+
+        var active = Assert.Single(result);
+        Assert.Equal("tech-core", active.ModuleId);
+        Assert.Equal("Core", active.ModuleName);
+        Assert.Contains("mem-active-core", active.RecentMemoryIds);
+    }
+
+    [Fact]
+    public async Task ScanAsync_HighFrequency_ShouldExpandModifiedModulesAndDirectDependencies()
+    {
+        using var harness = GovernanceTestHarness.Create();
+
+        harness.MemoryStore.Insert(new MemoryEntry
+        {
+            Id = "mem-active-core",
+            Type = MemoryType.Working,
+            NodeType = NodeType.Technical,
+            Source = MemorySource.System,
+            Content = "recent work",
+            Summary = "recent work",
+            NodeId = "tech-core",
+            Freshness = FreshnessStatus.Fresh,
+            Stage = MemoryStage.ShortTerm,
+            CreatedAt = DateTime.UtcNow.AddHours(-1)
+        });
+
+        harness.TopologyService.ValidationReport = new GovernanceReport
+        {
+            DependencyDrifts =
+            [
+                new DependencyDriftIssue
+                {
+                    ModuleName = "Core",
+                    Message = "Core has drift"
+                },
+                new DependencyDriftIssue
+                {
+                    ModuleName = "Unrelated",
+                    Message = "Ignore me"
+                }
+            ]
+        };
+
+        var result = await harness.Engine.ScanAsync(new GovernanceScanRequest
+        {
+            Cadence = GovernanceCadence.HighFrequency,
+            Scope = GovernanceScopeKind.ActiveChanges,
+            ActiveWindow = TimeSpan.FromDays(1),
+            IncludeDirectDependencies = true
+        });
+
+        Assert.Single(result.ActiveModules);
+        Assert.Contains(result.CandidateModules, item => item.ModuleId == "tech-core" && item.IsDirectlyActive);
+        Assert.Contains(result.CandidateModules, item => item.ModuleId == "tech-foundation" && item.AddedByDependencyExpansion);
+        Assert.Single(result.ArchitectureReport.DependencyDrifts);
+        Assert.Equal("Core", result.ArchitectureReport.DependencyDrifts[0].ModuleName);
+    }
+
+    [Fact]
+    public async Task ScanAsync_Subtree_ShouldIncludeDescendants()
+    {
+        using var harness = GovernanceTestHarness.Create();
+
+        var result = await harness.Engine.ScanAsync(new GovernanceScanRequest
+        {
+            Cadence = GovernanceCadence.LowFrequency,
+            Scope = GovernanceScopeKind.Subtree,
+            NodeIdOrName = "Platform",
+            IncludeDirectDependencies = false
+        });
+
+        Assert.Equal("platform-root", result.ScopeNodeId);
+        Assert.Contains(result.CandidateModules, item => item.ModuleId == "platform-root");
+        Assert.Contains(result.CandidateModules, item => item.ModuleId == "tech-core");
+        Assert.Contains(result.CandidateModules, item => item.ModuleId == "tech-foundation");
+    }
+
+    [Fact]
     public void ValidateArchitecture_ShouldDelegateToTopologyApplicationService()
     {
         using var harness = GovernanceTestHarness.Create();
@@ -240,11 +350,32 @@ public sealed class GovernanceRefactorTests
                 {
                     new()
                     {
+                        Id = "platform-root",
+                        Name = "Platform",
+                        Discipline = "engineering",
+                        Path = "src/platform",
+                        Layer = 0,
+                        Summary = "Platform root"
+                    },
+                    new()
+                    {
+                        Id = "tech-foundation",
+                        Name = "Foundation",
+                        Discipline = "engineering",
+                        Path = "src/foundation",
+                        Layer = 1,
+                        ParentModuleId = "platform-root",
+                        Summary = "Foundation module"
+                    },
+                    new()
+                    {
                         Id = "tech-core",
                         Name = "Core",
                         Discipline = "engineering",
                         Path = "src/core",
-                        Layer = 1,
+                        Layer = 2,
+                        ParentModuleId = "platform-root",
+                        Dependencies = ["tech-foundation"],
                         Summary = "Core module"
                     }
                 };
@@ -364,6 +495,7 @@ public sealed class GovernanceRefactorTests
 
         public bool TopologyRequested { get; private set; }
         public bool ValidationRequested { get; private set; }
+        public GovernanceReport ValidationReport { get; set; } = new();
 
         public TopologySnapshot BuildTopology()
         {
@@ -394,10 +526,10 @@ public sealed class GovernanceRefactorTests
         public GovernanceReport ValidateArchitecture()
         {
             ValidationRequested = true;
-            return new GovernanceReport();
+            return ValidationReport;
         }
 
-        public List<CrossWork> GetCrossWorks() => throw new NotSupportedException();
+        public List<CrossWork> GetCrossWorks() => [];
         public List<CrossWork> GetCrossWorksForModule(string moduleName) => throw new NotSupportedException();
         public void RegisterModule(string discipline, TopologyModuleDefinition module) => throw new NotSupportedException();
         public bool UnregisterModule(string name) => throw new NotSupportedException();
