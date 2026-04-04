@@ -4,14 +4,7 @@ namespace Dna.App.Services;
 
 public sealed class AppProjectLlmConfigService
 {
-    public string FilePath
-    {
-        get
-        {
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(userProfile, ".agentic-os", "llm.json");
-        }
-    }
+    public string FilePath => RuntimeLlmConfigPaths.ResolveGlobalFilePath();
 
     public RuntimeLlmConfigDocument Load()
         => RuntimeLlmConfigStore.LoadOrCreate(FilePath);

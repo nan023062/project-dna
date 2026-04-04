@@ -6,7 +6,6 @@ namespace Dna.App.Desktop;
 public sealed class DesktopProjectConfig
 {
     private const string MetadataDirectoryName = ".agentic-os";
-    private const string LlmConfigFileName = "llm.json";
 
     public required string ProjectRoot { get; init; }
     public required string ProjectName { get; init; }
@@ -76,10 +75,7 @@ public sealed class DesktopProjectConfig
         => Path.Combine(ResolveMetadataRootPath(projectRoot), "logs");
 
     public static string ResolveLlmConfigPath(string projectRoot)
-    {
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(userProfile, MetadataDirectoryName, LlmConfigFileName);
-    }
+        => RuntimeLlmConfigPaths.ResolveGlobalFilePath();
 
     private static string ResolveProjectName(string projectRoot)
     {

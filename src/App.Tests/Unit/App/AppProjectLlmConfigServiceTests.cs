@@ -4,24 +4,26 @@ using Xunit;
 
 namespace App.Tests;
 
+[Collection(RuntimeLlmConfigTestCollection.Name)]
 public sealed class AppProjectLlmConfigServiceTests
 {
     [Fact]
     public void Load_ShouldUseUserScopedLlmConfigFile()
     {
+        using var scope = CreateLlmScope();
         var service = new AppProjectLlmConfigService();
 
         var config = service.Load();
 
         Assert.NotNull(config);
         Assert.True(File.Exists(service.FilePath));
-        var expectedPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".agentic-os", "llm.json");
-        Assert.Equal(expectedPath, service.FilePath);
+        Assert.Equal(RuntimeLlmConfigPaths.ResolveGlobalFilePath(), service.FilePath);
     }
 
     [Fact]
     public void Save_ShouldPersistPurposesAndProviderBindings()
     {
+        using var scope = CreateLlmScope();
         var service = new AppProjectLlmConfigService();
 
         var saved = service.Save(new RuntimeLlmConfigDocument
@@ -55,4 +57,10 @@ public sealed class AppProjectLlmConfigServiceTests
         Assert.Equal("app-openai", saved.Purposes.Embedding);
     }
 
+    private static RuntimeLlmConfigPathOverrideScope CreateLlmScope()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), "app-llm-config-tests", Guid.NewGuid().ToString("N"), "llm.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+        return new RuntimeLlmConfigPathOverrideScope(filePath);
+    }
 }

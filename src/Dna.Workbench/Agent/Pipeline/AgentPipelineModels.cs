@@ -1,19 +1,24 @@
 using System.Text.Json.Serialization;
 
-namespace Dna.App.Services.Pipeline;
+namespace Dna.Workbench.Agent.Pipeline;
 
-public sealed class AppExecutionPipelineConfig
+public sealed class AgentExecutionPipelineConfig
 {
     public int Version { get; set; } = 1;
     public bool Enabled { get; set; } = true;
     public bool RequireArchitectBeforeDeveloper { get; set; } = true;
     public bool StrictGate { get; set; } = true;
     public bool PersistRunAsMemory { get; set; } = true;
-    public List<string> ExecutionOrder { get; set; } = ["architect", "developer"];
+    public List<string> ExecutionOrder { get; set; } =
+    [
+        AgentPipelineConstants.SlotIds.Architect,
+        AgentPipelineConstants.SlotIds.Developer
+    ];
+
     public Dictionary<string, AgentSlotConfig> Slots { get; set; } = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["architect"] = AgentSlotConfig.CreateArchitectDefault(),
-        ["developer"] = AgentSlotConfig.CreateDeveloperDefault()
+        [AgentPipelineConstants.SlotIds.Architect] = AgentSlotConfig.CreateArchitectDefault(),
+        [AgentPipelineConstants.SlotIds.Developer] = AgentSlotConfig.CreateDeveloperDefault()
     };
 }
 
@@ -29,8 +34,8 @@ public sealed class AgentSlotConfig
 
     public static AgentSlotConfig CreateArchitectDefault() => new()
     {
-        Id = "architect",
-        DisplayName = "架构师",
+        Id = AgentPipelineConstants.SlotIds.Architect,
+        DisplayName = AgentPipelineConstants.SlotDisplayNames.Architect,
         Enabled = true,
         BlockingOnFailure = true,
         DefaultModules = ["Dna.App"],
@@ -41,16 +46,16 @@ public sealed class AgentSlotConfig
         ],
         Objectives =
         [
-            "先复盘，再开发",
-            "输出架构风险与修复建议",
-            "确保单向依赖和可扩展性"
+            "先复盘，再开发。",
+            "输出架构风险与修复建议。",
+            "确保单向依赖和可扩展性。"
         ]
     };
 
     public static AgentSlotConfig CreateDeveloperDefault() => new()
     {
-        Id = "developer",
-        DisplayName = "开发者",
+        Id = AgentPipelineConstants.SlotIds.Developer,
+        DisplayName = AgentPipelineConstants.SlotDisplayNames.Developer,
         Enabled = true,
         BlockingOnFailure = false,
         DefaultModules = ["Dna.App"],
@@ -61,9 +66,9 @@ public sealed class AgentSlotConfig
         ],
         Objectives =
         [
-            "基于复盘结论执行开发",
-            "保持实现与架构约束一致",
-            "完成后回写记忆"
+            "基于复盘结论执行开发。",
+            "保持实现与架构约束一致。",
+            "完成后回写记忆。"
         ]
     };
 }
@@ -111,5 +116,5 @@ public sealed class SlotRunState
 public sealed class PipelineUpdateRequest
 {
     [JsonPropertyName("config")]
-    public AppExecutionPipelineConfig? Config { get; set; }
+    public AgentExecutionPipelineConfig? Config { get; set; }
 }

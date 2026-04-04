@@ -1,15 +1,14 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dna.App.Desktop.Services;
+using Dna.Knowledge.Workspace.Models;
 
 namespace Dna.App.Desktop.ViewModels;
 
 public partial class WorkspaceExplorerViewModel : ObservableObject
 {
-    private readonly IDnaApiClient _apiClient;
+    private readonly IDesktopLocalWorkbenchClient _localWorkbenchClient;
 
     [ObservableProperty]
     private ObservableCollection<WorkspaceTreeItemViewModel> _items = new();
@@ -38,9 +37,9 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
     [ObservableProperty]
     private string _selectionAction = string.Empty;
 
-    public WorkspaceExplorerViewModel(IDnaApiClient apiClient)
+    public WorkspaceExplorerViewModel(IDesktopLocalWorkbenchClient localWorkbenchClient)
     {
-        _apiClient = apiClient;
+        _localWorkbenchClient = localWorkbenchClient;
     }
 
     public void Reset()
@@ -90,11 +89,10 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
 
         try
         {
-            var tree = await _apiClient.GetAsync("/api/workspace/tree?maxDepth=6");
-            var root = ParseWorkspaceDirectoryTree(tree);
+            var root = await _localWorkbenchClient.GetWorkspaceTreeAsync(maxDepth: 6);
             
             Items.Clear();
-            foreach (var item in root.Children)
+            foreach (var item in root.Entries.Select(ParseWorkspaceTreeItem))
             {
                 Items.Add(item);
             }
@@ -121,42 +119,18 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
         }
     }
 
-    private static WorkspaceTreeRootViewModel ParseWorkspaceDirectoryTree(JsonElement element)
+    private static WorkspaceTreeItemViewModel ParseWorkspaceTreeItem(WorkspaceFileNode entry)
     {
-        return new WorkspaceTreeRootViewModel(
-            Name: GetString(element, "name", "Workspace") ?? "Workspace",
-            FullPath: GetString(element, "fullPath", string.Empty) ?? string.Empty,
-            DirectoryCount: ParseNullableInt(element, "directoryCount") ?? 0,
-            FileCount: ParseNullableInt(element, "fileCount") ?? 0,
-            ScannedAtUtc: ParseDate(element, "scannedAtUtc"),
-            Children: ParseWorkspaceTreeItems(element, "entries"));
-    }
-
-    private static List<WorkspaceTreeItemViewModel> ParseWorkspaceTreeItems(JsonElement element, string propertyName)
-    {
-        var items = new List<WorkspaceTreeItemViewModel>();
-        if (!element.TryGetProperty(propertyName, out var entries) || entries.ValueKind != JsonValueKind.Array)
-            return items;
-
-        foreach (var entry in entries.EnumerateArray())
-            items.Add(ParseWorkspaceTreeItem(entry));
-
-        return items;
-    }
-
-    private static WorkspaceTreeItemViewModel ParseWorkspaceTreeItem(JsonElement element)
-    {
-        var kind = GetString(element, "kind", "Directory") ?? "Directory";
-        var isDirectory = string.Equals(kind, "Directory", StringComparison.OrdinalIgnoreCase);
-        var directoryCount = ParseNullableInt(element, "childDirectoryCount") ?? 0;
-        var fileCount = ParseNullableInt(element, "childFileCount") ?? 0;
-        var module = ParseWorkspaceModuleLabel(element);
-        var descriptor = ParseWorkspaceDescriptorLabel(element);
-        var badge = GetString(element, "badge", null);
-        var statusLabel = GetString(element, "statusLabel", "-") ?? "-";
-        var sizeBytes = ParseInt64(element, "sizeBytes");
-        var lastModified = ParseDate(element, "lastModifiedUtc");
-        var children = ParseWorkspaceTreeItems(element, "children");
+        var isDirectory = entry.Kind == WorkspaceEntryKind.Directory;
+        var directoryCount = entry.ChildDirectoryCount;
+        var fileCount = entry.ChildFileCount;
+        var module = ParseWorkspaceModuleLabel(entry);
+        var descriptor = ParseWorkspaceDescriptorLabel(entry);
+        var badge = entry.Badge;
+        var statusLabel = entry.StatusLabel;
+        var sizeBytes = entry.SizeBytes;
+        var lastModified = entry.LastModifiedUtc ?? DateTime.MinValue;
+        var children = entry.Children?.Select(ParseWorkspaceTreeItem).ToList() ?? [];
 
         var meta = isDirectory
             ? $"{statusLabel} | {directoryCount} dirs | {fileCount} files"
@@ -170,14 +144,14 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
             actionParts.Add(module);
         if (!string.IsNullOrWhiteSpace(descriptor))
             actionParts.Add(descriptor);
-        if (TryBuildWorkspaceActionHint(element, out var actionHint))
+        if (TryBuildWorkspaceActionHint(entry, out var actionHint))
             actionParts.Add(actionHint);
 
         return new WorkspaceTreeItemViewModel(
-            Name: GetString(element, "name", string.Empty) ?? string.Empty,
-            DisplayName: GetString(element, "name", string.Empty) ?? string.Empty,
-            Path: GetString(element, "path", string.Empty) ?? string.Empty,
-            FullPath: GetString(element, "fullPath", string.Empty) ?? string.Empty,
+            Name: entry.Name,
+            DisplayName: entry.Name,
+            Path: entry.Path,
+            FullPath: entry.FullPath,
             IsDirectory: isDirectory,
             MetaLine: meta,
             Caption: isDirectory ? BuildFolderCaption(directoryCount, fileCount, badge) : (badge ?? statusLabel),
@@ -195,43 +169,32 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
             : $"{caption} | {badge}";
     }
 
-    private static string? ParseWorkspaceModuleLabel(JsonElement element)
+    private static string? ParseWorkspaceModuleLabel(WorkspaceFileNode entry)
     {
-        if (!element.TryGetProperty("module", out var module) || module.ValueKind != JsonValueKind.Object)
+        if (entry.Module is null)
             return null;
 
-        var name = GetString(module, "name", null);
-        var discipline = GetString(module, "discipline", null);
-        var layer = ParseNullableInt(module, "layer");
-        if (string.IsNullOrWhiteSpace(name))
-            return null;
-
-        return layer.HasValue
-            ? $"Module: {name} ({discipline ?? "-"}, L{layer.Value})"
-            : $"Module: {name}";
+        return $"Module: {entry.Module.Name} ({entry.Module.Discipline}, L{entry.Module.Layer})";
     }
 
-    private static string? ParseWorkspaceDescriptorLabel(JsonElement element)
+    private static string? ParseWorkspaceDescriptorLabel(WorkspaceFileNode entry)
     {
-        if (!element.TryGetProperty("descriptor", out var descriptor) || descriptor.ValueKind != JsonValueKind.Object)
+        if (entry.Descriptor is null)
             return null;
 
-        var stableGuid = GetString(descriptor, "stableGuid", null);
+        var stableGuid = entry.Descriptor.StableGuid;
         return string.IsNullOrWhiteSpace(stableGuid)
             ? "Metadata: .agentic.meta"
             : $"Metadata: {stableGuid}";
     }
 
-    private static bool TryBuildWorkspaceActionHint(JsonElement element, out string actionHint)
+    private static bool TryBuildWorkspaceActionHint(WorkspaceFileNode entry, out string actionHint)
     {
         actionHint = string.Empty;
-        if (!element.TryGetProperty("actions", out var actions) || actions.ValueKind != JsonValueKind.Object)
-            return false;
-
         var hints = new List<string>();
-        if (actions.TryGetProperty("canEdit", out var canEdit) && canEdit.ValueKind == JsonValueKind.True)
+        if (entry.Actions.CanEdit)
             hints.Add("editable");
-        if (actions.TryGetProperty("canRegister", out var canRegister) && canRegister.ValueKind == JsonValueKind.True)
+        if (entry.Actions.CanRegister)
             hints.Add("registerable");
 
         if (hints.Count == 0)
@@ -239,23 +202,6 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
 
         actionHint = $"Actions: {string.Join(", ", hints)}";
         return true;
-    }
-
-    private static long? ParseInt64(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number))
-            return number;
-
-        if (value.ValueKind == JsonValueKind.String &&
-            long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
-        {
-            return parsed;
-        }
-
-        return null;
     }
 
     private static string FormatFileSize(long? sizeBytes)
@@ -293,36 +239,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
 
         return null;
     }
-
-    private static string? GetString(JsonElement element, string propertyName, string? defaultValue)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String)
-            return value.GetString();
-        return defaultValue;
-    }
-
-    private static int? ParseNullableInt(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
-            return number;
-        return null;
-    }
-
-    private static DateTime ParseDate(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
-            return date;
-        return DateTime.MinValue;
-    }
 }
-
-public sealed record WorkspaceTreeRootViewModel(
-    string Name,
-    string FullPath,
-    int DirectoryCount,
-    int FileCount,
-    DateTime ScannedAtUtc,
-    List<WorkspaceTreeItemViewModel> Children);
 
 public sealed record WorkspaceTreeItemViewModel(
     string Name,

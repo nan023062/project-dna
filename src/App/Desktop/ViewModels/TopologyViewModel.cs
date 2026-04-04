@@ -3,15 +3,15 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dna.App.Desktop.Services;
+using Dna.Knowledge;
 
 namespace Dna.App.Desktop.ViewModels;
 
 public partial class TopologyViewModel : ObservableObject
 {
-    private readonly IDnaApiClient _apiClient;
-    private readonly Dictionary<string, JsonElement> _modulesById = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IDesktopLocalWorkbenchClient _localWorkbenchClient;
+    private readonly Dictionary<string, TopologyWorkbenchModuleView> _modulesById = new(StringComparer.OrdinalIgnoreCase);
     private string? _projectRoot;
-    private string _scopeRootLabel = "root";
 
     public event Action? GraphChanged;
     public event Action? NavigateRootRequested;
@@ -161,9 +161,9 @@ public partial class TopologyViewModel : ObservableObject
     [ObservableProperty]
     private string? _selectedNodeId;
 
-    public TopologyViewModel(IDnaApiClient apiClient)
+    public TopologyViewModel(IDesktopLocalWorkbenchClient localWorkbenchClient)
     {
-        _apiClient = apiClient;
+        _localWorkbenchClient = localWorkbenchClient;
     }
 
     [RelayCommand]
@@ -178,7 +178,7 @@ public partial class TopologyViewModel : ObservableObject
 
         try
         {
-            var snapshot = await _apiClient.GetAsync("/api/topology");
+            var snapshot = await _localWorkbenchClient.GetTopologySnapshotAsync();
             BuildTopologyState(snapshot);
             GraphChanged?.Invoke();
 
@@ -205,7 +205,7 @@ public partial class TopologyViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(SelectedNodeId))
         {
-            EditStatusText = "请先选择一个模块。";
+            EditStatusText = "Please select a module first.";
             return;
         }
 
@@ -217,35 +217,33 @@ public partial class TopologyViewModel : ObservableObject
             UpsertMetadataList(metadata, "rules", ParseMultilineList(EditRules));
             UpsertMetadataList(metadata, "prohibitions", ParseMultilineList(EditProhibitions));
 
-            var payload = new
-            {
-                discipline = string.IsNullOrWhiteSpace(EditDiscipline) ? "engineering" : EditDiscipline.Trim(),
-                module = new
+            await _localWorkbenchClient.SaveModuleAsync(
+                string.IsNullOrWhiteSpace(EditDiscipline) ? "engineering" : EditDiscipline.Trim(),
+                new TopologyModuleDefinition
                 {
-                    id = SelectedNodeId,
-                    name = EditName.Trim(),
-                    path = EditPath.Trim(),
-                    layer = int.TryParse(EditLayer, out var layer) ? layer : 0,
-                    parentModuleId = SelectedParent?.NodeId,
-                    managedPaths = ParseMultilineList(EditManagedPaths),
-                    dependencies = ParseMultilineList(EditDependencies),
-                    maintainer = EmptyToNull(EditMaintainer),
-                    summary = EmptyToNull(EditSummary),
-                    boundary = EmptyToNull(EditBoundary),
-                    publicApi = ParseMultilineList(EditPublicApi),
-                    constraints = ParseMultilineList(EditConstraints),
-                    metadata
-                }
-            };
+                    Discipline = string.IsNullOrWhiteSpace(EditDiscipline) ? "engineering" : EditDiscipline.Trim(),
+                    Id = SelectedNodeId,
+                    Name = EditName.Trim(),
+                    Path = EditPath.Trim(),
+                    Layer = int.TryParse(EditLayer, out var layer) ? layer : 0,
+                    ParentModuleId = SelectedParent?.NodeId,
+                    ManagedPaths = ParseMultilineList(EditManagedPaths),
+                    Dependencies = ParseMultilineList(EditDependencies),
+                    Maintainer = EmptyToNull(EditMaintainer),
+                    Summary = EmptyToNull(EditSummary),
+                    Boundary = EmptyToNull(EditBoundary),
+                    PublicApi = ParseMultilineList(EditPublicApi),
+                    Constraints = ParseMultilineList(EditConstraints),
+                    Metadata = metadata
+                });
 
-            await _apiClient.PostAsync("/api/modules", payload);
-            EditStatusText = $"模块已保存：{EditName}";
+            EditStatusText = $"Module saved: {EditName}";
             await RefreshAsync(_projectRoot);
             await SelectNodeAsync(SelectedNodeId);
         }
         catch (Exception ex)
         {
-            EditStatusText = $"模块保存失败：{ex.Message}";
+            EditStatusText = $"Module save failed: {ex.Message}";
         }
     }
 
@@ -256,7 +254,7 @@ public partial class TopologyViewModel : ObservableObject
             return;
 
         await SelectNodeAsync(SelectedNodeId);
-        EditStatusText = $"模块已重新加载：{EditName}";
+        EditStatusText = $"Module reloaded: {EditName}";
     }
 
     [RelayCommand]
@@ -271,31 +269,34 @@ public partial class TopologyViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(SelectedNodeId))
         {
-            KnowledgeStatusText = "请先选择一个模块。";
+            KnowledgeStatusText = "Please select a module first.";
             return;
         }
 
         try
         {
-            var payload = new
+            await _localWorkbenchClient.SaveModuleKnowledgeAsync(new TopologyModuleKnowledgeUpsertCommand
             {
-                identity = EmptyToNull(KnowledgeIdentity),
-                lessons = ParseLessons(KnowledgeLessons),
-                activeTasks = ParseMultilineList(KnowledgeActiveTasks),
-                facts = ParseMultilineList(KnowledgeFacts),
-                totalMemoryCount = 0,
-                identityMemoryId = (string?)null,
-                upgradeTrailMemoryId = (string?)null,
-                memoryIds = Array.Empty<string>()
-            };
+                NodeIdOrName = SelectedNodeId,
+                Knowledge = new NodeKnowledge
+                {
+                    Identity = EmptyToNull(KnowledgeIdentity),
+                    Lessons = ParseLessons(KnowledgeLessons),
+                    ActiveTasks = ParseMultilineList(KnowledgeActiveTasks),
+                    Facts = ParseMultilineList(KnowledgeFacts),
+                    TotalMemoryCount = 0,
+                    IdentityMemoryId = null,
+                    UpgradeTrailMemoryId = null,
+                    MemoryIds = []
+                }
+            });
 
-            await _apiClient.PutAsync($"/api/modules/{Uri.EscapeDataString(SelectedNodeId)}/knowledge", payload);
-            KnowledgeStatusText = $"模块知识已保存：{EditName}";
+            KnowledgeStatusText = $"Knowledge saved: {EditName}";
             await SelectNodeAsync(SelectedNodeId);
         }
         catch (Exception ex)
         {
-            KnowledgeStatusText = $"模块知识保存失败：{ex.Message}";
+            KnowledgeStatusText = $"Knowledge save failed: {ex.Message}";
         }
     }
 
@@ -306,7 +307,7 @@ public partial class TopologyViewModel : ObservableObject
             return;
 
         await LoadKnowledgeAsync(SelectedNodeId);
-        KnowledgeStatusText = $"模块知识已重新加载：{EditName}";
+        KnowledgeStatusText = $"Knowledge reloaded: {EditName}";
     }
 
     [RelayCommand]
@@ -316,7 +317,7 @@ public partial class TopologyViewModel : ObservableObject
         KnowledgeLessons = string.Empty;
         KnowledgeActiveTasks = string.Empty;
         KnowledgeFacts = string.Empty;
-        KnowledgeStatusText = "知识表单已重置。";
+        KnowledgeStatusText = "Knowledge form reset.";
     }
 
     public async Task SelectNodeAsync(string? nodeId)
@@ -328,32 +329,33 @@ public partial class TopologyViewModel : ObservableObject
             return;
         }
 
-        var label = GetString(module, "displayName", GetString(module, "name", nodeId)) ?? nodeId;
+        var label = string.IsNullOrWhiteSpace(module.DisplayName) ? module.Name : module.DisplayName;
         DetailTitle = label;
         DetailMeta = BuildDetailMeta(module);
-        DetailSummary = GetString(module, "summary", "No summary.") ?? "No summary.";
+        DetailSummary = string.IsNullOrWhiteSpace(module.Summary) ? "No summary." : module.Summary;
 
-        EditDiscipline = GetString(module, "discipline", string.Empty) ?? string.Empty;
-        EditLayer = GetInt(module, "layer")?.ToString() ?? "0";
-        EditName = GetString(module, "name", string.Empty) ?? string.Empty;
-        EditPath = GetString(module, "relativePath", string.Empty) ?? string.Empty;
-        EditManagedPaths = ToMultilineText(ParseStringArray(module, "managedPathScopes"));
-        EditMaintainer = GetString(module, "maintainer", string.Empty) ?? string.Empty;
-        EditSummary = GetString(module, "summary", string.Empty) ?? string.Empty;
-        EditBoundary = GetString(module, "boundary", string.Empty) ?? string.Empty;
-        EditDependencies = ToMultilineText(ParseStringArray(module, "dependencies"));
-        EditPublicApi = ToMultilineText(ParseStringArray(module, "publicApi"));
-        EditConstraints = ToMultilineText(ParseStringArray(module, "constraints"));
-        EditWorkflow = ToMultilineText(ParseMetadataList(module, "workflow"));
-        EditRules = ToMultilineText(ParseMetadataList(module, "rules"));
-        EditProhibitions = ToMultilineText(ParseMetadataList(module, "prohibitions"));
-        EditMetadata = JsonSerializer.Serialize(ParseStringDictionary(module, "metadata"), new JsonSerializerOptions { WriteIndented = true });
+        EditDiscipline = module.Discipline;
+        EditLayer = module.Layer.ToString();
+        EditName = module.Name;
+        EditPath = module.RelativePath ?? string.Empty;
+        EditManagedPaths = ToMultilineText(module.ManagedPathScopes);
+        EditMaintainer = module.Maintainer ?? string.Empty;
+        EditSummary = module.Summary ?? string.Empty;
+        EditBoundary = module.Boundary ?? string.Empty;
+        EditDependencies = ToMultilineText(module.Dependencies);
+        EditPublicApi = ToMultilineText(module.PublicApi);
+        EditConstraints = ToMultilineText(module.Constraints);
+        EditWorkflow = ToMultilineText(ParseMetadataList(module.Metadata, "workflow"));
+        EditRules = ToMultilineText(ParseMetadataList(module.Metadata, "rules"));
+        EditProhibitions = ToMultilineText(ParseMetadataList(module.Metadata, "prohibitions"));
+        EditMetadata = JsonSerializer.Serialize(
+            module.Metadata ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            new JsonSerializerOptions { WriteIndented = true });
         McpPreview = BuildMcpPreview();
-        EditHintText = $"正在编辑模块：{label}";
+        EditHintText = $"Editing module: {label}";
 
-        var parentId = GetString(module, "parentModuleId", null);
         SelectedParent = ParentOptions.FirstOrDefault(item =>
-            string.Equals(item.NodeId, parentId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.NodeId, module.ParentModuleId, StringComparison.OrdinalIgnoreCase));
 
         VisibleNodeLines.Clear();
         foreach (var item in GraphNodes.Select(node => $"{node.Label} | {node.TypeLabel} | {node.DisciplineLabel}"))
@@ -363,12 +365,17 @@ public partial class TopologyViewModel : ObservableObject
         await LoadRelationsAsync(nodeId);
     }
 
-    public void ApplyScope(string? viewRootId, IReadOnlyList<string> scopeTrailIds, IReadOnlyList<string> visibleNodeIds, IReadOnlyList<TopologyEdgeViewModel> visibleEdges)
+    public void ApplyScope(
+        string? viewRootId,
+        IReadOnlyList<string> scopeTrailIds,
+        IReadOnlyList<string> visibleNodeIds,
+        IReadOnlyList<TopologyEdgeViewModel> visibleEdges)
     {
-        _scopeRootLabel = string.IsNullOrWhiteSpace(viewRootId)
+        _ = scopeTrailIds;
+        var scopeRootLabel = string.IsNullOrWhiteSpace(viewRootId)
             ? "root"
             : GraphNodes.FirstOrDefault(node => string.Equals(node.Id, viewRootId, StringComparison.OrdinalIgnoreCase))?.Label ?? viewRootId;
-        TopologyScopeText = $"Current scope: {_scopeRootLabel}";
+        TopologyScopeText = $"Current scope: {scopeRootLabel}";
 
         VisibleNodeLines.Clear();
         foreach (var id in visibleNodeIds)
@@ -401,7 +408,7 @@ public partial class TopologyViewModel : ObservableObject
         ResetDetails();
     }
 
-    private void BuildTopologyState(JsonElement snapshot)
+    private void BuildTopologyState(TopologyWorkbenchSnapshot snapshot)
     {
         _modulesById.Clear();
         GraphNodes.Clear();
@@ -409,64 +416,64 @@ public partial class TopologyViewModel : ObservableObject
         DisciplineOptions.Clear();
         ParentOptions.Clear();
 
-        var modules = snapshot.TryGetProperty("modules", out var moduleArray) && moduleArray.ValueKind == JsonValueKind.Array
-            ? moduleArray.EnumerateArray().ToList()
-            : [];
-        var edges = snapshot.TryGetProperty("relationEdges", out var edgeArray) && edgeArray.ValueKind == JsonValueKind.Array
-            ? edgeArray.EnumerateArray().ToList()
-            : [];
-
-        foreach (var module in modules)
+        foreach (var module in snapshot.Modules)
         {
-            var nodeId = GetString(module, "nodeId", string.Empty) ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(nodeId))
+            if (string.IsNullOrWhiteSpace(module.NodeId))
                 continue;
 
-            _modulesById[nodeId] = module.Clone();
+            _modulesById[module.NodeId] = module;
             GraphNodes.Add(new TopologyNodeViewModel(
-                Id: nodeId,
-                NodeId: nodeId,
-                Label: GetString(module, "displayName", GetString(module, "name", nodeId)) ?? nodeId,
-                Type: GetString(module, "type", "Technical") ?? "Technical",
-                TypeLabel: GetString(module, "typeLabel", GetString(module, "typeName", "Technical")) ?? "Technical",
-                Discipline: GetString(module, "discipline", "root") ?? "root",
-                DisciplineLabel: GetString(module, "disciplineDisplayName", GetString(module, "discipline", "root")) ?? "root",
-                DependencyCount: ParseStringArray(module, "dependencies").Count,
-                Summary: GetString(module, "summary", string.Empty) ?? string.Empty,
-                ComputedLayer: GetInt(module, "architectureLayerScore"),
-                RelativePath: GetString(module, "relativePath", null),
-                ParentModuleId: GetString(module, "parentModuleId", null),
-                ChildModuleIds: ParseStringArray(module, "childIds"),
-                ManagedPathScopes: ParseStringArray(module, "managedPathScopes"),
-                Maintainer: GetString(module, "maintainer", null),
-                Boundary: GetString(module, "boundary", null),
-                PublicApi: ParseStringArray(module, "publicApi"),
-                Constraints: ParseStringArray(module, "constraints"),
-                Workflow: ParseMetadataList(module, "workflow"),
-                Rules: ParseMetadataList(module, "rules"),
-                Prohibitions: ParseMetadataList(module, "prohibitions"),
-                Metadata: ParseStringDictionary(module, "metadata"),
-                CanEdit: true));
+                Id: module.NodeId,
+                NodeId: module.NodeId,
+                Label: string.IsNullOrWhiteSpace(module.DisplayName) ? module.Name : module.DisplayName,
+                Type: module.Type,
+                TypeLabel: module.TypeLabel,
+                Discipline: module.Discipline,
+                DisciplineLabel: module.DisciplineDisplayName,
+                DependencyCount: module.Dependencies.Count,
+                Summary: module.Summary ?? string.Empty,
+                ComputedLayer: module.ArchitectureLayerScore,
+                RelativePath: module.RelativePath,
+                ParentModuleId: module.ParentModuleId,
+                ChildModuleIds: module.ChildIds,
+                ManagedPathScopes: module.ManagedPathScopes,
+                Maintainer: module.Maintainer,
+                Boundary: module.Boundary,
+                PublicApi: module.PublicApi,
+                Constraints: module.Constraints,
+                Workflow: ParseMetadataList(module.Metadata, "workflow"),
+                Rules: ParseMetadataList(module.Metadata, "rules"),
+                Prohibitions: ParseMetadataList(module.Metadata, "prohibitions"),
+                Metadata: module.Metadata ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                CanEdit: module.CanEdit));
         }
 
+        var edges = snapshot.RelationEdges.Count > 0 ? snapshot.RelationEdges : snapshot.Edges;
         foreach (var edge in edges)
         {
             GraphEdges.Add(new TopologyEdgeViewModel(
-                From: GetString(edge, "from", string.Empty) ?? string.Empty,
-                To: GetString(edge, "to", string.Empty) ?? string.Empty,
-                Relation: GetString(edge, "relation", "dependency") ?? "dependency",
-                IsComputed: GetBool(edge, "isComputed"),
-                Kind: GetString(edge, "kind", null)));
+                From: edge.From,
+                To: edge.To,
+                Relation: edge.Relation,
+                IsComputed: edge.IsComputed,
+                Kind: edge.Kind));
         }
 
-        foreach (var discipline in GraphNodes.Select(node => node.Discipline).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x))
+        foreach (var discipline in GraphNodes
+                     .Select(node => node.Discipline)
+                     .Distinct(StringComparer.OrdinalIgnoreCase)
+                     .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase))
+        {
             DisciplineOptions.Add(discipline);
+        }
 
         ParentOptions.Add(new TopologyParentOptionViewModel(null, "(none)"));
-        foreach (var node in GraphNodes.OrderBy(node => node.Label, StringComparer.OrdinalIgnoreCase))
+        foreach (var node in GraphNodes.OrderBy(static node => node.Label, StringComparer.OrdinalIgnoreCase))
             ParentOptions.Add(new TopologyParentOptionViewModel(node.NodeId, node.Label));
 
-        TopologySummaryText = GetString(snapshot, "summary", $"Loaded {GraphNodes.Count} modules.") ?? $"Loaded {GraphNodes.Count} modules.";
+        TopologySummaryText = string.IsNullOrWhiteSpace(snapshot.Summary)
+            ? $"Loaded {GraphNodes.Count} modules."
+            : snapshot.Summary;
         TopologyScopeText = "Current scope: root";
         StatModulesText = GraphNodes.Count.ToString();
         StatDependenciesText = GraphEdges.Count(edge => string.Equals(edge.Relation, "dependency", StringComparison.OrdinalIgnoreCase)).ToString();
@@ -479,17 +486,23 @@ public partial class TopologyViewModel : ObservableObject
     {
         try
         {
-            var result = await _apiClient.GetAsync($"/api/modules/{Uri.EscapeDataString(nodeId)}/knowledge");
-            KnowledgeIdentity = GetString(result, "identity", string.Empty) ?? string.Empty;
-            KnowledgeLessons = string.Join(Environment.NewLine, ParseLessonsToLines(result));
-            KnowledgeActiveTasks = ToMultilineText(ParseStringArray(result, "activeTasks"));
-            KnowledgeFacts = ToMultilineText(ParseStringArray(result, "facts"));
-            KnowledgeHintText = $"正在编辑模块知识：{GetString(result, "name", EditName) ?? EditName}";
+            var result = await _localWorkbenchClient.GetModuleKnowledgeAsync(nodeId);
+            if (result is null)
+            {
+                KnowledgeStatusText = $"Knowledge not found: {nodeId}";
+                return;
+            }
+
+            KnowledgeIdentity = result.Knowledge.Identity ?? string.Empty;
+            KnowledgeLessons = string.Join(Environment.NewLine, result.Knowledge.Lessons.Select(static lesson => lesson.Title));
+            KnowledgeActiveTasks = ToMultilineText(result.Knowledge.ActiveTasks);
+            KnowledgeFacts = ToMultilineText(result.Knowledge.Facts);
+            KnowledgeHintText = $"Editing module knowledge: {result.Name}";
             KnowledgeStatusText = "Knowledge editor ready.";
         }
         catch (Exception ex)
         {
-            KnowledgeStatusText = $"知识读取失败：{ex.Message}";
+            KnowledgeStatusText = $"Knowledge load failed: {ex.Message}";
         }
     }
 
@@ -497,31 +510,25 @@ public partial class TopologyViewModel : ObservableObject
     {
         try
         {
-            var result = await _apiClient.GetAsync($"/api/modules/{Uri.EscapeDataString(nodeId)}/relations");
+            var result = await _localWorkbenchClient.GetModuleRelationsAsync(nodeId);
             RelationLines.Clear();
 
-            if (result.TryGetProperty("outgoing", out var outgoing) && outgoing.ValueKind == JsonValueKind.Array)
+            if (result is null)
             {
-                foreach (var relation in outgoing.EnumerateArray())
-                {
-                    RelationLines.Add(
-                        $"{GetString(relation, "type", "-")}: {GetString(relation, "toName", GetString(relation, "toId", "-"))}");
-                }
+                RelationLines.Add($"Relations not found: {nodeId}");
+                return;
             }
 
-            if (result.TryGetProperty("incoming", out var incoming) && incoming.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var relation in incoming.EnumerateArray())
-                {
-                    RelationLines.Add(
-                        $"{GetString(relation, "type", "-")}: {GetString(relation, "fromName", GetString(relation, "fromId", "-"))}");
-                }
-            }
+            foreach (var relation in result.Outgoing)
+                RelationLines.Add($"{relation.Type}: {relation.ToName}");
+
+            foreach (var relation in result.Incoming)
+                RelationLines.Add($"{relation.Type}: {relation.FromName}");
         }
         catch (Exception ex)
         {
             RelationLines.Clear();
-            RelationLines.Add($"关系读取失败：{ex.Message}");
+            RelationLines.Add($"Relation load failed: {ex.Message}");
         }
     }
 
@@ -570,89 +577,22 @@ public partial class TopologyViewModel : ObservableObject
             $")";
     }
 
-    private static string BuildDetailMeta(JsonElement module)
+    private static string BuildDetailMeta(TopologyWorkbenchModuleView module)
     {
-        var type = GetString(module, "typeLabel", GetString(module, "typeName", "Technical")) ?? "Technical";
-        var discipline = GetString(module, "disciplineDisplayName", GetString(module, "discipline", "root")) ?? "root";
-        var layer = GetInt(module, "layer")?.ToString() ?? "0";
-        var path = GetString(module, "relativePath", "-") ?? "-";
-        return $"{type} | {discipline} | L{layer} | {path}";
+        var path = string.IsNullOrWhiteSpace(module.RelativePath) ? "-" : module.RelativePath;
+        return $"{module.TypeLabel} | {module.DisciplineDisplayName} | L{module.Layer} | {path}";
     }
 
-    private static string? GetString(JsonElement element, string propertyName, string? fallback = null)
+    private static IReadOnlyList<string> ParseMetadataList(IReadOnlyDictionary<string, string>? metadata, string key)
     {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return fallback;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => value.GetString(),
-            JsonValueKind.Number => value.ToString(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            _ => fallback
-        };
-    }
-
-    private static int? GetInt(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return null;
-
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
-            return number;
-
-        if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out var parsed))
-            return parsed;
-
-        return null;
-    }
-
-    private static bool GetBool(JsonElement element, string propertyName)
-        => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.True;
-
-    private static IReadOnlyList<string> ParseStringArray(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-
-        return value.EnumerateArray()
-            .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Select(item => item!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
-
-    private static IReadOnlyDictionary<string, string> ParseStringDictionary(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Object)
-            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in value.EnumerateObject())
-        {
-            var raw = property.Value.ValueKind == JsonValueKind.String
-                ? property.Value.GetString()
-                : property.Value.ToString();
-            if (!string.IsNullOrWhiteSpace(raw))
-                result[property.Name] = raw.Trim();
-        }
-
-        return result;
-    }
-
-    private static IReadOnlyList<string> ParseMetadataList(JsonElement element, string key)
-    {
-        if (!element.TryGetProperty("metadata", out var metadata) || metadata.ValueKind != JsonValueKind.Object)
-            return Array.Empty<string>();
-        if (!metadata.TryGetProperty(key, out var value) || value.ValueKind != JsonValueKind.String)
+        if (metadata is null || !metadata.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
             return Array.Empty<string>();
 
         try
         {
-            var parsed = JsonSerializer.Deserialize<List<string>>(value.GetString() ?? "[]");
-            return parsed?.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray() ?? Array.Empty<string>();
+            var parsed = JsonSerializer.Deserialize<List<string>>(value);
+            return parsed?.Where(static item => !string.IsNullOrWhiteSpace(item)).Select(static item => item.Trim()).ToArray()
+                   ?? Array.Empty<string>();
         }
         catch
         {
@@ -684,35 +624,26 @@ public partial class TopologyViewModel : ObservableObject
     }
 
     private static string ToMultilineText(IEnumerable<string>? values)
-        => values is null ? string.Empty : string.Join(Environment.NewLine, values.Where(x => !string.IsNullOrWhiteSpace(x)));
+        => values is null ? string.Empty : string.Join(Environment.NewLine, values.Where(static value => !string.IsNullOrWhiteSpace(value)));
 
     private static List<string> ParseMultilineList(string? raw)
     {
         return (raw ?? string.Empty)
             .Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x.Trim())
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
-    private static List<object> ParseLessons(string? raw)
+    private static List<LessonSummary> ParseLessons(string? raw)
     {
         return ParseMultilineList(raw)
-            .Select(item => (object)new { title = item, severity = (string?)null, resolution = (string?)null })
+            .Select(static item => new LessonSummary
+            {
+                Title = item
+            })
             .ToList();
-    }
-
-    private static IReadOnlyList<string> ParseLessonsToLines(JsonElement element)
-    {
-        if (!element.TryGetProperty("lessons", out var lessons) || lessons.ValueKind != JsonValueKind.Array)
-            return Array.Empty<string>();
-
-        return lessons.EnumerateArray()
-            .Select(item => GetString(item, "title", null))
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Select(item => item!.Trim())
-            .ToArray();
     }
 
     private static string? EmptyToNull(string? value)

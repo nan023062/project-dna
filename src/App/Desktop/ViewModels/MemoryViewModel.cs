@@ -1,24 +1,24 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
-using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dna.App.Desktop.Services;
+using Dna.Knowledge;
+using Dna.Memory.Models;
 
 namespace Dna.App.Desktop.ViewModels;
 
 public partial class MemoryViewModel : ObservableObject
 {
-    private readonly IDnaApiClient _apiClient;
+    private readonly IDesktopLocalWorkbenchClient _localWorkbenchClient;
 
     [ObservableProperty]
-    private string _memoryAccessText = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
+    private string _memoryAccessText = "Current memory store lives in project .agentic-os; write access is decided by the local desktop runtime.";
 
     [ObservableProperty]
-    private string _memoryStatusText = "记忆区就绪。";
+    private string _memoryStatusText = "Memory panel ready.";
 
     [ObservableProperty]
-    private bool _isAddMemoryEnabled = false;
+    private bool _isAddMemoryEnabled;
 
     [ObservableProperty]
     private string _memoryContent = string.Empty;
@@ -30,20 +30,20 @@ public partial class MemoryViewModel : ObservableObject
     private string _memoryTags = string.Empty;
 
     [ObservableProperty]
-    private int _memoryTypeSelectedIndex = 2; // Episodic
+    private int _memoryTypeSelectedIndex = 2;
 
     [ObservableProperty]
-    private ObservableCollection<string> _memories = new();
+    private ObservableCollection<string> _memories = [];
 
-    public MemoryViewModel(IDnaApiClient apiClient)
+    public MemoryViewModel(IDesktopLocalWorkbenchClient localWorkbenchClient)
     {
-        _apiClient = apiClient;
+        _localWorkbenchClient = localWorkbenchClient;
     }
 
     public void Reset()
     {
-        MemoryAccessText = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
-        MemoryStatusText = "记忆区就绪。";
+        MemoryAccessText = "Current memory store lives in project .agentic-os; write access is decided by the local desktop runtime.";
+        MemoryStatusText = "Memory panel ready.";
         IsAddMemoryEnabled = false;
         Memories.Clear();
     }
@@ -52,33 +52,33 @@ public partial class MemoryViewModel : ObservableObject
     {
         if (!access.HasProject)
         {
-            MemoryAccessText = "当前记忆库位于项目 .agentic-os；写入能力由本地运行时状态决定。";
+            MemoryAccessText = "Current memory store lives in project .agentic-os; write access is decided by the local desktop runtime.";
             IsAddMemoryEnabled = false;
             return;
         }
 
         if (!access.RuntimeOnline)
         {
-            MemoryAccessText = "运行时离线时，记忆页仅保留浏览入口，本地写入已禁用。";
+            MemoryAccessText = "Runtime is offline. Memory panel stays browse-only and local writes are disabled.";
             IsAddMemoryEnabled = false;
             return;
         }
 
         if (!access.Allowed)
         {
-            MemoryAccessText = "当前运行态为只读，记忆页仅用于查看，本地写入已禁用。";
+            MemoryAccessText = "Current runtime mode is read-only. Memory panel stays browse-only and local writes are disabled.";
             IsAddMemoryEnabled = false;
             return;
         }
 
         if (string.Equals(access.Role, "admin", StringComparison.OrdinalIgnoreCase))
         {
-            MemoryAccessText = "当前运行态允许直接写入本地记忆库。";
+            MemoryAccessText = "Current runtime mode allows direct local memory writes.";
             IsAddMemoryEnabled = true;
             return;
         }
 
-        MemoryAccessText = $"当前模式为 {access.Role}，此版本只开放本地知识浏览，写入按钮已禁用。";
+        MemoryAccessText = $"Current mode is {access.Role}. This MVP only opens local knowledge browsing; memory writes stay disabled.";
         IsAddMemoryEnabled = false;
     }
 
@@ -87,35 +87,28 @@ public partial class MemoryViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(projectRoot))
         {
-            MemoryStatusText = "未选择项目，无法加载记忆。";
+            MemoryStatusText = "No project selected.";
             Memories.Clear();
             return;
         }
 
         try
         {
-            var result = await _apiClient.GetAsync("/api/memory/query?limit=40&offset=0");
-            var entries = new List<(DateTime createdAt, string line)>();
+            var result = await _localWorkbenchClient.QueryMemoriesAsync(limit: 40, offset: 0);
+            var ordered = result
+                .OrderByDescending(static memory => memory.CreatedAt)
+                .Select(BuildMemoryLine)
+                .ToList();
 
-            if (result.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var memory in result.EnumerateArray())
-                {
-                    entries.Add((ParseDate(memory, "createdAt"), BuildMemoryLine(memory)));
-                }
-            }
-
-            var ordered = entries.OrderByDescending(x => x.createdAt).Select(x => x.line).ToList();
             Memories.Clear();
             foreach (var item in ordered)
-            {
                 Memories.Add(item);
-            }
-            MemoryStatusText = $"已加载 {ordered.Count} 条记忆。";
+
+            MemoryStatusText = $"Loaded {ordered.Count} memories.";
         }
         catch (Exception ex)
         {
-            MemoryStatusText = $"记忆加载失败：{ex.Message}";
+            MemoryStatusText = $"Memory load failed: {ex.Message}";
             Memories.Clear();
         }
     }
@@ -125,13 +118,13 @@ public partial class MemoryViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(projectRoot))
         {
-            MemoryStatusText = "未选择项目，无法写入。";
+            MemoryStatusText = "No project selected.";
             return;
         }
 
         if (!IsAddMemoryEnabled)
         {
-            MemoryStatusText = "当前运行态未开放写入，本地记忆写入已禁用。";
+            MemoryStatusText = "Current runtime mode does not allow local memory writes.";
             return;
         }
 
@@ -139,74 +132,60 @@ public partial class MemoryViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(content))
             return;
 
-        var discipline = (MemoryDiscipline ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(discipline))
-            discipline = "engineering";
-
-        var type = ResolveMemoryTypeValue();
-        var tags = ParseTags(MemoryTags);
+        var discipline = string.IsNullOrWhiteSpace(MemoryDiscipline)
+            ? "engineering"
+            : MemoryDiscipline.Trim();
 
         try
         {
-            var payload = new
+            var saved = await _localWorkbenchClient.RememberAsync(new RememberRequest
             {
-                type,
-                tags,
-                discipline,
-                content
-            };
-
-            var saved = await _apiClient.PostAsync("/api/memory/remember", payload);
-            var id = GetString(saved, "id", "-");
+                Type = (MemoryType)ResolveMemoryTypeValue(),
+                NodeType = NodeType.Technical,
+                Source = MemorySource.Human,
+                Content = content,
+                Summary = content.Length > 80 ? content[..80] : content,
+                Disciplines = [discipline],
+                Tags = ParseTags(MemoryTags),
+                Stage = MemoryStage.ShortTerm
+            });
 
             MemoryContent = string.Empty;
-            MemoryStatusText = $"本地记忆写入成功：{id}";
+            MemoryStatusText = $"Local memory saved: {saved.Id}";
             await RefreshMemoriesAsync(projectRoot);
         }
         catch (Exception ex)
         {
-            MemoryStatusText = $"写入失败：{ex.Message}";
+            MemoryStatusText = $"Write failed: {ex.Message}";
         }
     }
 
-    private static string BuildMemoryLine(JsonElement memory)
+    private static string BuildMemoryLine(MemoryEntry memory)
     {
-        var createdAt = ParseDate(memory, "createdAt");
-        var time = createdAt == DateTime.MinValue ? "--" : createdAt.ToLocalTime().ToString("MM-dd HH:mm");
-        var type = GetMemoryTypeLabel(memory.TryGetProperty("type", out var typeValue) ? typeValue.ToString() : "-");
-        var summary = GetString(memory, "summary", null);
-        if (string.IsNullOrWhiteSpace(summary))
-            summary = GetString(memory, "content", "(空内容)");
+        var time = memory.CreatedAt == DateTime.MinValue
+            ? "--"
+            : memory.CreatedAt.ToLocalTime().ToString("MM-dd HH:mm");
+
+        var summary = string.IsNullOrWhiteSpace(memory.Summary)
+            ? memory.Content
+            : memory.Summary;
 
         if (!string.IsNullOrWhiteSpace(summary) && summary.Length > 120)
             summary = summary[..120] + "...";
 
-        return $"{time} | {type} | {summary}";
-    }
-
-    private static string GetMemoryTypeLabel(string raw)
-    {
-        return raw switch
-        {
-            "0" or "Structural" => "Structural",
-            "1" or "Semantic" => "Semantic",
-            "2" or "Episodic" => "Episodic",
-            "3" or "Working" => "Working",
-            "4" or "Procedural" => "Procedural",
-            _ => raw
-        };
+        return $"{time} | {memory.Type} | {summary}";
     }
 
     private int ResolveMemoryTypeValue()
     {
         return MemoryTypeSelectedIndex switch
         {
-            0 => 0, // Structural
-            1 => 1, // Semantic
-            2 => 2, // Episodic
-            3 => 3, // Working
-            4 => 4, // Procedural
-            _ => 2
+            0 => (int)MemoryType.Structural,
+            1 => (int)MemoryType.Semantic,
+            2 => (int)MemoryType.Episodic,
+            3 => (int)MemoryType.Working,
+            4 => (int)MemoryType.Procedural,
+            _ => (int)MemoryType.Episodic
         };
     }
 
@@ -214,7 +193,7 @@ public partial class MemoryViewModel : ObservableObject
     {
         var tags = (raw ?? string.Empty)
             .Split([',', ';', '\n', '\r', '\t', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(tag => tag.StartsWith('#') ? tag : $"#{tag}")
+            .Select(static tag => tag.StartsWith('#') ? tag : $"#{tag}")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -222,23 +201,5 @@ public partial class MemoryViewModel : ObservableObject
             tags.Add("#desktop-note");
 
         return tags;
-    }
-
-    private static DateTime ParseDate(JsonElement element, string propertyName)
-    {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
-            return date;
-        return DateTime.MinValue;
-    }
-
-    private static string? GetString(JsonElement element, string propertyName, string? fallback = null)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-            return fallback;
-
-        if (value.ValueKind == JsonValueKind.String)
-            return value.GetString();
-
-        return fallback;
     }
 }

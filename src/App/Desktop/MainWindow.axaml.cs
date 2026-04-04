@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private const string LocalRuntimeModeLabel = "single-process-local-runtime";
     private readonly EmbeddedAppHost _host;
     private readonly IDnaApiClient _apiClient;
+    private readonly IDesktopLocalWorkbenchClient _localWorkbenchClient;
     private readonly DispatcherTimer _statusTimer;
     private readonly DesktopRecentProjectsStore _recentProjectsStore;
 
@@ -42,7 +43,8 @@ public partial class MainWindow : Window
     {
         _host = host;
         _apiClient = App.Current?.Services?.GetService<IDnaApiClient>() ?? new DnaApiClient();
-        ViewModel = new MainWindowViewModel(_apiClient);
+        _localWorkbenchClient = new DesktopLocalWorkbenchClient(_host);
+        ViewModel = new MainWindowViewModel(_apiClient, _localWorkbenchClient);
         DataContext = ViewModel;
         _recentProjectsStore = DesktopRecentProjectsStore.CreateDefault();
 
@@ -343,24 +345,22 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var runtime = await _apiClient.GetAsync("/api/status");
-            var moduleCount = ParseNullableInt(runtime, "moduleCount") ?? 0;
-            var memoryCount = ParseNullableInt(runtime, "memoryCount") ?? 0;
+            var runtime = await _localWorkbenchClient.GetRuntimeSnapshotAsync();
+            var moduleCount = runtime.ModuleCount;
+            var memoryCount = runtime.MemoryCount;
             ViewModel.ServerStateText = $"本地知识库: {moduleCount} 模块 / {memoryCount} 记忆";
 
-            var access = await _apiClient.GetAsync("/api/connection/access");
-            var allowed = access.TryGetProperty("allowed", out var allowedElement) &&
-                          allowedElement.ValueKind == JsonValueKind.True;
+            var access = await _localWorkbenchClient.GetAccessSnapshotAsync();
 
             _connectionAccess = new ConnectionAccessState(
                 HasProject: true,
                 RuntimeOnline: true,
-                Allowed: allowed,
-                Role: GetString(access, "role", "unknown") ?? "unknown",
-                EntryName: GetString(access, "entryName", "-") ?? "-",
-                RemoteIp: GetString(access, "remoteIp", "-") ?? "-",
-                Note: GetString(access, "note", null),
-                Reason: GetString(access, "reason", allowed ? string.Empty : "当前本地运行时未授权") ?? string.Empty);
+                Allowed: access.Allowed,
+                Role: access.Role,
+                EntryName: access.EntryName,
+                RemoteIp: access.RemoteIp,
+                Note: access.Note,
+                Reason: access.Reason);
         }
         catch (Exception ex)
         {
@@ -507,15 +507,8 @@ public partial class MainWindow : Window
 
     private async Task<bool> IsAppOnlineAsync()
     {
-        try
-        {
-            await _apiClient.GetAsync("/api/app/status");
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
+        await Task.CompletedTask;
+        return _host.IsRunning;
     }
 
     private static string? GetString(JsonElement element, string propertyName, string? fallback = null)

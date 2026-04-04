@@ -17,6 +17,7 @@ public sealed class EmbeddedAppHost
 
     public bool IsRunning => _runTask is { IsCompleted: false };
     public DesktopProjectConfig? CurrentProject => _currentProject;
+    public IServiceProvider? Services => _webApp?.Services;
 
     public async Task StartAsync(DesktopProjectConfig project)
     {

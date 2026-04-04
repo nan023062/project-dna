@@ -3,6 +3,7 @@ using Dna.App.Services;
 using Dna.App.Services.Tooling;
 using Dna.Core.Config;
 using Dna.Knowledge;
+using Dna.Workbench.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Server;
@@ -29,6 +30,7 @@ internal static class AppHostComposition
 
         services.AddSingleton<ProjectConfig>();
         services.AddKnowledgeGraph();
+        services.AddWorkbench();
         services.AddHostedService<AppLocalRuntimeInitializer>();
         services.AddSingleton<AppWorkspaceStore>();
         services.AddSingleton<AppProjectLlmConfigService>();
