@@ -60,9 +60,9 @@ Dna.Core
 说明：
 
 - `Dna.Agent`
-  - 负责内置 Agent 的编排、执行、模型调用与工具调用策略
+  - 负责内置 Agent 的需求规划、编排、执行、模型调用与工具调用策略
 - `Dna.Workbench`
-  - 负责为内置 Agent、外置 Agent、CLI、桌面宿主提供统一项目能力
+  - 负责为内置 Agent、外置 Agent、CLI、桌面宿主提供统一项目能力与任务桥接能力
 - `Dna.Knowledge`
   - 负责 Workspace / TopoGraph / Memory / Governance
 
@@ -95,7 +95,7 @@ Dna.Core
   - 包括任务规划、步骤推进、执行循环、模型交互、工具选择
 - `Dna.Workbench`
   - 负责“在这个项目里能做什么”
-  - 包括工作区、知识图谱、模块知识、记忆、运行时观测等统一能力
+  - 包括工作区、知识图谱、模块知识、记忆、任务上下文、模块锁、运行时观测等统一能力
 
 因此：
 
@@ -103,6 +103,47 @@ Dna.Core
 - 外置 Agent 通过 `MCP / CLI / HTTP Adapter -> Dna.Workbench` 工作
 
 外置 Agent 自身已有编排能力，不需要依赖 `Dna.Agent` 才能工作；它们真正需要的是 `Dna.Workbench` 提供的项目能力面。
+
+## 标准任务闭环
+
+所有 Agent 在最终架构中都应遵守同一条闭环：
+
+1. 先请求 `Dna.Workbench` 基于 `TopoGraph + MCDP` 拆解需求涉及的模块和依赖链
+2. Agent 根据拆解结果创建多个单模块 task
+3. 对某个 task 调用 `startTask`
+4. 获得该模块的精准隔离上下文
+5. 在这个上下文内执行分析、修改、查询与工具调用
+6. 调用 `endTask` 回写任务结果、关键决策、经验教训与阻塞项
+7. 再串行或并行推进剩余任务链
+
+最核心的约束是：
+
+- 一个 task 只能绑定一个目标模块
+- 一个 task 只能看到一个封闭操作空间
+- 必须 `startTask`
+- 必须 `endTask`
+
+这里还要明确一点：
+
+- `Workbench` 不负责决定任务顺序
+- `Workbench` 不负责并发调度
+- `Workbench` 只通过模块锁阻止多个 Agent 同时修改同一目标模块
+- 这样可以减少并行开发时的冲突和合并风险
+
+## 治理闭环
+
+除普通需求闭环外，`Workbench` 还支持治理闭环：
+
+1. Agent 发起全局或指定模块的治理请求
+2. `Workbench` 返回对应范围的模块树上下文
+3. Agent 基于该上下文拆解治理顺序和多个治理型单模块 task
+4. 再通过同一套 `startTask / endTask` 生命周期完成治理
+
+这意味着：
+
+- 治理不是直接批处理黑盒
+- 仍然要落回单模块 task
+- 仍然要遵守模块互斥和上下文隔离
 
 ## 快速开始
 
@@ -209,7 +250,6 @@ http://127.0.0.1:5052
 
 详见：
 
-- [ROADMAP.md](ROADMAP.md)
 - [src/Dna.Agent/ARCHITECTURE.md](src/Dna.Agent/ARCHITECTURE.md)
 - [src/Dna.Workbench/ARCHITECTURE.md](src/Dna.Workbench/ARCHITECTURE.md)
 - [src/Dna.Knowledge/ARCHITECTURE.md](src/Dna.Knowledge/ARCHITECTURE.md)

@@ -5,6 +5,7 @@ using Dna.App.Services.Tooling;
 using Dna.Agent.Contracts;
 using Dna.Agent.DependencyInjection;
 using Dna.Core.Config;
+using Dna.ExternalAgent.DependencyInjection;
 using Dna.Knowledge;
 using Dna.Workbench.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,7 @@ internal static class AppHostComposition
         services.AddKnowledgeGraph();
         services.AddWorkbench();
         services.AddAgent();
+        services.AddExternalAgent();
         services.AddHostedService<AppLocalRuntimeInitializer>();
         services.AddSingleton<AppWorkspaceStore>();
         services.AddSingleton<AppProjectLlmConfigService>();

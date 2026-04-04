@@ -48,9 +48,9 @@ Dna.Core
 Responsibilities:
 
 - `Dna.Agent`
-  - built-in agent orchestration, execution loop, model interaction, tool-call policy
+  - built-in agent orchestration, requirement planning, execution loop, model interaction, tool-call policy
 - `Dna.Workbench`
-  - unified project capability surface for built-in agents, external agents, CLI, and the desktop host
+  - unified project capability surface, task bridge, and governance bridge for built-in agents, external agents, CLI, and the desktop host
 - `Dna.Knowledge`
   - Workspace, TopoGraph, Memory, Governance
 
@@ -59,11 +59,40 @@ Responsibilities:
 This is the key boundary of the current design:
 
 - `Dna.Agent`
-  - decides how work is planned and executed
+  - decides how work is decomposed, planned, and executed
 - `Dna.Workbench`
-  - decides what project capabilities are available
+  - decides what project capabilities are available, which module a task may target, and what isolated context it may see
 
 External agents such as Cursor, Codex, or Claude Code do not need `Dna.Agent` to exist. They already have their own orchestration. What they need is the project-specific capability surface exposed by `Dna.Workbench`.
+
+## Standard Task Flow
+
+Every agent should follow the same loop:
+
+1. ask `Dna.Workbench` to resolve the requirement against `TopoGraph + MCDP`
+2. create multiple single-module tasks from that result
+3. call `startTask` for one task and receive the isolated task context
+4. execute inside that context with tools and model capabilities
+5. call `endTask` with outcome, decisions, lessons, and blockers
+6. continue the remaining task chain serially or in parallel when modules do not conflict
+
+The core rule is:
+
+- one task
+- one target module
+- one isolated operation scope
+- one required `endTask`
+
+## Governance Flow
+
+Besides the normal task loop, `Dna.Workbench` also supports a governance loop:
+
+1. an agent sends a governance request for the whole graph or a selected module scope
+2. `Dna.Workbench` returns the matching module tree as governance context
+3. the agent decomposes that scope into multiple governance single-task sessions
+4. those governance tasks still use the same `startTask / endTask` lifecycle
+
+This means governance is not a bulk opaque operation. It still falls back to single-module tasks with the same isolation and conflict rules.
 
 ## Quick Start
 
@@ -101,7 +130,6 @@ After the App has loaded a project, point your MCP config to:
 
 ## Documentation
 
-- [ROADMAP.md](ROADMAP.md)
 - [src/Dna.Agent/ARCHITECTURE.md](src/Dna.Agent/ARCHITECTURE.md)
 - [src/Dna.Workbench/ARCHITECTURE.md](src/Dna.Workbench/ARCHITECTURE.md)
 - [src/Dna.Knowledge/ARCHITECTURE.md](src/Dna.Knowledge/ARCHITECTURE.md)

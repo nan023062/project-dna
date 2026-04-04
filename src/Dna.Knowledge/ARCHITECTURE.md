@@ -37,7 +37,7 @@ Dna.Core
 - `Dna.Agent`
   - 内置 Agent 的任务编排与执行层（目标架构）
 - `Dna.Workbench`
-  - 应用服务、项目能力门面、运行时观测入口
+  - 应用服务、项目能力门面、任务桥接层、运行时观测入口
 - `Dna.Knowledge`
   - 知识域能力
 - `Dna.Core`
@@ -149,13 +149,17 @@ Workspace 事实
 
 上层的 `Dna.Workbench` 再在这个基础上组合出：
 
+- 基于 `TopoGraph + MCDP` 的需求拆解支持
+- 全局或指定模块范围的治理模块树生成
+- 模块级 task 的精准上下文
 - 项目级知识查询
 - 项目级知识修改
+- 任务结果回写所需的记忆与治理输入
 - 统一运行时观测能力
 
 而未来的 `Dna.Agent` 再在 `Dna.Workbench` 之上负责：
 
-- 任务编排
+- 根据拆解结果编排多个单模块 task
 - 执行循环
 - 模型与工具调用策略
 
@@ -175,4 +179,3 @@ Workspace 事实
 `Dna.Knowledge` 的正确定位不是某一个具体功能模块，而是：
 
 > 一个面向知识域的父级 `Department` 模块，负责组织 `Workspace`、`TopoGraph`、`Memory`、`Governance` 四个子模块，并为 `Dna.Workbench` 提供统一的知识域能力基础。
-
