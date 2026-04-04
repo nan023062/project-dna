@@ -84,6 +84,12 @@ public sealed class WorkbenchToolServiceTests : IDisposable
         Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.Remember);
         Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.Recall);
         Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.GetRuntimeProjection);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.ResolveRequirementSupport);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.StartTask);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.EndTask);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.ListActiveTasks);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.ListCompletedTasks);
+        Assert.Contains(tools, item => item.Name == WorkbenchToolConstants.ToolNames.ResolveGovernance);
     }
 
     [Fact]
