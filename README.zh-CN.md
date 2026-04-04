@@ -179,9 +179,8 @@ http://127.0.0.1:5052
 
 详见：
 
-- [docs/architecture/agentic-os-design.md](docs/architecture/agentic-os-design.md)
-- [docs/architecture/agentic-os-transport-auth-decision.md](docs/architecture/agentic-os-transport-auth-decision.md)
-- [docs/architecture/app-topology-upgrade-plan.md](docs/architecture/app-topology-upgrade-plan.md)
+- [src/Dna.Workbench/ARCHITECTURE.md](src/Dna.Workbench/ARCHITECTURE.md)
+- [src/Dna.Knowledge/ARCHITECTURE.md](src/Dna.Knowledge/ARCHITECTURE.md)
 
 ## 许可证
 

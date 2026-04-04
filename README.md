@@ -175,9 +175,8 @@ The App also exposes `GET /api/app/mcp/tools` for UI and automation usage.
 
 See:
 
-- [docs/architecture/agentic-os-design.md](docs/architecture/agentic-os-design.md)
-- [docs/architecture/agentic-os-transport-auth-decision.md](docs/architecture/agentic-os-transport-auth-decision.md)
-- [docs/architecture/app-topology-upgrade-plan.md](docs/architecture/app-topology-upgrade-plan.md)
+- [src/Dna.Workbench/ARCHITECTURE.md](src/Dna.Workbench/ARCHITECTURE.md)
+- [src/Dna.Knowledge/ARCHITECTURE.md](src/Dna.Knowledge/ARCHITECTURE.md)
 
 ## Contributing
 
