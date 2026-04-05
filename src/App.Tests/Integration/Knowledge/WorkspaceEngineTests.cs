@@ -43,6 +43,19 @@ public sealed class WorkspaceEngineTests : IDisposable
     }
 
     [Fact]
+    public void GetRootSnapshot_ShouldExcludeHiddenDirectories()
+    {
+        Directory.CreateDirectory(Path.Combine(_workspaceRoot, "src"));
+        Directory.CreateDirectory(Path.Combine(_workspaceRoot, ".xxx"));
+        Directory.CreateDirectory(Path.Combine(_workspaceRoot, ".cache", "nested"));
+
+        var snapshot = _engine.GetRootSnapshot(_workspaceRoot, new WorkspaceTopologyContext());
+
+        Assert.Equal(["src"], snapshot.Entries.Select(entry => entry.Name).ToArray());
+        Assert.DoesNotContain(snapshot.Entries, entry => entry.Name.StartsWith(".", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void GetDirectorySnapshot_ShouldAnnotateRegisteredManagedAndTrackedEntries()
     {
         Directory.CreateDirectory(Path.Combine(_workspaceRoot, "src", "App"));

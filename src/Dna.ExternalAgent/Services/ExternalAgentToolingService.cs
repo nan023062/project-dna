@@ -89,7 +89,8 @@ internal sealed class ExternalAgentToolingService(
 
         var managedFiles = BuildManagedFileStatuses(workspaceRoot, package.ManagedFiles);
         var filesExist = managedFiles.All(file => file.Exists);
-        var mcpConfigured = fileManager.IsMcpConfigured(descriptor, workspaceRoot, mcpEndpoint, serverName);
+        var integrationStatus = fileManager.GetIntegrationStatus(descriptor, workspaceRoot, mcpEndpoint, serverName);
+        var mcpConfigured = integrationStatus.RequiresMcp && integrationStatus.Configured;
 
         return new ExternalAgentToolingTargetStatus
         {
@@ -97,8 +98,9 @@ internal sealed class ExternalAgentToolingService(
             DisplayName = descriptor.DisplayName,
             Description = descriptor.Description,
             InstallMode = descriptor.InstallMode,
-            Installed = filesExist && mcpConfigured,
+            Installed = filesExist && integrationStatus.Configured,
             McpConfigured = mcpConfigured,
+            Integration = integrationStatus,
             ManagedFiles = managedFiles
         };
     }

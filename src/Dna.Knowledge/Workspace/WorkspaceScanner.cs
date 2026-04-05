@@ -61,7 +61,7 @@ public static class WorkspaceScanner
             foreach (var directoryPath in Directory.GetDirectories(parentFullPath).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
             {
                 var name = Path.GetFileName(directoryPath);
-                if (string.IsNullOrWhiteSpace(name) || excludes.Contains(name))
+                if (DefaultExcludes.IsExcludedDirectory(name, excludes))
                     continue;
 
                 var relativePath = AppendPath(parentRelativePath, name);
@@ -119,7 +119,7 @@ public static class WorkspaceScanner
         HashSet<string> excludes)
     {
         var name = ResolveEntryName(fullPath);
-        if (name.Length == 0 || excludes.Contains(name))
+        if (DefaultExcludes.IsExcludedDirectory(name, excludes))
             return null;
 
         var normalizedPath = WorkspacePath.NormalizeRelativePath(relativePath);
@@ -339,7 +339,7 @@ public static class WorkspaceScanner
             foreach (var directoryPath in Directory.GetDirectories(fullPath))
             {
                 var name = Path.GetFileName(directoryPath);
-                if (!string.IsNullOrWhiteSpace(name) && !excludes.Contains(name))
+                if (!DefaultExcludes.IsExcludedDirectory(name, excludes))
                     directoryCount++;
             }
         }

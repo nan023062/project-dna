@@ -19,18 +19,29 @@ internal sealed class ExternalAgentFileManager
         string endpoint,
         string serverName)
     {
-        var configPath = ResolveManagedConfigPath(descriptor, workspaceRoot);
-        if (configPath == null)
-            return true;
+        var status = GetIntegrationStatus(descriptor, workspaceRoot, endpoint, serverName);
+        return status.RequiresMcp && status.Configured;
+    }
 
-        if (!File.Exists(configPath))
-            return false;
-
+    public ExternalAgentIntegrationStatus GetIntegrationStatus(
+        ExternalAgentAdapterDescriptor descriptor,
+        string workspaceRoot,
+        string endpoint,
+        string serverName)
+    {
         return descriptor.ProductId switch
         {
-            ExternalAgentConstants.ProductIds.Cursor => IsCursorMcpConfigured(configPath, endpoint, serverName),
-            ExternalAgentConstants.ProductIds.Codex => IsCodexMcpConfigured(configPath, endpoint, serverName),
-            _ => true
+            ExternalAgentConstants.ProductIds.Cursor => BuildCursorStatus(workspaceRoot, endpoint, serverName),
+            ExternalAgentConstants.ProductIds.Codex => BuildCodexStatus(workspaceRoot, endpoint, serverName),
+            ExternalAgentConstants.ProductIds.ClaudeCode => BuildClaudeCodeStatus(workspaceRoot, endpoint, serverName),
+            ExternalAgentConstants.ProductIds.Copilot => BuildCopilotStatus(workspaceRoot),
+            _ => new ExternalAgentIntegrationStatus
+            {
+                Kind = "unknown",
+                RequiresMcp = false,
+                Configured = false,
+                Summary = $"Unsupported target: {descriptor.ProductId}"
+            }
         };
     }
 
@@ -223,6 +234,112 @@ internal sealed class ExternalAgentFileManager
     {
         var relativePath = descriptor.ManagedPaths.FirstOrDefault(path => IsCursorMcpConfig(path) || IsCodexMcpConfig(path));
         return relativePath == null ? null : ResolveFullPath(workspaceRoot, relativePath);
+    }
+
+    private static ExternalAgentIntegrationStatus BuildCursorStatus(string workspaceRoot, string endpoint, string serverName)
+    {
+        var configPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.CursorMcp);
+        var configured = File.Exists(configPath) && IsCursorMcpConfigured(configPath, endpoint, serverName);
+        return new ExternalAgentIntegrationStatus
+        {
+            Kind = "mcp",
+            RequiresMcp = true,
+            Configured = configured,
+            Summary = configured
+                ? $"Cursor MCP 已指向 {endpoint}"
+                : $"Cursor MCP 未配置或未指向 {endpoint}"
+        };
+    }
+
+    private static ExternalAgentIntegrationStatus BuildCodexStatus(string workspaceRoot, string endpoint, string serverName)
+    {
+        var configPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.CodexConfig);
+        var configured = File.Exists(configPath) && IsCodexMcpConfigured(configPath, endpoint, serverName);
+        return new ExternalAgentIntegrationStatus
+        {
+            Kind = "mcp",
+            RequiresMcp = true,
+            Configured = configured,
+            Summary = configured
+                ? $"Codex MCP 已指向 {endpoint}"
+                : $"Codex MCP 未配置或未指向 {endpoint}"
+        };
+    }
+
+    private static ExternalAgentIntegrationStatus BuildClaudeCodeStatus(string workspaceRoot, string endpoint, string serverName)
+    {
+        var manifestPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.ClaudePluginManifest);
+        var commandPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.ClaudePluginCommand);
+        var hookPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.ClaudePluginHook);
+        var readmePath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.ClaudePluginReadme);
+
+        if (!File.Exists(manifestPath))
+        {
+            return new ExternalAgentIntegrationStatus
+            {
+                Kind = "plugin-bundle",
+                RequiresMcp = false,
+                Configured = false,
+                Summary = "Claude Code plugin manifest 缺失"
+            };
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(File.ReadAllText(manifestPath)) as JsonObject;
+            var pluginId = root?["id"]?.GetValue<string>();
+            var mcp = root?["mcp"] as JsonObject;
+            var configured = string.Equals(pluginId, ExternalAgentConstants.ClaudePlugin.Id, StringComparison.OrdinalIgnoreCase) &&
+                             string.Equals(mcp?["endpoint"]?.GetValue<string>(), endpoint, StringComparison.OrdinalIgnoreCase) &&
+                             string.Equals(mcp?["serverName"]?.GetValue<string>(), serverName, StringComparison.OrdinalIgnoreCase) &&
+                             File.Exists(commandPath) &&
+                             File.Exists(hookPath) &&
+                             File.Exists(readmePath);
+
+            return new ExternalAgentIntegrationStatus
+            {
+                Kind = "plugin-bundle",
+                RequiresMcp = false,
+                Configured = configured,
+                Summary = configured
+                    ? "Claude Code plugin bundle 预览产物已就绪"
+                    : "Claude Code plugin bundle 缺少 manifest 元数据或入口文件"
+            };
+        }
+        catch
+        {
+            return new ExternalAgentIntegrationStatus
+            {
+                Kind = "plugin-bundle",
+                RequiresMcp = false,
+                Configured = false,
+                Summary = "Claude Code plugin manifest 解析失败"
+            };
+        }
+    }
+
+    private static ExternalAgentIntegrationStatus BuildCopilotStatus(string workspaceRoot)
+    {
+        var instructionPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.CopilotInstructions);
+        var pathInstructionPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.CopilotPathInstructions);
+        var agentsPath = ResolveFullPath(workspaceRoot, ExternalAgentConstants.ManagedPaths.CopilotAgents);
+
+        var configured = File.Exists(instructionPath) &&
+                         File.Exists(pathInstructionPath) &&
+                         File.Exists(agentsPath) &&
+                         File.ReadAllText(instructionPath).Contains("Agentic OS", StringComparison.Ordinal) &&
+                         File.ReadAllText(pathInstructionPath).Contains("模块", StringComparison.Ordinal) &&
+                         File.ReadAllText(agentsPath).Contains("Agentic OS", StringComparison.Ordinal);
+
+        return new ExternalAgentIntegrationStatus
+        {
+            Kind = "instructions",
+            RequiresMcp = false,
+            Configured = configured,
+            Summary = configured
+                ? "GitHub Copilot repository/path/agent instructions 已就绪"
+                : "GitHub Copilot instructions 缺失或内容不完整"
+        };
     }
 
     private static bool IsCursorMcpConfig(string relativePath)

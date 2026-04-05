@@ -16,6 +16,7 @@ public sealed class ExternalAgentToolingTargetStatus
     public string InstallMode { get; init; } = string.Empty;
     public bool Installed { get; init; }
     public bool McpConfigured { get; init; }
+    public ExternalAgentIntegrationStatus Integration { get; init; } = new();
     public IReadOnlyList<ExternalAgentManagedFileStatus> ManagedFiles { get; init; } = [];
 }
 
@@ -29,4 +30,12 @@ public sealed class ExternalAgentToolingInstallReport
     public List<string> SkippedFiles { get; init; } = [];
     public List<string> BackupFiles { get; init; } = [];
     public List<string> Warnings { get; init; } = [];
+}
+
+public sealed class ExternalAgentIntegrationStatus
+{
+    public string Kind { get; init; } = string.Empty;
+    public bool RequiresMcp { get; init; }
+    public bool Configured { get; init; }
+    public string Summary { get; init; } = string.Empty;
 }

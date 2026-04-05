@@ -2,7 +2,9 @@ using Dna.App.Interfaces.Api;
 using Dna.App.Services;
 using Dna.App.Services.Tooling;
 using Dna.Core.Config;
+using Dna.ExternalAgent.Contracts;
 using Dna.ExternalAgent.DependencyInjection;
+using Dna.ExternalAgent.Interfaces.Api;
 using Dna.Knowledge;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -32,6 +34,8 @@ public class AppEndpointRouteSmokeTests
         builder.Services.AddSingleton<AppProjectLlmConfigService>();
         builder.Services.AddSingleton<DnaServerApi>();
         builder.Services.AddSingleton<AppFolderPickerService>();
+        builder.Services.AddSingleton<IExternalAgentWorkspaceContext>(sp => sp.GetRequiredService<AppWorkspaceStore>());
+        builder.Services.AddSingleton<IExternalAgentFolderPicker>(sp => sp.GetRequiredService<AppFolderPickerService>());
         builder.Services.AddExternalAgent();
         var app = builder.Build();
 
@@ -40,7 +44,7 @@ public class AppEndpointRouteSmokeTests
         app.MapAppLlmConfigEndpoints();
         app.MapAppWorkspaceEndpoints();
         app.MapAppDiscoveryEndpoints();
-        app.MapAppToolingEndpoints();
+        app.MapExternalAgentEndpoints();
 
         var routes = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(dataSource => dataSource.Endpoints)

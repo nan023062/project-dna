@@ -56,6 +56,16 @@ public static class DefaultExcludes
     public static readonly HashSet<string> Dirs =
         new(WorkspaceConstants.ExcludedDirectories.Names, StringComparer.OrdinalIgnoreCase);
 
+    public static bool IsExcludedDirectory(string? directoryName, ISet<string>? excludes = null)
+    {
+        if (string.IsNullOrWhiteSpace(directoryName))
+            return true;
+
+        var trimmed = directoryName.Trim();
+        return trimmed.StartsWith(".", StringComparison.Ordinal) ||
+               (excludes?.Contains(trimmed) ?? Dirs.Contains(trimmed));
+    }
+
     public static HashSet<string> BuildWithCustom(IEnumerable<string>? customDirs)
     {
         var merged = new HashSet<string>(Dirs, StringComparer.OrdinalIgnoreCase);

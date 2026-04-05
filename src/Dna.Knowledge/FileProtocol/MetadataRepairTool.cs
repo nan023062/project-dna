@@ -81,8 +81,7 @@ public sealed class MetadataRepairTool
     private static List<MetaSnapshot> ScanPhysicalMeta(string projectRoot)
     {
         var results = new List<MetaSnapshot>();
-        var excludes = new HashSet<string>(WorkspaceConstants.ExcludedDirectories.Names,
-            StringComparer.OrdinalIgnoreCase);
+        var excludes = DefaultExcludes.BuildWithCustom(customDirs: null);
 
         ScanRecursive(projectRoot, projectRoot, excludes, results);
         return results;
@@ -92,7 +91,7 @@ public sealed class MetadataRepairTool
         HashSet<string> excludes, List<MetaSnapshot> results)
     {
         var dirName = Path.GetFileName(current);
-        if (excludes.Contains(dirName))
+        if (DefaultExcludes.IsExcludedDirectory(dirName, excludes))
             return;
 
         var relative = Path.GetRelativePath(root, current).Replace('\\', '/');

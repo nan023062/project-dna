@@ -47,6 +47,24 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         Assert.Equal("custom agent", File.ReadAllText(agentPath));
     }
 
+    [Theory]
+    [InlineData("claude-code")]
+    [InlineData("copilot")]
+    public void InstallTarget_ShouldReportNonMcpTargets_AsInstalledWithoutMcp(string productId)
+    {
+        Directory.CreateDirectory(_workspaceRoot);
+        var tooling = CreateToolingService();
+
+        var report = tooling.InstallTarget(productId, _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: true);
+        var status = tooling.GetTargetStatus(productId, _workspaceRoot, "http://localhost:5052/mcp", "agentic-os");
+
+        Assert.NotEmpty(report.WrittenFiles);
+        Assert.True(status.Installed);
+        Assert.False(status.McpConfigured);
+        Assert.False(status.Integration.RequiresMcp);
+        Assert.True(status.Integration.Configured);
+    }
+
     private static IExternalAgentToolingService CreateToolingService()
     {
         return new ServiceCollection()

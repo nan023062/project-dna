@@ -5,8 +5,10 @@ using Dna.App.Services.Tooling;
 using Dna.Agent.Contracts;
 using Dna.Agent.DependencyInjection;
 using Dna.Core.Config;
+using Dna.ExternalAgent.Contracts;
 using Dna.ExternalAgent;
 using Dna.ExternalAgent.DependencyInjection;
+using Dna.ExternalAgent.Interfaces.Api;
 using Dna.Knowledge;
 using Dna.Workbench.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,6 +42,7 @@ internal static class AppHostComposition
         services.AddExternalAgent();
         services.AddHostedService<AppLocalRuntimeInitializer>();
         services.AddSingleton<AppWorkspaceStore>();
+        services.AddSingleton<IExternalAgentWorkspaceContext>(sp => sp.GetRequiredService<AppWorkspaceStore>());
         services.AddSingleton<AppProjectLlmConfigService>();
         services.AddSingleton<IAgentProviderCatalog, AppAgentProviderCatalog>();
 
@@ -49,6 +52,7 @@ internal static class AppHostComposition
         });
 
         services.AddSingleton<AppFolderPickerService>();
+        services.AddSingleton<IExternalAgentFolderPicker>(sp => sp.GetRequiredService<AppFolderPickerService>());
 
         services.AddMcpServer(opts =>
         {
@@ -63,7 +67,7 @@ internal static class AppHostComposition
         web.MapAppLlmConfigEndpoints();
         web.MapAppWorkspaceEndpoints();
         web.MapAppDiscoveryEndpoints();
-        web.MapAppToolingEndpoints();
+        web.MapExternalAgentEndpoints();
         web.MapMcp("/mcp");
     }
 }

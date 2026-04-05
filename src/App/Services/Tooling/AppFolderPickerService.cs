@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Dna.ExternalAgent.Contracts;
 
 namespace Dna.App.Services.Tooling;
 
-public sealed class AppFolderPickerService
+public sealed class AppFolderPickerService : IExternalAgentFolderPicker
 {
     public async Task<string?> PickFolderAsync(string? defaultPath = null, string? prompt = null, CancellationToken cancellationToken = default)
     {

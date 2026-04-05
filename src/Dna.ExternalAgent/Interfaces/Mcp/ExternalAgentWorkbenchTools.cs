@@ -22,11 +22,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var result = workbench.Knowledge.GetTopologySnapshot();
-            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+            return Task.FromResult(Success(nameof(get_topology), result));
         }
         catch (Exception ex)
         {
-            return Task.FromResult($"Error: {ex.Message}");
+            return Task.FromResult(Error(nameof(get_topology), "unexpected_error", ex.Message));
         }
     }
 
@@ -37,11 +37,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var result = workbench.Knowledge.GetWorkspaceSnapshot(relativePath);
-            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+            return Task.FromResult(Success(nameof(get_workspace_snapshot), result));
         }
         catch (Exception ex)
         {
-            return Task.FromResult($"Error: {ex.Message}");
+            return Task.FromResult(Error(nameof(get_workspace_snapshot), "unexpected_error", ex.Message));
         }
     }
 
@@ -53,12 +53,13 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         {
             var result = workbench.Knowledge.GetModuleKnowledge(nodeIdOrName);
             if (result == null)
-                return Task.FromResult($"Error: Module knowledge not found: {nodeIdOrName}");
-            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+                return Task.FromResult(Error(nameof(get_module_knowledge), "not_found", $"Module knowledge not found: {nodeIdOrName}"));
+
+            return Task.FromResult(Success(nameof(get_module_knowledge), result));
         }
         catch (Exception ex)
         {
-            return Task.FromResult($"Error: {ex.Message}");
+            return Task.FromResult(Error(nameof(get_module_knowledge), "unexpected_error", ex.Message));
         }
     }
 
@@ -91,11 +92,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
             };
 
             var result = workbench.Knowledge.SaveModuleKnowledge(command);
-            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+            return Task.FromResult(Success(nameof(save_module_knowledge), result));
         }
         catch (Exception ex)
         {
-            return Task.FromResult($"Error: {ex.Message}");
+            return Task.FromResult(Error(nameof(save_module_knowledge), "unexpected_error", ex.Message));
         }
     }
 
@@ -116,14 +117,14 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
-                return $"Error: invalid memory type '{type}'.";
+                return Error(nameof(remember), "validation_error", $"Invalid memory type '{type}'.");
             if (!Enum.TryParse<NodeType>(nodeType, true, out var parsedNodeType))
-                return $"Error: invalid node type '{nodeType}'.";
+                return Error(nameof(remember), "validation_error", $"Invalid node type '{nodeType}'.");
             MemoryStage? parsedStage = null;
             if (!string.IsNullOrWhiteSpace(stage))
             {
                 if (!Enum.TryParse<MemoryStage>(stage, true, out var parsed))
-                    return $"Error: invalid memory stage '{stage}'.";
+                    return Error(nameof(remember), "validation_error", $"Invalid memory stage '{stage}'.");
                 parsedStage = parsed;
             }
 
@@ -144,11 +145,17 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
             };
 
             var result = await workbench.Knowledge.RememberAsync(request);
-            return $"Memory created [{result.Id}].";
+            return Success(nameof(remember), new
+            {
+                id = result.Id,
+                summary = result.Summary,
+                createdAt = result.CreatedAt,
+                message = $"Memory created [{result.Id}]."
+            });
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(remember), "unexpected_error", ex.Message);
         }
     }
 
@@ -184,11 +191,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
             };
 
             var result = await workbench.Knowledge.RecallAsync(request);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(recall), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(recall), "unexpected_error", ex.Message);
         }
     }
 
@@ -198,11 +205,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var result = workbench.Runtime.GetProjectionSnapshot();
-            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+            return Task.FromResult(Success(nameof(get_runtime_projection), result));
         }
         catch (Exception ex)
         {
-            return Task.FromResult($"Error: {ex.Message}");
+            return Task.FromResult(Error(nameof(get_runtime_projection), "unexpected_error", ex.Message));
         }
     }
 
@@ -219,11 +226,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
                 MaxCandidates = maxCandidates
             };
             var result = await workbench.Tasks.ResolveRequirementSupportAsync(request);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(resolve_requirement_support), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(resolve_requirement_support), "unexpected_error", ex.Message);
         }
     }
 
@@ -238,7 +245,7 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             if (!Enum.TryParse<WorkbenchTaskType>(type, true, out var taskType))
-                return $"Error: invalid task type '{type}'.";
+                return Error(nameof(start_task), "validation_error", $"Invalid task type '{type}'.");
 
             var request = new WorkbenchTaskRequest
             {
@@ -249,11 +256,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
                 PrerequisiteTaskIds = SplitCsv(prerequisiteTaskIds)
             };
             var result = await workbench.Tasks.StartTaskAsync(request);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(start_task), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(start_task), "unexpected_error", ex.Message);
         }
     }
 
@@ -269,7 +276,7 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             if (!Enum.TryParse<WorkbenchTaskOutcome>(outcome, true, out var taskOutcome))
-                return $"Error: invalid task outcome '{outcome}'.";
+                return Error(nameof(end_task), "validation_error", $"Invalid task outcome '{outcome}'.");
 
             var request = new WorkbenchTaskResult
             {
@@ -281,11 +288,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
                 PendingDependencies = SplitCsv(pendingDependencies)
             };
             var result = await workbench.Tasks.EndTaskAsync(request);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(end_task), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(end_task), "unexpected_error", ex.Message);
         }
     }
 
@@ -295,11 +302,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var result = await workbench.Tasks.ListActiveTasksAsync();
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(list_active_tasks), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(list_active_tasks), "unexpected_error", ex.Message);
         }
     }
 
@@ -310,11 +317,11 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var result = await workbench.Tasks.ListCompletedTasksAsync(limit);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(list_completed_tasks), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(list_completed_tasks), "unexpected_error", ex.Message);
         }
     }
 
@@ -328,9 +335,9 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             if (!Enum.TryParse<GovernanceCadence>(cadence, true, out var govCadence))
-                return $"Error: invalid cadence '{cadence}'.";
+                return Error(nameof(resolve_governance), "validation_error", $"Invalid cadence '{cadence}'.");
             if (!Enum.TryParse<GovernanceScopeKind>(scope, true, out var govScope))
-                return $"Error: invalid scope '{scope}'.";
+                return Error(nameof(resolve_governance), "validation_error", $"Invalid scope '{scope}'.");
 
             var request = new WorkbenchGovernanceRequest
             {
@@ -340,13 +347,34 @@ public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
                 IncludeDirectDependencies = includeDirectDependencies
             };
             var result = await workbench.Governance.ResolveGovernanceAsync(request);
-            return JsonSerializer.Serialize(result, PrettyJson);
+            return Success(nameof(resolve_governance), result);
         }
         catch (Exception ex)
         {
-            return $"Error: {ex.Message}";
+            return Error(nameof(resolve_governance), "unexpected_error", ex.Message);
         }
     }
+
+    private static string Success(string toolName, object? result)
+        => JsonSerializer.Serialize(new
+        {
+            ok = true,
+            tool = toolName,
+            result
+        }, PrettyJson);
+
+    private static string Error(string toolName, string code, string message, object? details = null)
+        => JsonSerializer.Serialize(new
+        {
+            ok = false,
+            tool = toolName,
+            error = new
+            {
+                code,
+                message,
+                details
+            }
+        }, PrettyJson);
 
     private static List<string> SplitCsv(string? csv) =>
         string.IsNullOrWhiteSpace(csv)

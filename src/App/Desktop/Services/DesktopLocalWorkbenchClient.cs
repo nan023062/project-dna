@@ -214,6 +214,7 @@ public sealed class DesktopLocalWorkbenchClient(EmbeddedAppHost host) : IDesktop
             DirectoryCount = snapshot.DirectoryCount,
             FileCount = snapshot.FileCount,
             Entries = snapshot.Entries
+                .Where(static entry => entry.Kind == WorkspaceEntryKind.Directory)
                 .Select(entry => CloneWorkspaceEntry(knowledge, entry, remainingDepth - 1))
                 .ToList()
         };
@@ -231,6 +232,7 @@ public sealed class DesktopLocalWorkbenchClient(EmbeddedAppHost host) : IDesktop
         {
             var childSnapshot = knowledge.GetWorkspaceSnapshot(entry.Path);
             children = childSnapshot.Entries
+                .Where(static child => child.Kind == WorkspaceEntryKind.Directory)
                 .Select(child => CloneWorkspaceEntry(knowledge, child, remainingDepth - 1))
                 .ToList();
         }

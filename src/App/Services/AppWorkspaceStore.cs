@@ -1,8 +1,9 @@
 using System.Text.Json;
+using Dna.ExternalAgent.Contracts;
 
 namespace Dna.App.Services;
 
-public sealed class AppWorkspaceStore
+public sealed class AppWorkspaceStore : IExternalAgentWorkspaceContext
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -54,6 +55,17 @@ public sealed class AppWorkspaceStore
         {
             return Clone(ResolveCurrentWorkspace());
         }
+    }
+
+    public ExternalAgentWorkspaceContextSnapshot GetCurrentWorkspaceSnapshot()
+    {
+        var current = GetCurrentWorkspace();
+        return new ExternalAgentWorkspaceContextSnapshot
+        {
+            WorkspaceId = current.Id,
+            Name = current.Name,
+            WorkspaceRoot = current.WorkspaceRoot
+        };
     }
 
     public AppWorkspaceRecord CreateWorkspace(AppWorkspaceUpsertRequest request)

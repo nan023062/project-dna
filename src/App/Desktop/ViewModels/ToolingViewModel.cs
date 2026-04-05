@@ -1,10 +1,9 @@
 using System.Collections.ObjectModel;
-using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Dna.App.Desktop.Services;
-
 using Dna.App.Services;
+using Dna.ExternalAgent.Interfaces.Api;
 
 namespace Dna.App.Desktop.ViewModels;
 
@@ -19,7 +18,19 @@ public partial class ToolingViewModel : ObservableObject
     private string _codexStateText = "Codex: -";
 
     [ObservableProperty]
+    private string _claudeCodeStateText = "Claude Code: -";
+
+    [ObservableProperty]
+    private string _copilotStateText = "GitHub Copilot: -";
+
+    [ObservableProperty]
+    private ObservableCollection<ToolingTargetStatusViewModel> _targetDetails = new();
+
+    [ObservableProperty]
     private string _toolingHubText = "App 保留本地 5052 运行时，既服务桌面宿主内部调用，也向外暴露 CLI 与 /mcp。";
+
+    [ObservableProperty]
+    private string _toolingTargetsSummaryText = "外置 Agent 目标状态未加载。";
 
     [ObservableProperty]
     private string _toolingStatusText = "工具区就绪。";
@@ -45,6 +56,10 @@ public partial class ToolingViewModel : ObservableObject
         McpSummaryText = "MCP 清单未加载。";
         CursorStateText = "Cursor: -";
         CodexStateText = "Codex: -";
+        ClaudeCodeStateText = "Claude Code: -";
+        CopilotStateText = "GitHub Copilot: -";
+        ToolingTargetsSummaryText = "外置 Agent 目标状态未加载。";
+        TargetDetails.Clear();
         McpTools.Clear();
     }
 
@@ -56,35 +71,42 @@ public partial class ToolingViewModel : ObservableObject
         {
             CursorStateText = "Cursor: 未加载项目";
             CodexStateText = "Codex: 未加载项目";
+            ClaudeCodeStateText = "Claude Code: 未加载项目";
+            CopilotStateText = "GitHub Copilot: 未加载项目";
             ToolingHubText = "请先加载项目工作区，再为 IDE 安装本地 DNA App 连接配置。";
+            ToolingTargetsSummaryText = "请先加载项目工作区。";
             ToolingStatusText = "请先加载项目工作区。";
+            TargetDetails.Clear();
             return;
         }
 
         try
         {
-            var tooling = await _apiClient.GetAsync("/api/app/tooling/list");
-            var cursorInstalled = false;
-            var codexInstalled = false;
+            var tooling = await _apiClient.GetAsync<ExternalAgentToolingListResponse>("/api/app/tooling/list");
+            CursorStateText = "Cursor: 未安装";
+            CodexStateText = "Codex: 未安装";
+            ClaudeCodeStateText = "Claude Code: 未安装";
+            CopilotStateText = "GitHub Copilot: 未安装";
+            TargetDetails.Clear();
 
-            if (tooling.TryGetProperty("targets", out var targets) && targets.ValueKind == JsonValueKind.Array)
+            foreach (var target in tooling.Targets)
             {
-                foreach (var target in targets.EnumerateArray())
-                {
-                    var id = GetString(target, "id", string.Empty) ?? string.Empty;
-                    var installed = target.TryGetProperty("installed", out var installedElement) &&
-                                    installedElement.ValueKind == JsonValueKind.True;
+                var detail = new ToolingTargetStatusViewModel(
+                    ProductId: target.ProductId,
+                    DisplayName: target.DisplayName,
+                    StateLabel: target.StateLabel,
+                    MetaLine: target.MetaLine,
+                    SummaryLine: target.SummaryLine,
+                    IsInstalled: target.Installed);
 
-                    if (string.Equals(id, "cursor", StringComparison.OrdinalIgnoreCase))
-                        cursorInstalled = installed;
-                    if (string.Equals(id, "codex", StringComparison.OrdinalIgnoreCase))
-                        codexInstalled = installed;
-                }
+                SetTargetStateText(target.ProductId, $"{target.DisplayName}: {target.StateLabel}");
+                TargetDetails.Add(detail);
             }
 
-            var workspaceRoot = GetString(tooling, "workspaceRoot", "-");
-            CursorStateText = cursorInstalled ? "Cursor: 已安装" : "Cursor: 未安装";
-            CodexStateText = codexInstalled ? "Codex: 已安装" : "Codex: 未安装";
+            var workspaceRoot = tooling.WorkspaceRoot;
+            var readyCount = tooling.ReadyCount;
+            var pendingCount = tooling.PendingCount;
+            ToolingTargetsSummaryText = $"已检测 {TargetDetails.Count} 个外置 Agent 目标：{readyCount} 个已就绪，{pendingCount} 个待处理。";
             ToolingHubText = $"本地 5052 运行时已就绪。当前工作区：{workspaceRoot}；CLI：agentic-os cli；MCP 入口：{AppRuntimeConstants.ApiBaseUrl}/mcp";
             ToolingStatusText = $"工具状态已刷新。工作区：{workspaceRoot}";
         }
@@ -92,7 +114,11 @@ public partial class ToolingViewModel : ObservableObject
         {
             CursorStateText = "Cursor: 错误";
             CodexStateText = "Codex: 错误";
+            ClaudeCodeStateText = "Claude Code: 错误";
+            CopilotStateText = "GitHub Copilot: 错误";
+            ToolingTargetsSummaryText = "外置 Agent 目标状态刷新失败。";
             ToolingStatusText = $"工具状态刷新失败：{ex.Message}";
+            TargetDetails.Clear();
         }
     }
 
@@ -108,36 +134,30 @@ public partial class ToolingViewModel : ObservableObject
         try
         {
             ToolingStatusText = $"正在选择 {FormatToolingTargetName(target)} 安装目录...";
-            var picked = await _apiClient.PostAsync("/api/app/tooling/select-folder", new
+            var picked = await _apiClient.PostAsync<ExternalAgentFolderPickResponse>("/api/app/tooling/select-folder", new
             {
                 defaultWorkspaceRoot = ProjectRoot,
                 prompt = $"选择要安装 {FormatToolingTargetName(target)} 工作流配置的项目目录"
             });
 
-            var accepted = picked.TryGetProperty("selected", out var selectedElement) &&
-                           selectedElement.ValueKind == JsonValueKind.True;
-            if (!accepted)
+            if (!picked.Selected)
             {
                 ToolingStatusText = "已取消目录选择。";
                 return;
             }
 
-            var workspaceRoot = GetString(picked, "workspaceRoot", string.Empty);
+            var workspaceRoot = picked.WorkspaceRoot;
             if (string.IsNullOrWhiteSpace(workspaceRoot))
                 throw new InvalidOperationException("未获取到有效工作区目录。");
 
-            var install = await _apiClient.PostAsync("/api/app/tooling/install", new
+            var install = await _apiClient.PostAsync<ExternalAgentToolingInstallResponse>("/api/app/tooling/install", new
             {
                 target,
                 replaceExisting = true,
                 workspaceRoot
             });
 
-            var reportsCount = install.TryGetProperty("reports", out var reports) && reports.ValueKind == JsonValueKind.Array
-                ? reports.GetArrayLength()
-                : 0;
-
-            ToolingStatusText = $"{FormatToolingTargetName(target)} 安装完成（报告 {reportsCount} 条），目录：{workspaceRoot}";
+            ToolingStatusText = $"{FormatToolingTargetName(target)} 安装完成（报告 {install.Reports.Count} 条），目录：{workspaceRoot}";
             await RefreshToolingStatusAsync(ProjectRoot);
         }
         catch (Exception ex)
@@ -151,19 +171,15 @@ public partial class ToolingViewModel : ObservableObject
     {
         try
         {
-            var catalog = await _apiClient.GetAsync("/api/app/mcp/tools");
-            var endpoint = GetString(catalog, "mcpEndpoint", GetString(catalog, "endpoint", $"{AppRuntimeConstants.ApiBaseUrl}/mcp"));
+            var catalog = await _apiClient.GetAsync<ExternalAgentMcpToolCatalogResponse>("/api/app/mcp/tools");
+            var endpoint = string.IsNullOrWhiteSpace(catalog.McpEndpoint)
+                ? $"{AppRuntimeConstants.ApiBaseUrl}/mcp"
+                : catalog.McpEndpoint;
 
             McpTools.Clear();
-            if (catalog.TryGetProperty("tools", out var tools) && tools.ValueKind == JsonValueKind.Array)
+            foreach (var tool in catalog.Tools)
             {
-                foreach (var tool in tools.EnumerateArray())
-                {
-                    var name = GetString(tool, "name", "-");
-                    var group = GetString(tool, "group", "General");
-                    var description = GetString(tool, "description", string.Empty);
-                    McpTools.Add($"[{group}] {name} - {description}");
-                }
+                McpTools.Add($"[{tool.Group}] {tool.Name} - {tool.Description}");
             }
 
             McpSummaryText = $"MCP 入口：{endpoint}，工具数：{McpTools.Count}";
@@ -177,12 +193,29 @@ public partial class ToolingViewModel : ObservableObject
 
     private static string FormatToolingTargetName(string target)
         => string.Equals(target, "cursor", StringComparison.OrdinalIgnoreCase) ? "Cursor" :
-           string.Equals(target, "codex", StringComparison.OrdinalIgnoreCase) ? "Codex" : target;
+           string.Equals(target, "codex", StringComparison.OrdinalIgnoreCase) ? "Codex" :
+           string.Equals(target, "claude-code", StringComparison.OrdinalIgnoreCase) ? "Claude Code" :
+           string.Equals(target, "copilot", StringComparison.OrdinalIgnoreCase) ? "GitHub Copilot" :
+           string.Equals(target, "all", StringComparison.OrdinalIgnoreCase) ? "全部目标" :
+           target;
 
-    private static string? GetString(JsonElement element, string propertyName, string? defaultValue)
+    private void SetTargetStateText(string productId, string value)
     {
-        if (element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String)
-            return value.GetString();
-        return defaultValue;
+        if (string.Equals(productId, "cursor", StringComparison.OrdinalIgnoreCase))
+            CursorStateText = value;
+        else if (string.Equals(productId, "codex", StringComparison.OrdinalIgnoreCase))
+            CodexStateText = value;
+        else if (string.Equals(productId, "claude-code", StringComparison.OrdinalIgnoreCase))
+            ClaudeCodeStateText = value;
+        else if (string.Equals(productId, "copilot", StringComparison.OrdinalIgnoreCase))
+            CopilotStateText = value;
     }
 }
+
+public sealed record ToolingTargetStatusViewModel(
+    string ProductId,
+    string DisplayName,
+    string StateLabel,
+    string MetaLine,
+    string SummaryLine,
+    bool IsInstalled);

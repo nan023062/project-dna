@@ -29,6 +29,13 @@ public class DnaApiClient : IDnaApiClient, IDisposable
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
 
+    public async Task<T> GetAsync<T>(string path)
+    {
+        var response = await _http.GetAsync(BuildUrl(path));
+        response.EnsureSuccessStatusCode();
+        return await DeserializeAsync<T>(response);
+    }
+
     public async Task<JsonElement> PostAsync(string path, object payload)
     {
         var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -36,6 +43,14 @@ public class DnaApiClient : IDnaApiClient, IDisposable
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(json);
+    }
+
+    public async Task<T> PostAsync<T>(string path, object payload)
+    {
+        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await _http.PostAsync(BuildUrl(path), content);
+        response.EnsureSuccessStatusCode();
+        return await DeserializeAsync<T>(response);
     }
 
     public async Task<JsonElement> PutAsync(string path, object payload)
@@ -47,12 +62,27 @@ public class DnaApiClient : IDnaApiClient, IDisposable
         return JsonSerializer.Deserialize<JsonElement>(json);
     }
 
+    public async Task<T> PutAsync<T>(string path, object payload)
+    {
+        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await _http.PutAsync(BuildUrl(path), content);
+        response.EnsureSuccessStatusCode();
+        return await DeserializeAsync<T>(response);
+    }
+
     public async Task<JsonElement> DeleteAsync(string path)
     {
         var response = await _http.DeleteAsync(BuildUrl(path));
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
         return JsonSerializer.Deserialize<JsonElement>(json);
+    }
+
+    public async Task<T> DeleteAsync<T>(string path)
+    {
+        var response = await _http.DeleteAsync(BuildUrl(path));
+        response.EnsureSuccessStatusCode();
+        return await DeserializeAsync<T>(response);
     }
 
     public Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
@@ -67,5 +97,14 @@ public class DnaApiClient : IDnaApiClient, IDisposable
     public void Dispose()
     {
         _http.Dispose();
+    }
+
+    private static async Task<T> DeserializeAsync<T>(HttpResponseMessage response)
+    {
+        var payload = await response.Content.ReadFromJsonAsync<T>();
+        if (payload is null)
+            throw new InvalidOperationException($"Failed to deserialize response into {typeof(T).Name}.");
+
+        return payload;
     }
 }

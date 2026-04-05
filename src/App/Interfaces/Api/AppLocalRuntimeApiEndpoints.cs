@@ -141,6 +141,7 @@ public static class AppLocalRuntimeApiEndpoints
             DirectoryCount = snapshot.DirectoryCount,
             FileCount = snapshot.FileCount,
             Entries = snapshot.Entries
+                .Where(static entry => entry.Kind == WorkspaceEntryKind.Directory)
                 .Select(entry => BuildWorkspaceEntryTree(
                     workspace,
                     projectRoot,
@@ -221,6 +222,7 @@ public static class AppLocalRuntimeApiEndpoints
         {
             var snapshot = workspace.GetDirectorySnapshot(projectRoot, entry.Path, topology);
             response.Children = snapshot.Entries
+                .Where(static child => child.Kind == WorkspaceEntryKind.Directory)
                 .Select(child => BuildWorkspaceEntryTree(
                     workspace,
                     projectRoot,

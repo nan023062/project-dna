@@ -218,7 +218,7 @@ public sealed class WorkspaceTreeCache : IDisposable
 
         foreach (var segment in WorkspacePath.EnumerateSegments(relativePath))
         {
-            if (_excludes.Contains(segment))
+            if (DefaultExcludes.IsExcludedDirectory(segment, _excludes))
                 return true;
         }
 

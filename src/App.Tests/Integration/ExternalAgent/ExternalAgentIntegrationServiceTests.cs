@@ -51,4 +51,32 @@ public sealed class ExternalAgentIntegrationServiceTests
         Assert.Contains(package.ManagedFiles, file => file.Content.Contains("先解析知识拓扑", StringComparison.Ordinal));
         Assert.Contains(package.RequiredTools, tool => tool.Name == WorkbenchToolConstants.ToolNames.StartTask);
     }
+
+    [Fact]
+    public void BuildPackage_ShouldGenerateClaudePreviewBundle_WithManifestMetadata()
+    {
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddExternalAgent()
+            .BuildServiceProvider();
+
+        var integration = services.GetRequiredService<IExternalAgentIntegrationService>();
+        var package = integration.BuildPackage(new ExternalAgentPackageRequest
+        {
+            ProductId = ExternalAgentConstants.ProductIds.ClaudeCode,
+            ServerName = "agentic-os",
+            McpEndpoint = "http://127.0.0.1:5052/mcp",
+            StrictTopologyMode = true
+        });
+
+        var manifest = Assert.Single(package.ManagedFiles, file => file.RelativePath == ExternalAgentConstants.ManagedPaths.ClaudePluginManifest);
+        Assert.Contains("\"schemaVersion\": \"0.2-preview\"", manifest.Content, StringComparison.Ordinal);
+        Assert.Contains("\"id\": \"agentic-os-topology\"", manifest.Content, StringComparison.Ordinal);
+        Assert.Contains("\"endpoint\": \"http://127.0.0.1:5052/mcp\"", manifest.Content, StringComparison.Ordinal);
+        Assert.Contains("\"strictTopologyMode\": true", manifest.Content, StringComparison.Ordinal);
+
+        var command = Assert.Single(package.ManagedFiles, file => file.RelativePath == ExternalAgentConstants.ManagedPaths.ClaudePluginCommand);
+        Assert.Contains("knowledge.get_topology", command.Content, StringComparison.Ordinal);
+        Assert.Contains("tasks.start_task", command.Content, StringComparison.Ordinal);
+    }
 }

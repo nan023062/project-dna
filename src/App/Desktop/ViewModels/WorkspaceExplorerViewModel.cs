@@ -26,7 +26,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
     private string _selectionTitle = "Nothing selected";
 
     [ObservableProperty]
-    private string _selectionMeta = "Select a folder or file from the WorkspaceEngine tree.";
+    private string _selectionMeta = "Select a folder from the WorkspaceEngine tree.";
 
     [ObservableProperty]
     private string _selectionPath = "-";
@@ -64,7 +64,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
     {
         if (value is null)
         {
-            ResetSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
+            ResetSelectionDetails("Select a folder from the WorkspaceEngine tree.");
             return;
         }
 
@@ -97,7 +97,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
                 Items.Add(item);
             }
 
-            SummaryText = $"{root.Name}  |  {root.DirectoryCount} dirs  |  {root.FileCount} files  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
+            SummaryText = $"{root.Name}  |  {root.DirectoryCount} dirs  |  updated {root.ScannedAtUtc.ToLocalTime():HH:mm:ss}";
             ProjectPathText = root.FullPath;
 
             var preferredPath = SelectedItem?.Path;
@@ -106,7 +106,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
             
             if (preferred is null)
             {
-                ResetSelectionDetails("Select a folder or file from the WorkspaceEngine tree.");
+                ResetSelectionDetails("Select a folder from the WorkspaceEngine tree.");
             }
         }
         catch (Exception ex)
@@ -133,7 +133,7 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
         var children = entry.Children?.Select(ParseWorkspaceTreeItem).ToList() ?? [];
 
         var meta = isDirectory
-            ? $"{statusLabel} | {directoryCount} dirs | {fileCount} files"
+            ? $"{statusLabel} | {directoryCount} dirs"
             : $"{statusLabel} | {FormatFileSize(sizeBytes)}";
 
         if (lastModified != DateTime.MinValue)
@@ -157,13 +157,13 @@ public partial class WorkspaceExplorerViewModel : ObservableObject
             Caption: isDirectory ? BuildFolderCaption(directoryCount, fileCount, badge) : (badge ?? statusLabel),
             BadgeLine: badge,
             ActionLine: actionParts.Count == 0 ? null : string.Join(" | ", actionParts),
-            Icon: isDirectory ? "D" : "F",
             Children: children);
     }
 
     private static string BuildFolderCaption(int directoryCount, int fileCount, string? badge)
     {
-        var caption = $"{directoryCount} dirs / {fileCount} files";
+        _ = fileCount;
+        var caption = $"{directoryCount} dirs";
         return string.IsNullOrWhiteSpace(badge)
             ? caption
             : $"{caption} | {badge}";
@@ -251,5 +251,4 @@ public sealed record WorkspaceTreeItemViewModel(
     string Caption,
     string? BadgeLine,
     string? ActionLine,
-    string Icon,
     List<WorkspaceTreeItemViewModel> Children);

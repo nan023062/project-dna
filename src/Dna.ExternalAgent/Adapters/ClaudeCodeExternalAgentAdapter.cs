@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dna.ExternalAgent.Models;
 
 namespace Dna.ExternalAgent.Adapters;
@@ -28,31 +29,86 @@ internal sealed class ClaudeCodeExternalAgentAdapter : ExternalAgentAdapterBase
 
     public override ExternalAgentPackageResult BuildPackage(ExternalAgentPackageContext context)
     {
-        var manifestContent =
-            $$"""
+        var manifestContent = JsonSerializer.Serialize(new
+        {
+            schemaVersion = ExternalAgentConstants.ClaudePlugin.ManifestSchemaVersion,
+            id = ExternalAgentConstants.ClaudePlugin.Id,
+            name = "Agentic OS Topology Guard",
+            version = ExternalAgentConstants.ClaudePlugin.ManifestVersion,
+            description = "Enhanced preview bundle for Claude Code plugin installation.",
+            author = "Agentic OS",
+            installMode = "preview-bundle",
+            capabilities = Descriptor.Capabilities,
+            mcp = new
             {
-              "name": "agentic-os-topology",
-              "displayName": "Agentic OS Topology Guard",
-              "version": "0.1.0",
-              "description": "Preview bundle for Claude Code plugin installation."
+                serverName = context.Request.ServerName,
+                endpoint = context.Request.McpEndpoint,
+                requiredTools = context.RequiredTools.Select(tool => tool.Name).ToArray()
+            },
+            entrypoints = new
+            {
+                commands = new[]
+                {
+                    new
+                    {
+                        name = ExternalAgentConstants.ClaudePlugin.CommandName,
+                        file = "commands/agentic-os-topology.md",
+                        description = "Run the Agentic OS topology-first workflow before implementation."
+                    }
+                },
+                hooks = new[]
+                {
+                    new
+                    {
+                        phase = "task-start",
+                        file = "hooks/agentic-os-topology.md",
+                        description = "Validate topology, module scope, and governance boundary before work starts."
+                    },
+                    new
+                    {
+                        phase = "task-end",
+                        file = "hooks/agentic-os-topology.md",
+                        description = "Require task summary, decisions, and lessons before the task closes."
+                    }
+                }
+            },
+            policy = new
+            {
+                strictTopologyMode = context.Policy.StrictMode,
+                workflowRules = context.Policy.WorkflowRules
             }
-            """;
+        }, new JsonSerializerOptions { WriteIndented = true });
 
         var readmeContent =
             "# Agentic OS Claude Code Plugin Preview\n\n" +
+            "这个 bundle 会把 Claude Code 收口到 Agentic OS 的拓扑优先工作流。\n\n" +
+            "## Bundle Layout\n\n" +
+            $"- `{ExternalAgentConstants.ManagedPaths.ClaudePluginManifest}`: 预览 manifest，声明 MCP、命令与 hook 入口。\n" +
+            $"- `{ExternalAgentConstants.ManagedPaths.ClaudePluginCommand}`: 斜杠命令入口，要求先解析拓扑与模块。\n" +
+            $"- `{ExternalAgentConstants.ManagedPaths.ClaudePluginHook}`: 任务开始/结束检查清单。\n" +
+            $"- MCP server: `{context.Request.ServerName}` -> `{context.Request.McpEndpoint}`\n\n" +
             context.SharedInstructionsMarkdown + "\n\n" +
             BuildToolListMarkdown(context);
 
         var commandContent =
-            "# /agentic-os-topology\n\n" +
-            "执行任何任务前，先确认目标模块、父子层级、依赖方向与协作边界，然后再进入实现阶段。\n\n" +
+            $"# {ExternalAgentConstants.ClaudePlugin.CommandName}\n\n" +
+            "执行任何任务前，必须先完成下面顺序：\n\n" +
+            "1. 调用 `knowledge.get_topology`\n" +
+            "2. 调用 `knowledge.get_workspace_snapshot`\n" +
+            "3. 解析目标模块、父子层级、依赖方向与协作边界\n" +
+            "4. 如需执行任务，先走 `tasks.resolve_requirement_support` / `tasks.start_task`\n" +
+            "5. 结束时调用 `tasks.end_task` 与 `memory.remember`\n\n" +
             context.SharedInstructionsMarkdown;
 
         var hookContent =
             "# Agentic OS Hook Policy\n\n" +
-            "- 当任务开始时，必须先拉取拓扑和模块知识。\n" +
-            "- 当任务结束时，必须回写记忆与关键决策。\n" +
-            "- 当跨模块协作时，必须显式说明 Collaboration / Team 边界。\n";
+            "## On Task Start\n\n" +
+            "- 必须先拉取拓扑、workspace snapshot 与模块知识。\n" +
+            "- 必须确认当前任务只落在单一模块范围内。\n" +
+            "- 如果跨模块，必须显式说明 Collaboration / Team 边界，并拆分成多个 task。\n\n" +
+            "## On Task End\n\n" +
+            "- 必须回写任务 summary、关键决策和 lessons。\n" +
+            "- 如果被阻塞，必须记录 pending dependencies 或失败原因。\n";
 
         return new ExternalAgentPackageResult
         {

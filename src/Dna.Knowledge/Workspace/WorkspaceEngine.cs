@@ -274,7 +274,7 @@ public sealed class WorkspaceEngine(WorkspaceTreeCache treeCache) : IWorkspaceEn
             foreach (var childDirectory in childDirectories)
             {
                 var name = Path.GetFileName(childDirectory);
-                if (string.IsNullOrWhiteSpace(name) || excludes.Contains(name))
+                if (DefaultExcludes.IsExcludedDirectory(name, excludes))
                     continue;
 
                 var childRelativePath = currentRelativePath.Length == 0

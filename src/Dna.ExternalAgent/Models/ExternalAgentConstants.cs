@@ -49,6 +49,14 @@ public static class ExternalAgentConstants
         public const string CopilotAgents = "AGENTS.md";
     }
 
+    public static class ClaudePlugin
+    {
+        public const string Id = "agentic-os-topology";
+        public const string ManifestSchemaVersion = "0.2-preview";
+        public const string ManifestVersion = "0.2.0";
+        public const string CommandName = "/agentic-os-topology";
+    }
+
     public static class DefaultToolNames
     {
         public const string GetTopology = "knowledge.get_topology";
@@ -78,7 +86,7 @@ public static class ExternalAgentConstants
 
     public static class Notes
     {
-        public const string ClaudePluginBundlePreview = "当前 Claude Code 适配器先输出 plugin bundle 预览产物；正式安装器与 manifest 细节后续补齐。";
+        public const string ClaudePluginBundlePreview = "当前 Claude Code 适配器输出增强版 plugin bundle 预览产物；正式安装器与官方 manifest schema 仍可后续继续细化。";
         public const string TopologyStrictMode = "该包默认启用严格拓扑模式：外置 Agent 必须先走拓扑解析与模块映射，再进入实现阶段。";
     }
 }
