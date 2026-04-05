@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;**/src/publish/**;**/src/.tmp/**;**/.temp/**</DefaultItemExcludes>
+
+    <BaseOutputPath>$(MSBuildThisFileDirectory)src/publish/$(MSBuildProjectName)/</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)src/publish/obj/$(MSBuildProjectName)/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+    <PublishDir>$(MSBuildThisFileDirectory)src/publish/$(MSBuildProjectName)/publish/</PublishDir>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,805 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:desktop="clr-namespace:Dna.App.Desktop"
+        xmlns:viewModels="clr-namespace:Dna.App.Desktop.ViewModels"
+        mc:Ignorable="d"
+        d:DesignWidth="1520"
+        d:DesignHeight="980"
+        x:Class="Dna.App.Desktop.MainWindow"
+        x:Name="MainWindowRoot"
+        x:DataType="viewModels:MainWindowViewModel"
+        Title="{Binding WindowTitle}"
+        MinWidth="1280"
+        MinHeight="820">
+    <Grid>
+        <Border x:Name="ProjectLoadPanel"
+                Classes="shellSurface"
+                Padding="28"
+                Margin="24"
+                IsVisible="{Binding IsProjectLoadVisible}">
+            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="18">
+                <StackPanel Spacing="8">
+                    <TextBlock Classes="heroTitle" Text="Open Workspace" />
+                    <TextBlock Classes="mutedText"
+                               TextWrapping="Wrap"
+                               Text="Choose any workspace folder. Agentic OS will create or reuse .agentic-os automatically and enter the single-process desktop shell." />
+                </StackPanel>
+
+                <WrapPanel Grid.Row="1" Orientation="Horizontal">
+                    <Button Classes="primaryAction"
+                            Content="Open Folder..."
+                            Command="{Binding OpenProjectFolderCommand}"
+                            Margin="0,0,8,0" />
+                </WrapPanel>
+
+                <Grid Grid.Row="2" ColumnDefinitions="1.5*,1*" ColumnSpacing="18">
+                    <Border Classes="panelSurface" Padding="16">
+                        <Grid RowDefinitions="Auto,*" RowSpacing="12">
+                            <TextBlock x:Name="RecentCountText"
+                                       Classes="sectionTitle"
+                                       Text="{Binding RecentCountText}" />
+                            <ListBox Grid.Row="1"
+                                     x:Name="RecentProjectsListBox"
+                                     ItemsSource="{Binding RecentProjects}"
+                                     SelectedItem="{Binding SelectedRecentProject}"
+                                     DoubleTapped="RecentProjectsListBox_OnDoubleTapped">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate x:CompileBindings="False">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Classes="cardTitle" Text="{Binding Title}" />
+                                                <TextBlock Classes="secondaryText"
+                                                           Text="{Binding ProjectRoot}"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    Classes="quietIcon"
+                                                    Width="26"
+                                                    Height="26"
+                                                    Padding="0"
+                                                    Content="-"
+                                                    Command="{Binding #MainWindowRoot.DataContext.RemoveRecentProjectCommand}"
+                                                    CommandParameter="{Binding ProjectRoot}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="1" Classes="panelSurface" Padding="16">
+                        <StackPanel Spacing="12">
+                            <TextBlock Classes="sectionTitle" Text="Project Summary" />
+                            <TextBlock x:Name="RecentProjectHintText"
+                                       Classes="secondaryText"
+                                       Text="{Binding RecentProjectHintText}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock x:Name="LoaderStatusText"
+                                       Classes="mutedText"
+                                       Text="{Binding LoaderStatusText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <TextBlock Grid.Row="3"
+                           Classes="tertiaryText"
+                           TextWrapping="Wrap"
+                           Text="Double-click a recent project to enter directly. Remove an item with the trailing '-' button." />
+            </Grid>
+        </Border>
+
+        <Grid x:Name="WorkspacePanel"
+              IsVisible="{Binding IsWorkspaceVisible}"
+              RowDefinitions="Auto,*">
+            <Border Grid.Row="0" Classes="menuBarSurface" Padding="8,4">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <Menu Classes="workspaceMenu">
+                        <MenuItem Header="_Project">
+                            <MenuItem Header="Switch Workspace..." Command="{Binding SwitchWorkspaceCommand}" />
+                            <MenuItem Header="Open Folder..." Command="{Binding OpenProjectFolderCommand}" />
+                            <Separator />
+                            <MenuItem Header="Exit" Command="{Binding ExitCommand}" />
+                        </MenuItem>
+                        <MenuItem Header="_View">
+                                                    <MenuItem Header="Refresh Explorer" Command="{Binding WorkspaceExplorer.RefreshCommand}" CommandParameter="{Binding ProjectRoot}" />
+                            <MenuItem Header="Refresh Graph"  />
+                            <MenuItem Header="Refresh Memory" Command="{Binding Memory.RefreshMemoriesCommand}" CommandParameter="{Binding ProjectRoot}" />
+                            <Separator />
+                            <MenuItem Header="Refresh Recent" Command="{Binding ReloadRecentProjectsCommand}" />
+                        </MenuItem>
+                    </Menu>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <StackPanel IsVisible="False">
+                            <TextBlock x:Name="SelectedProjectText" Text="{Binding SelectedProjectText}" />
+                            <TextBlock x:Name="LaunchModeText" Text="{Binding LaunchModeText}" />
+                        </StackPanel>
+                        <Border Classes="statusPill"><TextBlock x:Name="AppStateText" Classes="statusPillText" Text="{Binding AppStateText}" /></Border>
+                        <Border Classes="statusPill"><TextBlock x:Name="ServerStateText" Classes="statusPillText" Text="{Binding ServerStateText}" /></Border>
+                        <Border Classes="statusPill"><TextBlock x:Name="AccessStateText" Classes="statusPillText" Text="{Binding AccessStateText}" /></Border>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <desktop:WorkbenchSplitLayout Grid.Row="1"
+                                          Orientation="Horizontal"
+                                          PrimaryLength="300">
+                <desktop:WorkbenchSplitLayout.First>
+                    <desktop:WorkbenchSplitLayout Orientation="Vertical"
+                                                  PrimaryLength="*">
+                        <desktop:WorkbenchSplitLayout.First>
+                            <desktop:WorkbenchWindow x:Name="WorkspaceExplorerWindow"
+                                                     Title="Workspace Tree">
+                                <desktop:WorkbenchWindow.WindowContent>
+                                    <Grid RowDefinitions="Auto,*" RowSpacing="0">
+                                        <StackPanel IsVisible="False">
+                                            <TextBlock x:Name="WorkspaceTreeSummaryText" Text="{Binding WorkspaceExplorer.SummaryText}" />
+                                            <TextBlock x:Name="WorkspaceProjectPathText" Text="{Binding WorkspaceExplorer.ProjectPathText}" />
+                                        </StackPanel>
+
+                                        <Border Grid.Row="1" Background="Transparent" Padding="0">
+                                            <TreeView x:Name="WorkspaceTreeView"
+                                                      Classes="workspaceExplorer"
+                                                      ItemsSource="{Binding WorkspaceExplorer.Items}"
+                                                      SelectedItem="{Binding WorkspaceExplorer.SelectedItem}">
+                                                <TreeView.ItemTemplate>
+                                                    <TreeDataTemplate x:CompileBindings="False" ItemsSource="{Binding Children}">
+                                                        <Grid ColumnDefinitions="Auto,*"
+                                                              ColumnSpacing="8"
+                                                              Margin="6,1,8,1">
+                                                            <TextBlock Grid.Column="0" Classes="explorerGlyph" Text="{Binding Icon}" />
+                                                            <TextBlock Grid.Column="1" Classes="explorerLabel" Text="{Binding DisplayName}" />
+                                                        </Grid>
+                                                    </TreeDataTemplate>
+                                                </TreeView.ItemTemplate>
+                                            </TreeView>
+                                        </Border>
+                                    </Grid>
+                                </desktop:WorkbenchWindow.WindowContent>
+                            </desktop:WorkbenchWindow>
+                        </desktop:WorkbenchSplitLayout.First>
+
+                        <desktop:WorkbenchSplitLayout.Second>
+                            <desktop:WorkbenchWindow Title="文件元数据">
+                                <desktop:WorkbenchWindow.WindowContent>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <StackPanel Margin="12" Spacing="8">
+                                            <TextBlock x:Name="WorkspaceSelectionTitleText"
+                                                       Classes="cardTitle"
+                                                       Text="{Binding WorkspaceExplorer.SelectionTitle}" />
+                                            <TextBlock x:Name="WorkspaceSelectionMetaText"
+                                                       Classes="secondaryText"
+                                                       TextWrapping="Wrap"
+                                                       Text="{Binding WorkspaceExplorer.SelectionMeta}" />
+                                            <TextBlock x:Name="WorkspaceSelectionPathText"
+                                                       Classes="mutedText"
+                                                       TextWrapping="Wrap"
+                                                       Text="{Binding WorkspaceExplorer.SelectionPath}" />
+                                            <TextBlock x:Name="WorkspaceSelectionBadgeText"
+                                                       Classes="tertiaryText"
+                                                       TextWrapping="Wrap"
+                                                       Text="{Binding WorkspaceExplorer.SelectionBadge}" />
+                                            <TextBlock x:Name="WorkspaceSelectionActionText"
+                                                       Classes="tertiaryText"
+                                                       TextWrapping="Wrap"
+                                                       Text="{Binding WorkspaceExplorer.SelectionAction}" />
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </desktop:WorkbenchWindow.WindowContent>
+                            </desktop:WorkbenchWindow>
+                        </desktop:WorkbenchSplitLayout.Second>
+                    </desktop:WorkbenchSplitLayout>
+                </desktop:WorkbenchSplitLayout.First>
+
+                <desktop:WorkbenchSplitLayout.Second>
+                    <desktop:WorkbenchSplitLayout Orientation="Vertical"
+                                                  PrimaryLength="*">
+                        <desktop:WorkbenchSplitLayout.First>
+                            <desktop:WorkbenchSplitLayout Orientation="Horizontal"
+                                                          PrimaryLength="*">
+                                <desktop:WorkbenchSplitLayout.First>
+                                    <desktop:WorkbenchWindow Title="知识工作台">
+                                        <desktop:WorkbenchWindow.WindowContent>
+                                            <desktop:WorkbenchTabLayout x:Name="WorkspaceTabs" SelectedIndex="1">
+                                                <desktop:WorkbenchTab Title="记忆">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                        <StackPanel Margin="16" Spacing="14">
+                                                            <StackPanel IsVisible="False">
+                                                                <TextBlock x:Name="OverviewModeText" Text="{Binding OverviewModeText}" />
+                                                                <TextBlock x:Name="StatusText" Text="{Binding StatusText}" />
+                                                                <TextBlock x:Name="OverviewPrimaryActionText" Text="{Binding OverviewPrimaryActionText}" />
+                                                                <TextBlock x:Name="OverviewWorkflowText" Text="{Binding OverviewWorkflowText}" />
+                                                                <TextBlock x:Name="OverviewRecommendationText" Text="{Binding OverviewRecommendationText}" />
+                                                                <TextBlock x:Name="ConnectionStatusText" Text="{Binding ConnectionStatusText}" />
+                                                                <TextBlock x:Name="ConnectionRoleText" Text="{Binding ConnectionRoleText}" />
+                                                                <TextBlock x:Name="ConnectionIpText" Text="{Binding ConnectionIpText}" />
+                                                                <TextBlock x:Name="ConnectionServerText" Text="{Binding ConnectionServerText}" />
+                                                                <TextBlock x:Name="ConnectionNoteText" Text="{Binding ConnectionNoteText}" />
+                                                                <TextBlock x:Name="ConnectionRecommendationText" Text="{Binding ConnectionRecommendationText}" />
+                                                            </StackPanel>
+
+                                                            <Border Classes="innerSurface" Padding="16">
+                                                                <StackPanel Spacing="8">
+                                                                    <TextBlock Classes="sectionTitle" Text="Short-Term Memory" />
+                                                                    <TextBlock x:Name="MemoryAccessText"
+                                                                               Classes="mutedText"
+                                                                               TextWrapping="Wrap"
+                                                                               Text="Memory access pending." />
+                                                                </StackPanel>
+                                                            </Border>
+
+                                                            <Grid ColumnDefinitions="360,*" ColumnSpacing="12">
+                                                                <Border Classes="innerSurface" Padding="16">
+                                                                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
+                                                                        <WrapPanel Orientation="Horizontal">
+                                                                            <Button Classes="primaryAction"
+                                                                                    Content="Refresh Memory"
+                                                                                    Command="{Binding Memory.RefreshMemoriesCommand}" CommandParameter="{Binding ProjectRoot}" />
+                                                                        </WrapPanel>
+
+                                                                        <Grid Grid.Row="1" ColumnDefinitions="Auto,120,Auto,*,Auto,120" ColumnSpacing="8">
+                                                                            <TextBlock Grid.Column="0" Classes="formLabel" VerticalAlignment="Center" Text="Type" />
+                                                                            <ComboBox Grid.Column="1" x:Name="MemoryTypeBox" SelectedIndex="{Binding Memory.MemoryTypeSelectedIndex}">
+                                                                                <ComboBoxItem Content="Structural" />
+                                                                                <ComboBoxItem Content="Semantic" />
+                                                                                <ComboBoxItem Content="Episodic" />
+                                                                                <ComboBoxItem Content="Working" />
+                                                                                <ComboBoxItem Content="Procedural" />
+                                                                            </ComboBox>
+                                                                            <TextBlock Grid.Column="2" Classes="formLabel" VerticalAlignment="Center" Text="Tags" />
+                                                                            <TextBox Grid.Column="3" x:Name="MemoryTagsBox" Text="{Binding Memory.MemoryTags}" Watermark="#desktop-note,#decision" />
+                                                                            <TextBlock Grid.Column="4" Classes="formLabel" VerticalAlignment="Center" Text="Discipline" />
+                                                                            <TextBox Grid.Column="5" x:Name="MemoryDisciplineBox" Text="{Binding Memory.MemoryDiscipline}" />
+                                                                        </Grid>
+
+                                                                        <TextBox Grid.Row="2"
+                                                                                 x:Name="MemoryContentBox"
+                                                                                 AcceptsReturn="True"
+                                                                                 Height="96"
+                                                                                 Text="{Binding Memory.MemoryContent}"
+                                                                                 TextWrapping="Wrap"
+                                                                                 Watermark="Write a short-term memory..." />
+
+                                                                        <WrapPanel Grid.Row="3" Orientation="Horizontal">
+                                                                            <Button x:Name="AddMemoryButton" Classes="primaryAction" Content="Remember" Command="{Binding Memory.AddMemoryCommand}" CommandParameter="{Binding ProjectRoot}" />
+                                                                        </WrapPanel>
+
+                                                                        <TextBlock Grid.Row="4" x:Name="MemoryStatusText" Classes="mutedText" TextWrapping="Wrap" Text="{Binding Memory.MemoryStatusText}" />
+                                                                    </Grid>
+                                                                </Border>
+
+                                                                <Border Grid.Column="1" Classes="innerSurface" Padding="16">
+                                                                    <StackPanel Spacing="8">
+                                                                        <TextBlock Classes="sectionTitle" Text="Recent Memory" />
+                                                                        <ListBox x:Name="MemoryListBox" ItemsSource="{Binding Memory.Memories}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </desktop:WorkbenchTab>
+                                                <desktop:WorkbenchTab Title="知识拓扑图">
+                                                    <Grid Margin="16" RowDefinitions="Auto,Auto,*" RowSpacing="12">
+                                                        <StackPanel Spacing="8">
+                                                            <WrapPanel Orientation="Horizontal">
+                                                                <Button Classes="primaryAction"
+                                                                        Content="Refresh Graph"
+                                                                        Command="{Binding Topology.RefreshCommand}"
+                                                                        CommandParameter="{Binding ProjectRoot}"
+                                                                        Margin="0,0,8,0" />
+                                                                <Button Content="Root View"
+                                                                        Command="{Binding Topology.NavigateRootCommand}"
+                                                                        Margin="0,0,12,0" />
+                                                                <CheckBox Classes="filterChip"
+                                                                          x:Name="TopologyDependencyFilter"
+                                                                          IsChecked="{Binding Topology.ShowDependency}"
+                                                                          Content="Dependency"
+                                                                          Margin="0,0,8,0"
+                                                                          
+                                                                           />
+                                                                <CheckBox Classes="filterChip"
+                                                                          x:Name="TopologyCompositionFilter"
+                                                                          IsChecked="{Binding Topology.ShowComposition}"
+                                                                          Content="Composition"
+                                                                          Margin="0,0,8,0"
+                                                                          
+                                                                           />
+                                                                <CheckBox Classes="filterChip"
+                                                                          x:Name="TopologyAggregationFilter"
+                                                                          IsChecked="{Binding Topology.ShowAggregation}"
+                                                                          Content="Aggregation"
+                                                                          Margin="0,0,8,0"
+                                                                          
+                                                                           />
+                                                                <CheckBox Classes="filterChip"
+                                                                          x:Name="TopologyParentChildFilter"
+                                                                          IsChecked="{Binding Topology.ShowParentChild}"
+                                                                          Content="Parent / Child"
+                                                                          Margin="0,0,8,0"
+                                                                          
+                                                                           />
+                                                                <CheckBox Classes="filterChip"
+                                                                          x:Name="TopologyCollaborationFilter"
+                                                                          IsChecked="{Binding Topology.ShowCollaboration}"
+                                                                          Content="Collaboration"
+                                                                          
+                                                                           />
+                                                            </WrapPanel>
+                                                            <TextBlock x:Name="TopologySummaryText"
+                                                                       Classes="mutedText"
+                                                                       TextWrapping="Wrap"
+                                                                       Text="{Binding Topology.TopologySummaryText}" />
+                                                            <TextBlock x:Name="TopologyScopeText"
+                                                                       Classes="secondaryText"
+                                                                       TextWrapping="Wrap"
+                                                                       Text="{Binding Topology.TopologyScopeText}" />
+                                                        </StackPanel>
+
+                                                        <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                                                            <Border Classes="metricSurface" Padding="12">
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Classes="mutedText" Text="Nodes" />
+                                                                    <TextBlock x:Name="StatModulesText" Classes="metricValue" Text="{Binding Topology.StatModulesText}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <Border Grid.Column="1" Classes="metricSurface" Padding="12">
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Classes="mutedText" Text="Dependencies" />
+                                                                    <TextBlock x:Name="StatDependenciesText" Classes="metricValue" Text="{Binding Topology.StatDependenciesText}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <Border Grid.Column="2" Classes="metricSurface" Padding="12">
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Classes="mutedText" Text="Collaboration" />
+                                                                    <TextBlock x:Name="StatCollaborationText" Classes="metricValue" Text="{Binding Topology.StatCollaborationText}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                            <Border Grid.Column="3" Classes="metricSurface" Padding="12">
+                                                                <StackPanel Spacing="4">
+                                                                    <TextBlock Classes="mutedText" Text="Disciplines" />
+                                                                    <TextBlock x:Name="StatDisciplinesText" Classes="metricValue" Text="{Binding Topology.StatDisciplinesText}" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </Grid>
+
+                                                        <Grid Grid.Row="2" ColumnDefinitions="2.2*,1.1*" ColumnSpacing="12">
+                                                            <Border Classes="graphSurface" Padding="10">
+                                                                <desktop:TopologyGraphControl x:Name="TopologyGraph" />
+                                                            </Border>
+
+                                                            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                                                                <StackPanel Spacing="12">
+                                                                    <Border Classes="innerSurface" Padding="14">
+                                                                        <StackPanel Spacing="6">
+                                                                            <TextBlock x:Name="TopologyDetailTitle"
+                                                                                       Classes="cardTitle"
+                                                                                       FontSize="18"
+                                                                                       Text="{Binding Topology.DetailTitle}" />
+                                                                            <TextBlock x:Name="TopologyDetailMeta"
+                                                                                       Classes="mutedText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.DetailMeta}" />
+                                                                            <TextBlock x:Name="TopologyDetailSummary"
+                                                                                       Classes="secondaryText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.DetailSummary}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+
+                                                                    <Border Classes="innerSurface" Padding="14">
+                                                                        <StackPanel Spacing="8">
+                                                                            <TextBlock Classes="sectionTitle" Text="Module Editor" />
+                                                                            <TextBlock x:Name="TopologyEditHintText"
+                                                                                       Classes="mutedText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.EditHintText}" />
+                                                                            <TextBlock x:Name="TopologyEditParallelHintText"
+                                                                                       Classes="tertiaryText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.EditParallelHintText}" />
+                                                                            <TextBlock Classes="formLabel" Text="Discipline" />
+                                                                            <ComboBox x:Name="TopologyEditDisciplineBox" ItemsSource="{Binding Topology.DisciplineOptions}" SelectedItem="{Binding Topology.EditDiscipline}" />
+                                                                            <TextBlock Classes="formLabel" Text="Layer" />
+                                                                            <TextBox x:Name="TopologyEditLayerBox" Text="{Binding Topology.EditLayer}" />
+                                                                            <TextBlock Classes="formLabel" Text="Name" />
+                                                                            <TextBox x:Name="TopologyEditNameBox" Text="{Binding Topology.EditName}" />
+                                                                            <TextBlock Classes="formLabel" Text="Path" />
+                                                                            <TextBox x:Name="TopologyEditPathBox" Text="{Binding Topology.EditPath}" />
+                                                                            <TextBlock Classes="formLabel" Text="Parent Module" />
+                                                                            <ComboBox x:Name="TopologyEditParentBox" ItemsSource="{Binding Topology.ParentOptions}" SelectedItem="{Binding Topology.SelectedParent}" />
+                                                                            <TextBlock Classes="formLabel" Text="Managed Paths" />
+                                                                            <TextBox x:Name="TopologyEditManagedPathsBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditManagedPaths}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Maintainer" />
+                                                                            <TextBox x:Name="TopologyEditMaintainerBox" Text="{Binding Topology.EditMaintainer}" />
+                                                                            <TextBlock Classes="formLabel" Text="Summary" />
+                                                                            <TextBox x:Name="TopologyEditSummaryBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditSummary}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Boundary" />
+                                                                            <ComboBox x:Name="TopologyEditBoundaryBox" SelectedIndex="0">
+                                                                                <ComboBoxItem Content="" />
+                                                                                <ComboBoxItem Content="open" />
+                                                                                <ComboBoxItem Content="semi-open" />
+                                                                                <ComboBoxItem Content="closed" />
+                                                                            </ComboBox>
+                                                                            <TextBlock Classes="formLabel" Text="Dependencies" />
+                                                                            <TextBox x:Name="TopologyEditDependenciesBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditDependencies}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Public API" />
+                                                                            <TextBox x:Name="TopologyEditPublicApiBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditPublicApi}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Constraints" />
+                                                                            <TextBox x:Name="TopologyEditConstraintsBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditConstraints}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Workflow" />
+                                                                            <TextBox x:Name="TopologyEditWorkflowBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditWorkflow}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Rules" />
+                                                                            <TextBox x:Name="TopologyEditRulesBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditRules}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Prohibitions" />
+                                                                            <TextBox x:Name="TopologyEditProhibitionsBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="56"
+                                                                                     Text="{Binding Topology.EditProhibitions}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Metadata JSON" />
+                                                                            <TextBox x:Name="TopologyEditMetadataBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="88"
+                                                                                     Text="{Binding Topology.EditMetadata}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="MCP Preview" />
+                                                                            <TextBox x:Name="TopologyMcpPreviewBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     IsReadOnly="True"
+                                                                                     Height="138"
+                                                                                     Text="{Binding Topology.McpPreview}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <WrapPanel Orientation="Horizontal">
+                                                                                <Button x:Name="TopologySaveModuleButton"
+                                                                                        Classes="primaryAction"
+                                                                                        Content="Save Module"
+                                                                                        Command="{Binding Topology.SaveModuleCommand}"
+                                                                                        Margin="0,0,8,0" />
+                                                                                <Button x:Name="TopologyReloadLatestModuleButton"
+                                                                                        Content="Reload Latest"
+                                                                                        Command="{Binding Topology.ReloadModuleCommand}"
+                                                                                        Margin="0,0,8,0" />
+                                                                                <Button Content="Reset"
+                                                                                        
+                                                                                        Margin="0,0,8,0" />
+                                                                                <Button x:Name="CopyTopologyMcpPreviewButton"
+                                                                                        Content="Copy MCP"
+                                                                                        Command="{Binding Topology.CopyMcpPreviewCommand}" />
+                                                                            </WrapPanel>
+                                                                            <TextBlock x:Name="TopologyEditStatusText"
+                                                                                       Classes="mutedText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.EditStatusText}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+
+                                                                    <Border Classes="innerSurface" Padding="14">
+                                                                        <StackPanel Spacing="8">
+                                                                            <TextBlock Classes="sectionTitle" Text="Module Knowledge" />
+                                                                            <TextBlock x:Name="TopologyKnowledgeHintText"
+                                                                                       Classes="mutedText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.KnowledgeHintText}" />
+                                                                            <TextBlock x:Name="TopologyKnowledgeParallelHintText"
+                                                                                       Classes="tertiaryText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.KnowledgeParallelHintText}" />
+                                                                            <TextBlock Classes="formLabel" Text="Identity" />
+                                                                            <TextBox x:Name="TopologyKnowledgeIdentityBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="80"
+                                                                                     Text="{Binding Topology.KnowledgeIdentity}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Lessons" />
+                                                                            <TextBox x:Name="TopologyKnowledgeLessonsBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeLessons}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Active Tasks" />
+                                                                            <TextBox x:Name="TopologyKnowledgeActiveTasksBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeActiveTasks}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <TextBlock Classes="formLabel" Text="Facts" />
+                                                                            <TextBox x:Name="TopologyKnowledgeFactsBox"
+                                                                                     AcceptsReturn="True"
+                                                                                     Height="72"
+                                                                                     Text="{Binding Topology.KnowledgeFacts}"
+                                                                                     TextWrapping="Wrap" />
+                                                                            <WrapPanel Orientation="Horizontal">
+                                                                                <Button x:Name="TopologySaveKnowledgeButton"
+                                                                                        Classes="primaryAction"
+                                                                                        Content="Save Knowledge"
+                                                                                        Command="{Binding Topology.SaveKnowledgeCommand}"
+                                                                                        Margin="0,0,8,0" />
+                                                                                <Button x:Name="TopologyReloadKnowledgeButton"
+                                                                                        Content="Reload Latest"
+                                                                                        Command="{Binding Topology.ReloadKnowledgeCommand}"
+                                                                                        Margin="0,0,8,0" />
+                                                                                <Button x:Name="TopologyResetKnowledgeButton"
+                                                                                        Content="Reset Form"
+                                                                                        Command="{Binding Topology.ResetKnowledgeCommand}" />
+                                                                            </WrapPanel>
+                                                                            <TextBlock x:Name="TopologyKnowledgeStatusText"
+                                                                                       Classes="mutedText"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Text="{Binding Topology.KnowledgeStatusText}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+
+                                                                    <Border Classes="innerSurface" Padding="14">
+                                                                        <StackPanel Spacing="8">
+                                                                            <TextBlock Classes="sectionTitle" Text="Visible Nodes" />
+                                                                            <ListBox x:Name="TopologyListBox"
+                                                                                     MaxHeight="220"
+                                                                                     ItemsSource="{Binding Topology.VisibleNodeLines}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+
+                                                                    <Border Classes="innerSurface" Padding="14">
+                                                                        <StackPanel Spacing="8">
+                                                                            <TextBlock Classes="sectionTitle" Text="Relations" />
+                                                                            <ListBox x:Name="TopologyRelationListBox" MaxHeight="220" ItemsSource="{Binding Topology.RelationLines}" />
+                                                                        </StackPanel>
+                                                                    </Border>
+                                                                </StackPanel>
+                                                            </ScrollViewer>
+                                                        </Grid>
+                                                    </Grid>
+                                                </desktop:WorkbenchTab>
+                                                <desktop:WorkbenchTab Title="MCP 工具">
+                                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                        <StackPanel Margin="16" Spacing="12">
+                                                            <Border Classes="innerSurface" Padding="16">
+                                                                <StackPanel Spacing="8">
+                                                                    <TextBlock Classes="sectionTitle" Text="External Agent Access" />
+                                                                    <TextBlock x:Name="ToolingHubText"
+                                                                               Classes="secondaryText"
+                                                                               TextWrapping="Wrap"
+                                                                               Text="{Binding Tooling.ToolingHubText}" />
+                                                                </StackPanel>
+                                                            </Border>
+
+                                                            <WrapPanel Orientation="Horizontal">
+                                                                <Button Classes="primaryAction"
+                                                                        Content="Install Cursor"
+                                                                        Command="{Binding Tooling.InstallToolingCommand}"
+                                                                        CommandParameter="cursor"
+                                                                        Margin="0,0,8,0" />
+                                                                <Button Content="Install Codex"
+                                                                        Command="{Binding Tooling.InstallToolingCommand}"
+                                                                        CommandParameter="codex"
+                                                                        Margin="0,0,8,0" />
+                                                                <Button Content="Refresh"
+                                                                        Command="{Binding Tooling.RefreshToolingStatusCommand}"
+                                                                        CommandParameter="{Binding ProjectRoot}"
+                                                                        Margin="0,0,8,0" />
+                                                                <Button Content="Refresh MCP"
+                                                                        Command="{Binding Tooling.RefreshMcpToolsCommand}" />
+                                                            </WrapPanel>
+
+                                                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                                                                <Border Classes="innerSurface" Padding="16">
+                                                                    <StackPanel Spacing="8">
+                                                                        <TextBlock x:Name="CursorStateText" Classes="cardTitle" Text="{Binding Tooling.CursorStateText}" />
+                                                                        <TextBlock x:Name="CodexStateText" Classes="cardTitle" Text="{Binding Tooling.CodexStateText}" />
+                                                                        <TextBlock x:Name="ToolingStatusText"
+                                                                                   Classes="mutedText"
+                                                                                   TextWrapping="Wrap"
+                                                                                   Text="{Binding Tooling.ToolingStatusText}" />
+                                                                    </StackPanel>
+                                                                </Border>
+
+                                                                <Border Grid.Column="1" Classes="innerSurface" Padding="16">
+                                                                    <StackPanel Spacing="8">
+                                                                        <TextBlock Classes="sectionTitle" Text="MCP Catalog" />
+                                                                        <TextBlock x:Name="McpSummaryText"
+                                                                                   Classes="mutedText"
+                                                                                   TextWrapping="Wrap"
+                                                                                   Text="{Binding Tooling.McpSummaryText}" />
+                                                                        <ListBox x:Name="McpToolListBox" MaxHeight="280" ItemsSource="{Binding Tooling.McpTools}" />
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </Grid>
+                                                        </StackPanel>
+                                                    </ScrollViewer>
+                                                </desktop:WorkbenchTab>
+                                            </desktop:WorkbenchTabLayout>
+                                        </desktop:WorkbenchWindow.WindowContent>
+                                    </desktop:WorkbenchWindow>
+                                </desktop:WorkbenchSplitLayout.First>
+
+                                <desktop:WorkbenchSplitLayout.Second>
+                                    <desktop:WorkbenchWindow Title="Agent">
+                                        <desktop:WorkbenchWindow.WindowContent>
+                                            <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+                                                <StackPanel IsVisible="False">
+                                                    <TextBlock x:Name="ChatSubtitleText" />
+                                                </StackPanel>
+
+                                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="12,12,12,0">
+                                                    <TextBlock Classes="sectionTitle"
+                                                               VerticalAlignment="Center"
+                                                               Text="Agent Session" />
+                                                    <Button Grid.Column="1"
+                                                            x:Name="ChatSessionsToggleButton"
+                                                            Content="Sessions"
+                                                            Command="{Binding Chat.ToggleChatSessionsCommand}" />
+                                                    <Button Grid.Column="2"
+                                                            x:Name="ChatNewButton"
+                                                            Classes="primaryAction"
+                                                            Content="New"
+                                                            Command="{Binding Chat.StartNewChatCommand}" />
+                                                </Grid>
+
+                                                <Border Grid.Row="1" Margin="12,12,12,0" Classes="innerSurface" Padding="10">
+                                                    <Grid ColumnDefinitions="*">
+                                                        <ComboBox x:Name="ChatProviderBox"
+                                                                  ItemsSource="{Binding Chat.ChatProviders}"
+                                                                  SelectedItem="{Binding Chat.SelectedChatProvider}" />
+                                                    </Grid>
+                                                </Border>
+
+                                                <Border Grid.Row="2" Margin="12" Classes="innerSurface" Padding="8">
+                                                    <Grid>
+                                                        <ScrollViewer x:Name="ChatMessagesScrollViewer"
+                                                                      VerticalScrollBarVisibility="Auto"
+                                                                      IsVisible="{Binding Chat.IsChatMessagesVisible}">
+                                                            <ItemsControl ItemsSource="{Binding Chat.ChatMessages}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:CompileBindings="False">
+                                                                        <Border Classes="innerSurface" Padding="10" Margin="0,0,0,8">
+                                                                            <StackPanel Spacing="6">
+                                                                                <TextBlock Classes="tertiaryText" Text="{Binding Role}" />
+                                                                                <TextBlock TextWrapping="Wrap" Text="{Binding Content}" />
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                        <ScrollViewer x:Name="ChatSessionsScrollViewer"
+                                                                      VerticalScrollBarVisibility="Auto"
+                                                                      IsVisible="{Binding Chat.IsChatSessionsVisible}">
+                                                            <ItemsControl ItemsSource="{Binding Chat.ChatSessions}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate x:CompileBindings="False">
+                                                                        <Button Classes="quietButton"
+                                                                                HorizontalContentAlignment="Left"
+                                                                                Padding="10"
+                                                                                Margin="0,0,0,8"
+                                                                                Command="{Binding #MainWindowRoot.DataContext.Chat.LoadChatSessionCommand}"
+                                                                                CommandParameter="{Binding Id}">
+                                                                            <StackPanel Spacing="4">
+                                                                                <TextBlock Classes="cardTitle" Text="{Binding Title}" />
+                                                                                <TextBlock Classes="tertiaryText" Text="{Binding Mode}" />
+                                                                                <TextBlock Classes="mutedText" Text="{Binding UpdatedAtLabel}" />
+                                                                            </StackPanel>
+                                                                        </Button>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                        </ScrollViewer>
+                                                    </Grid>
+                                                </Border>
+
+                                                <TextBlock Grid.Row="3"
+                                                           x:Name="ChatStatusText"
+                                                           Margin="12,0"
+                                                           Classes="mutedText"
+                                                           TextWrapping="Wrap"
+                                                           Text="{Binding Chat.ChatStatusText}" />
+
+                                                <Grid Grid.Row="4" Margin="12" RowDefinitions="Auto,Auto" RowSpacing="10">
+                                                    <TextBox x:Name="ChatInputBox"
+                                                             AcceptsReturn="True"
+                                                             Height="92"
+                                                             Text="{Binding Chat.ChatInputBoxText}"
+                                                             TextWrapping="Wrap"
+                                                             Watermark="Type a message..."
+                                                              />
+                                                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <Button x:Name="ChatModeAskButton"
+                                                                    Classes="chatModeButton"
+                                                                    Content="Ask"
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="ask" />
+                                                            <Button x:Name="ChatModePlanButton"
+                                                                    Classes="chatModeButton"
+                                                                    Content="Plan"
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="plan" />
+                                                            <Button x:Name="ChatModeAgentButton"
+                                                                    Classes="chatModeButton"
+                                                                    Content="Agent"
+                                                                    Command="{Binding Chat.SwitchChatModeCommand}" CommandParameter="agent" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1"
+                                                                x:Name="ChatStopButton"
+                                                                Content="Stop"
+                                                                Command="{Binding Chat.StopChatCommand}"
+                                                                IsVisible="{Binding Chat.IsChatStreaming}" />
+                                                        <Button Grid.Column="2"
+                                                                x:Name="ChatSendButton"
+                                                                Classes="primaryAction"
+                                                                Content="Send"
+                                                                Command="{Binding Chat.SendChatMessageCommand}" />
+                                                    </Grid>
+                                                </Grid>
+                                            </Grid>
+                                        </desktop:WorkbenchWindow.WindowContent>
+                                    </desktop:WorkbenchWindow>
+                                </desktop:WorkbenchSplitLayout.Second>
+                            </desktop:WorkbenchSplitLayout>
+                        </desktop:WorkbenchSplitLayout.First>
+
+                        <desktop:WorkbenchSplitLayout.Second>
+                            <desktop:WorkbenchWindow Title="日志">
+                                <desktop:WorkbenchWindow.WindowContent>
+                                    <Grid RowDefinitions="Auto,*" Margin="12">
+                                        <StackPanel IsVisible="False">
+                                            <TextBlock x:Name="LogFileText" Text="No log file loaded." />
+                                        </StackPanel>
+                                        <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="8">
+                                            <Grid ColumnDefinitions="*">
+                                                <TextBlock x:Name="LogStatusText"
+                                                           Classes="tertiaryText"
+                                                           TextWrapping="Wrap"
+                                                           Text="Load a workspace to view runtime logs." />
+                                            </Grid>
+                                            <TextBox Grid.Row="1"
+                                                     x:Name="LogTailBox"
+                                                     Classes="logViewer"
+                                                     IsReadOnly="True"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="NoWrap"
+                                                     VerticalContentAlignment="Top"
+                                                     HorizontalContentAlignment="Left" />
+                                        </Grid>
+                                    </Grid>
+                                </desktop:WorkbenchWindow.WindowContent>
+                            </desktop:WorkbenchWindow>
+                        </desktop:WorkbenchSplitLayout.Second>
+                    </desktop:WorkbenchSplitLayout>
+                </desktop:WorkbenchSplitLayout.Second>
+            </desktop:WorkbenchSplitLayout>
+        </Grid>
+    </Grid>
+</Window>

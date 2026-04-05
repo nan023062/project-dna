@@ -12,6 +12,9 @@ Thumbs.db
 bin/
 obj/
 publish/
+/src/publish/
+/src/.tmp/
+/.temp/
 
 # Node
 node_modules/

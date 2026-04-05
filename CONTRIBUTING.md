@@ -1,4 +1,4 @@
-# Contributing to Project DNA
+# Contributing to Agentic OS
 
 Thank you for your interest in contributing!
 
@@ -23,9 +23,8 @@ Open an issue with:
 ```bash
 # Prerequisites: .NET 10 SDK
 
-cd src
-dotnet build
-dotnet run --project Server -- --db /path/to/knowledge-store
+dotnet build src/App/App.csproj
+dotnet run --no-launch-profile --project src/App
 ```
 
 ## License

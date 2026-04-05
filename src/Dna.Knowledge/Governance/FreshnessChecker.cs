@@ -10,15 +10,13 @@ namespace Dna.Knowledge.Governance;
 internal class FreshnessChecker
 {
     private readonly MemoryStore _store;
-    private readonly ILogger<FreshnessChecker> _logger;
 
     public FreshnessChecker(MemoryStore store, ILogger<FreshnessChecker> logger)
     {
         _store = store;
-        _logger = logger;
     }
 
-    public int CheckAll(TopologySnapshot topology)
+    public int CheckAll()
     {
         return _store.DecayStaleMemories();
     }

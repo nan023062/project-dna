@@ -1,0 +1,13 @@
+{
+  "app": {
+    "serverIp": "127.0.0.1",
+    "port": 5052,
+    "serverName": "agentic-os",
+    "hook": {
+      "enabled": true,
+      "replaceExisting": true,
+      "ruleFileName": "agentic-os-mcp-hook.mdc",
+      "agentFileName": "agentic-os-mcp-hooks.md"
+    }
+  }
+}

@@ -9,44 +9,46 @@ namespace Dna.Knowledge;
 /// </summary>
 public sealed class GovernanceEngine : IGovernanceEngine
 {
-    private readonly GraphEngine _graphEngine;
+    private readonly ITopoGraphApplicationService _topology;
     private readonly FreshnessChecker _freshnessChecker;
     private readonly MemoryMaintainer _memoryMaintainer;
 
-    internal GovernanceEngine(DnaServiceHolder holder, GraphEngine graphEngine, ILoggerFactory loggerFactory)
+    public GovernanceEngine(
+        MemoryStore memoryStore,
+        ITopoGraphStore topoGraphStore,
+        ITopoGraphApplicationService topology,
+        ILoggerFactory loggerFactory)
     {
-        _graphEngine = graphEngine;
-        _freshnessChecker = new FreshnessChecker(holder.Store, loggerFactory.CreateLogger<FreshnessChecker>());
-        _memoryMaintainer = new MemoryMaintainer(holder.Store, loggerFactory.CreateLogger<MemoryMaintainer>());
+        _topology = topology;
+        _freshnessChecker = new FreshnessChecker(memoryStore, loggerFactory.CreateLogger<FreshnessChecker>());
+        _memoryMaintainer = new MemoryMaintainer(memoryStore, topoGraphStore, topology, loggerFactory.CreateLogger<MemoryMaintainer>());
     }
 
     public GovernanceReport ValidateArchitecture()
-        => _graphEngine.ValidateArchitectureInternal();
-
-    public int CheckFreshness()
     {
-        var topology = _graphEngine.GetTopology();
-        return _freshnessChecker.CheckAll(topology);
+        _topology.BuildTopology();
+        return _topology.ValidateArchitecture();
     }
 
-    public int DetectMemoryConflicts()
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.DetectConflicts(topology);
-    }
+    public int CheckFreshness() => _freshnessChecker.CheckAll();
+
+    public int DetectMemoryConflicts() => _memoryMaintainer.DetectConflicts();
 
     public int ArchiveStaleMemories(TimeSpan staleThreshold)
         => _memoryMaintainer.ArchiveStaleMemories(staleThreshold);
 
+    public Task<IReadOnlyList<GovernanceActiveModule>> GetActiveModulesAsync(TimeSpan activeWindow, int maxModules = 50)
+        => _memoryMaintainer.GetActiveModulesAsync(activeWindow, maxModules);
+
+    public Task<GovernanceScanResult> ScanAsync(GovernanceScanRequest request)
+        => _memoryMaintainer.ScanAsync(request);
+
+    public Task<KnowledgeEvolutionReport> EvolveKnowledgeAsync(string? nodeIdOrName = null, int maxSuggestions = 50)
+        => _memoryMaintainer.EvolveKnowledgeAsync(nodeIdOrName, maxSuggestions);
+
     public Task<KnowledgeCondenseResult> CondenseNodeKnowledgeAsync(string nodeIdOrName, int maxSourceMemories = 200)
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.CondenseNodeKnowledgeAsync(topology, nodeIdOrName, maxSourceMemories);
-    }
+        => _memoryMaintainer.CondenseNodeKnowledgeAsync(nodeIdOrName, maxSourceMemories);
 
     public Task<List<KnowledgeCondenseResult>> CondenseAllNodesAsync(int maxSourceMemories = 200)
-    {
-        var topology = _graphEngine.GetTopology();
-        return _memoryMaintainer.CondenseAllNodesAsync(topology, maxSourceMemories);
-    }
+        => _memoryMaintainer.CondenseAllNodesAsync(maxSourceMemories);
 }

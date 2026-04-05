@@ -1,5 +1,5 @@
 using Dna.Knowledge;
-using Dna.Knowledge.Models;
+using Dna.Knowledge.FileProtocol;
 using Dna.Memory.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +11,7 @@ namespace Dna.Memory.Store;
 /// 记忆存储 — 纯 SQLite 存储引擎。
 /// memory.db 存储索引/元数据/向量/FTS，记忆内容不再落盘为 JSON 文件。
 /// </summary>
-internal partial class MemoryStore : IDisposable
+public partial class MemoryStore : IDisposable
 {
     private readonly ILogger<MemoryStore> _logger;
     private SqliteConnection? _db;
@@ -34,8 +34,7 @@ internal partial class MemoryStore : IDisposable
     public void Reload()
     {
         if (!_initialized) return;
-        LoadAllManifests();
-        _logger.LogInformation("MemoryStore 已重载配置");
+        _logger.LogInformation("MemoryStore 已重载");
     }
 
     public void Initialize(string storePath)
@@ -43,26 +42,10 @@ internal partial class MemoryStore : IDisposable
         if (_initialized && _storePath == storePath) return;
 
         _storePath = storePath;
-        _memoryDir = Path.Combine(storePath, "memory");
+        _memoryDir = storePath;
         Directory.CreateDirectory(_memoryDir);
 
-        var dbPath = Path.Combine(storePath, "memory.db");
-        var legacyRootIndexDbPath = Path.Combine(storePath, "index.db");
-        var legacyMemoryDirIndexDbPath = Path.Combine(_memoryDir, "index.db");
-
-        if (!File.Exists(dbPath))
-        {
-            if (File.Exists(legacyRootIndexDbPath))
-            {
-                MoveSqliteDbWithSidecars(legacyRootIndexDbPath, dbPath);
-                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyRootIndexDbPath, dbPath);
-            }
-            else if (File.Exists(legacyMemoryDirIndexDbPath))
-            {
-                MoveSqliteDbWithSidecars(legacyMemoryDirIndexDbPath, dbPath);
-                _logger.LogInformation("已迁移旧记忆库: {Old} -> {New}", legacyMemoryDirIndexDbPath, dbPath);
-            }
-        }
+        var dbPath = Path.Combine(_memoryDir, "memory.db");
 
         _db?.Dispose();
         _db = new SqliteConnection($"Data Source={dbPath}");
@@ -75,26 +58,14 @@ internal partial class MemoryStore : IDisposable
         }
 
         EnsureSchema();
-        LoadAllManifests();
 
         _initialized = true;
+
+        // 文件优先：每次启动都从 .agentic-os/memory/ 明文文件重建，DB 只是缓存
+        RebuildFromFileProtocol();
+
         _logger.LogInformation("MemoryStore 已初始化: db={DbPath}, store={Store}, entries={Count}",
             dbPath, storePath, Count());
-    }
-
-    private static void MoveSqliteDbWithSidecars(string fromDbPath, string toDbPath)
-    {
-        File.Move(fromDbPath, toDbPath, overwrite: true);
-
-        var fromWal = fromDbPath + "-wal";
-        var fromShm = fromDbPath + "-shm";
-        var toWal = toDbPath + "-wal";
-        var toShm = toDbPath + "-shm";
-
-        if (File.Exists(fromWal))
-            File.Move(fromWal, toWal, overwrite: true);
-        if (File.Exists(fromShm))
-            File.Move(fromShm, toShm, overwrite: true);
     }
 
     private void EnsureSchema()
@@ -110,6 +81,7 @@ internal partial class MemoryStore : IDisposable
                 summary         TEXT,
                 importance      REAL DEFAULT 0.5,
                 freshness       TEXT DEFAULT 'Fresh',
+                stage           TEXT NOT NULL DEFAULT 'LongTerm',
                 created_at      TEXT NOT NULL,
                 last_verified_at TEXT,
                 stale_after     TEXT,
@@ -158,9 +130,49 @@ internal partial class MemoryStore : IDisposable
                 relation TEXT NOT NULL,
                 PRIMARY KEY (from_id, to_id, relation)
             );
+            """;
+        cmd.ExecuteNonQuery();
 
+        MigrateSchemaIfNeeded();
+        EnsureIndexes();
+        EnsureFullTextSearchTable();
+    }
+
+    private void MigrateSchemaIfNeeded()
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var pragma = _db!.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA table_info(memory_entries)";
+            using var reader = pragma.ExecuteReader();
+            while (reader.Read())
+                columns.Add(reader.GetString(1));
+        }
+
+        if (!columns.Contains("content"))
+        {
+            _logger.LogInformation("迁移 Schema: memory_entries 表添加 content 列");
+            using var alterContent = _db.CreateCommand();
+            alterContent.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
+            alterContent.ExecuteNonQuery();
+        }
+
+        if (!columns.Contains("stage"))
+        {
+            _logger.LogInformation("迁移 Schema: memory_entries 表添加 stage 列");
+            using var alterStage = _db.CreateCommand();
+            alterStage.CommandText = "ALTER TABLE memory_entries ADD COLUMN stage TEXT NOT NULL DEFAULT 'LongTerm'";
+            alterStage.ExecuteNonQuery();
+        }
+    }
+
+    private void EnsureIndexes()
+    {
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = """
             CREATE INDEX IF NOT EXISTS idx_layer ON memory_entries(layer);
             CREATE INDEX IF NOT EXISTS idx_freshness ON memory_entries(freshness);
+            CREATE INDEX IF NOT EXISTS idx_stage ON memory_entries(stage);
             CREATE INDEX IF NOT EXISTS idx_parent ON memory_entries(parent_id);
             CREATE INDEX IF NOT EXISTS idx_node ON memory_entries(node_id);
             CREATE INDEX IF NOT EXISTS idx_created ON memory_entries(created_at);
@@ -168,69 +180,17 @@ internal partial class MemoryStore : IDisposable
             CREATE INDEX IF NOT EXISTS idx_feat ON memory_features(feature);
             """;
         cmd.ExecuteNonQuery();
+    }
 
-        using var ftsCmd = _db.CreateCommand();
+    private void EnsureFullTextSearchTable()
+    {
+        using var ftsCmd = _db!.CreateCommand();
         ftsCmd.CommandText = """
             CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
                 id, summary, content, tags, tokenize='unicode61'
             );
             """;
         ftsCmd.ExecuteNonQuery();
-
-        MigrateSchemaIfNeeded();
-        MigrateLegacyLayerValuesToNodeType();
-    }
-
-    private void MigrateSchemaIfNeeded()
-    {
-        var hasContent = false;
-        using (var pragma = _db!.CreateCommand())
-        {
-            pragma.CommandText = "PRAGMA table_info(memory_entries)";
-            using var reader = pragma.ExecuteReader();
-            while (reader.Read())
-            {
-                if (string.Equals(reader.GetString(1), "content", StringComparison.OrdinalIgnoreCase))
-                {
-                    hasContent = true;
-                    break;
-                }
-            }
-        }
-
-        if (hasContent) return;
-
-        _logger.LogInformation("迁移 Schema: memory_entries 表添加 content 列");
-        using var alter = _db.CreateCommand();
-        alter.CommandText = "ALTER TABLE memory_entries ADD COLUMN content TEXT NOT NULL DEFAULT ''";
-        alter.ExecuteNonQuery();
-    }
-
-    private void MigrateLegacyLayerValuesToNodeType()
-    {
-        using var cmd = _db!.CreateCommand();
-        cmd.CommandText = """
-            UPDATE memory_entries
-            SET layer = CASE LOWER(layer)
-                WHEN 'projectvision' THEN 'Project'
-                WHEN 'disciplinestandard' THEN 'Department'
-                WHEN 'crossdiscipline' THEN 'Team'
-                WHEN 'featuresystem' THEN 'Technical'
-                WHEN 'implementation' THEN 'Team'
-                WHEN 'root' THEN 'Project'
-                WHEN 'module' THEN 'Technical'
-                WHEN 'group' THEN 'Technical'
-                WHEN 'crosswork' THEN 'Team'
-                ELSE layer
-            END
-            WHERE LOWER(layer) IN (
-                'projectvision','disciplinestandard','crossdiscipline','featuresystem','implementation',
-                'root','module','crosswork'
-            )
-            """;
-        var migrated = cmd.ExecuteNonQuery();
-        if (migrated > 0)
-            _logger.LogInformation("记忆层级字段已迁移到 NodeType 语义，共 {Count} 条", migrated);
     }
 
     // ═══════════════════════════════════════════
@@ -240,7 +200,7 @@ internal partial class MemoryStore : IDisposable
     /// <summary>
     /// 重建搜索索引：重建 FTS 文本索引（不触碰业务数据）。
     /// </summary>
-    public (int imported, int skipped) RebuildIndex(bool rewriteJson = false)
+    public int RebuildIndex()
     {
         if (_db == null) throw new InvalidOperationException("MemoryStore not initialized");
 
@@ -266,26 +226,7 @@ internal partial class MemoryStore : IDisposable
 
         transaction.Commit();
         _logger.LogInformation("已重建 memory_fts 索引：{Count} 条", indexed);
-        return (indexed, 0);
-    }
-
-    /// <summary>
-    /// 兼容旧接口：JSON 增量同步已废弃，改为重建搜索索引。
-    /// </summary>
-    public (int added, int removed, int skipped) SyncFromJson()
-    {
-        var (indexed, _) = RebuildIndex();
-        return (indexed, 0, 0);
-    }
-
-    /// <summary>
-    /// 兼容旧接口：JSON 导出已废弃（当前为纯 DB 存储）。
-    /// </summary>
-    public (int exported, int skipped) ExportToJson()
-    {
-        var total = Count();
-        _logger.LogInformation("ExportToJson 已废弃：当前为纯 DB 存储，entries={Count}", total);
-        return (0, total);
+        return indexed;
     }
 
     private List<string> QueryMultiValues(string table, string column, string memoryId)
@@ -327,6 +268,7 @@ internal partial class MemoryStore : IDisposable
     public MemoryEntry Insert(MemoryEntry entry)
     {
         InsertIntoSqlite(entry);
+        SyncEntryToFileProtocol(entry);
         return entry;
     }
 
@@ -335,6 +277,7 @@ internal partial class MemoryStore : IDisposable
     {
         DeleteFromSqlite(entry.Id);
         InsertIntoSqlite(entry);
+        SyncEntryToFileProtocol(entry);
         return entry;
     }
 
@@ -347,6 +290,7 @@ internal partial class MemoryStore : IDisposable
         if (Convert.ToInt32(check.ExecuteScalar()) == 0) return false;
 
         DeleteFromSqlite(id);
+        DeleteEntryFileFromProtocol(id);
         return true;
     }
 
@@ -357,6 +301,10 @@ internal partial class MemoryStore : IDisposable
         foreach (var entry in entries)
             InsertIntoSqlite(entry);
         transaction.Commit();
+
+        foreach (var entry in entries)
+            SyncEntryToFileProtocol(entry);
+
         return entries;
     }
 
@@ -368,15 +316,59 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@freshness", freshness.ToString());
         cmd.ExecuteNonQuery();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
+        else
+            DeleteEntryFileFromProtocol(id);
     }
 
     public void UpdateTags(string id, List<string> tags)
     {
-        using var cmd = _db!.CreateCommand();
-        cmd.CommandText = "UPDATE memory_entries SET tags = @tags WHERE id = @id";
-        cmd.Parameters.AddWithValue("@id", id);
-        cmd.Parameters.AddWithValue("@tags", string.Join(",", tags));
-        cmd.ExecuteNonQuery();
+        using var transaction = _db!.BeginTransaction();
+
+        using (var deleteCmd = _db.CreateCommand())
+        {
+            deleteCmd.Transaction = transaction;
+            deleteCmd.CommandText = "DELETE FROM memory_tags WHERE memory_id = @id";
+            deleteCmd.Parameters.AddWithValue("@id", id);
+            deleteCmd.ExecuteNonQuery();
+        }
+
+        if (tags.Count > 0)
+        {
+            using var insertCmd = _db.CreateCommand();
+            insertCmd.Transaction = transaction;
+            insertCmd.CommandText = "INSERT OR IGNORE INTO memory_tags (memory_id, tag) VALUES (@mid, @tag)";
+            insertCmd.Parameters.AddWithValue("@mid", id);
+            var tagParam = insertCmd.Parameters.Add("@tag", SqliteType.Text);
+
+            foreach (var tag in tags)
+            {
+                tagParam.Value = tag;
+                insertCmd.ExecuteNonQuery();
+            }
+        }
+
+        using (var updateFts = _db.CreateCommand())
+        {
+            updateFts.Transaction = transaction;
+            updateFts.CommandText = """
+                UPDATE memory_fts
+                SET tags = @tags
+                WHERE id = @id
+                """;
+            updateFts.Parameters.AddWithValue("@id", id);
+            updateFts.Parameters.AddWithValue("@tags", string.Join(" ", tags));
+            updateFts.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
     }
 
     /// <summary>扫描并自动降级过期的记忆</summary>
@@ -423,6 +415,14 @@ internal partial class MemoryStore : IDisposable
             }
             
             transaction.Commit();
+
+            foreach (var id in idsToDecay)
+            {
+                var entry = GetById(id);
+                if (entry != null)
+                    SyncEntryToFileProtocol(entry);
+            }
+
             return idsToDecay.Count;
         }
         catch
@@ -445,6 +445,10 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@id", id);
         cmd.Parameters.AddWithValue("@now", now.ToString("O"));
         cmd.ExecuteNonQuery();
+
+        var entry = GetById(id);
+        if (entry != null)
+            SyncEntryToFileProtocol(entry);
     }
 
     /// <summary>更新向量</summary>
@@ -478,7 +482,7 @@ internal partial class MemoryStore : IDisposable
         var (whereClause, parameters) = BuildWhereClause(filter);
         var sql = $"""
             SELECT DISTINCT e.id, e.type, e.layer, e.source, e.content, e.summary,
-                   e.importance, e.freshness, e.created_at, e.last_verified_at,
+                   e.importance, e.freshness, e.stage, e.created_at, e.last_verified_at,
                    e.stale_after, e.superseded_by, e.parent_id, e.node_id,
                    e.version, e.ext_source_url, e.ext_source_id
             FROM memory_entries e
@@ -605,11 +609,11 @@ internal partial class MemoryStore : IDisposable
         cmd.CommandText = """
             INSERT OR REPLACE INTO memory_entries
                 (id, type, layer, source, content, summary, importance, freshness,
-                 created_at, last_verified_at, stale_after, superseded_by,
+                 stage, created_at, last_verified_at, stale_after, superseded_by,
                  parent_id, node_id, version, embedding, ext_source_url, ext_source_id)
             VALUES
                 (@id, @type, @layer, @source, @content, @summary, @importance, @freshness,
-                 @created_at, @last_verified_at, @stale_after, @superseded_by,
+                 @stage, @created_at, @last_verified_at, @stale_after, @superseded_by,
                  @parent_id, @node_id, @version, @embedding, @ext_source_url, @ext_source_id)
             """;
 
@@ -621,6 +625,7 @@ internal partial class MemoryStore : IDisposable
         cmd.Parameters.AddWithValue("@summary", (object?)entry.Summary ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@importance", entry.Importance);
         cmd.Parameters.AddWithValue("@freshness", entry.Freshness.ToString());
+        cmd.Parameters.AddWithValue("@stage", entry.Stage.ToString());
         cmd.Parameters.AddWithValue("@created_at", entry.CreatedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@last_verified_at",
             entry.LastVerifiedAt.HasValue ? entry.LastVerifiedAt.Value.ToString("O") : DBNull.Value);
@@ -737,6 +742,14 @@ internal partial class MemoryStore : IDisposable
                 parameters.Add(($"@type{i}", filter.Types[i].ToString()));
         }
 
+        if (filter.ResolvedStages is { Count: > 0 })
+        {
+            var placeholders = filter.ResolvedStages.Select((_, i) => $"@stage{i}").ToList();
+            conditions.Add($"e.stage IN ({string.Join(",", placeholders)})");
+            for (var i = 0; i < filter.ResolvedStages.Count; i++)
+                parameters.Add(($"@stage{i}", filter.ResolvedStages[i].ToString()));
+        }
+
         if (filter.Disciplines is { Count: > 0 })
         {
             var placeholders = filter.Disciplines.Select((_, i) => $"@disc{i}").ToList();
@@ -755,7 +768,7 @@ internal partial class MemoryStore : IDisposable
 
         if (!string.IsNullOrEmpty(filter.NodeId))
         {
-            var nodeCandidates = ResolveNodeIdCandidates(filter.NodeId, strict: false);
+            var nodeCandidates = TopoGraphStore.ResolveNodeIdCandidates(filter.NodeId, strict: false);
             if (nodeCandidates.Count == 1)
             {
                 conditions.Add("e.node_id = @nodeId0");
@@ -809,7 +822,7 @@ internal partial class MemoryStore : IDisposable
 
     private const string SelectAllColumns = """
         SELECT e.id, e.type, e.layer, e.source, e.content, e.summary,
-               e.importance, e.freshness, e.created_at, e.last_verified_at,
+               e.importance, e.freshness, e.stage, e.created_at, e.last_verified_at,
                e.stale_after, e.superseded_by, e.parent_id, e.node_id,
                e.version, e.ext_source_url, e.ext_source_id
         FROM memory_entries e
@@ -839,6 +852,7 @@ internal partial class MemoryStore : IDisposable
             : NodeType.Technical;
         Enum.TryParse<MemorySource>(reader.GetString(3), true, out var source);
         Enum.TryParse<FreshnessStatus>(reader.GetString(7), true, out var freshness);
+        var hasStage = Enum.TryParse<MemoryStage>(reader.GetString(8), true, out var stage);
 
         return new MemoryEntry
         {
@@ -850,15 +864,16 @@ internal partial class MemoryStore : IDisposable
             Summary = reader.IsDBNull(5) ? null : reader.GetString(5),
             Importance = reader.GetDouble(6),
             Freshness = freshness,
-            CreatedAt = DateTime.TryParse(reader.GetString(8), out var ca) ? ca : DateTime.UtcNow,
-            LastVerifiedAt = reader.IsDBNull(9) ? null : DateTime.TryParse(reader.GetString(9), out var lv) ? lv : null,
-            StaleAfter = reader.IsDBNull(10) ? null : DateTime.TryParse(reader.GetString(10), out var sa) ? sa : null,
-            SupersededBy = reader.IsDBNull(11) ? null : reader.GetString(11),
-            ParentId = reader.IsDBNull(12) ? null : reader.GetString(12),
-            NodeId = reader.IsDBNull(13) ? null : reader.GetString(13),
-            Version = reader.GetInt32(14),
-            ExternalSourceUrl = reader.IsDBNull(15) ? null : reader.GetString(15),
-            ExternalSourceId = reader.IsDBNull(16) ? null : reader.GetString(16),
+            Stage = hasStage ? stage : MemoryStage.LongTerm,
+            CreatedAt = DateTime.TryParse(reader.GetString(9), out var ca) ? ca : DateTime.UtcNow,
+            LastVerifiedAt = reader.IsDBNull(10) ? null : DateTime.TryParse(reader.GetString(10), out var lv) ? lv : null,
+            StaleAfter = reader.IsDBNull(11) ? null : DateTime.TryParse(reader.GetString(11), out var sa) ? sa : null,
+            SupersededBy = reader.IsDBNull(12) ? null : reader.GetString(12),
+            ParentId = reader.IsDBNull(13) ? null : reader.GetString(13),
+            NodeId = reader.IsDBNull(14) ? null : reader.GetString(14),
+            Version = reader.GetInt32(15),
+            ExternalSourceUrl = reader.IsDBNull(16) ? null : reader.GetString(16),
+            ExternalSourceId = reader.IsDBNull(17) ? null : reader.GetString(17),
             Disciplines = QueryMultiValues("memory_disciplines", "discipline", id),
             Features = QueryMultiValues("memory_features", "feature", id),
             Tags = QueryMultiValues("memory_tags", "tag", id),
@@ -901,6 +916,157 @@ internal partial class MemoryStore : IDisposable
         var floats = new float[bytes.Length / sizeof(float)];
         Buffer.BlockCopy(bytes, 0, floats, 0, bytes.Length);
         return floats;
+    }
+
+    /// <summary>
+    /// 每次启动时从 .agentic-os/memory/ 明文文件重建 DB。
+    /// 明文文件是真相源，DB 是可重建的索引缓存。
+    /// </summary>
+    private void RebuildFromFileProtocol()
+    {
+        try
+        {
+            var agenticOsPath = ResolveAgenticOsPathForMemory(_storePath);
+            if (agenticOsPath == null)
+                return;
+
+            var memoryFileStore = new MemoryFileStore();
+            var sessionFileStore = new SessionFileStore();
+            var memoryFiles = memoryFileStore.LoadMemories(agenticOsPath);
+            var sessionFiles = sessionFileStore.LoadSessions(agenticOsPath);
+
+            // 收集文件中的所有 ID
+            var fileIds = new HashSet<string>(StringComparer.Ordinal);
+            var upserted = 0;
+
+            foreach (var entry in memoryFiles
+                         .Select(FileToLongTermMemoryEntry)
+                         .Concat(sessionFiles.Select(FileToShortTermMemoryEntry))
+                         .Where(entry => entry != null)
+                         .Cast<MemoryEntry>())
+            {
+                fileIds.Add(entry.Id);
+
+                // 检查 DB 中是否已存在
+                var existing = GetById(entry.Id);
+                if (existing == null)
+                {
+                    InsertIntoSqlite(entry);
+                    upserted++;
+                }
+                else
+                {
+                    // 文件内容可能更新，用文件覆盖 DB
+                    DeleteFromSqlite(entry.Id);
+                    InsertIntoSqlite(entry);
+                    upserted++;
+                }
+            }
+
+            // 删除 DB 中有但文件中没有的条目（文件已删除）
+            var dbIds = LoadAllIdsFromSqlite();
+            var removed = 0;
+            foreach (var dbId in dbIds)
+            {
+                if (!fileIds.Contains(dbId))
+                {
+                    DeleteFromSqlite(dbId);
+                    removed++;
+                }
+            }
+
+            if (upserted > 0 || removed > 0)
+                _logger.LogInformation(
+                    "从 .agentic-os/memory/ 重建记忆: 同步={Upserted}, 清理={Removed}",
+                    upserted, removed);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "从 .agentic-os/memory/ 重建记忆失败");
+        }
+    }
+
+    private static MemoryEntry? FileToLongTermMemoryEntry(Dna.Knowledge.FileProtocol.Models.MemoryFile file)
+    {
+        if (string.IsNullOrWhiteSpace(file.Id))
+            return null;
+
+        var type = Enum.TryParse<MemoryType>(file.Type, ignoreCase: true, out var mt) ? mt : MemoryType.Semantic;
+        var source = Enum.TryParse<MemorySource>(file.Source, ignoreCase: true, out var ms) ? ms : MemorySource.Human;
+
+        return new MemoryEntry
+        {
+            Id = file.Id,
+            Type = type,
+            Source = source,
+            Content = file.Body,
+            Summary = null,
+            NodeId = file.NodeId,
+            Disciplines = file.Disciplines ?? [],
+            Tags = file.Tags ?? [],
+            Importance = file.Importance ?? 0.5,
+            Stage = MemoryStage.LongTerm,
+            CreatedAt = file.CreatedAt,
+            LastVerifiedAt = file.LastVerifiedAt,
+            SupersededBy = file.SupersededBy
+        };
+    }
+
+    private static MemoryEntry? FileToShortTermMemoryEntry(Dna.Knowledge.FileProtocol.Models.SessionFile file)
+    {
+        if (string.IsNullOrWhiteSpace(file.Id))
+            return null;
+
+        var type = Enum.TryParse<MemoryType>(file.Type, ignoreCase: true, out var mt) ? mt : MemoryType.Working;
+        var source = Enum.TryParse<MemorySource>(file.Source, ignoreCase: true, out var ms) ? ms : MemorySource.Human;
+
+        return new MemoryEntry
+        {
+            Id = file.Id,
+            Type = type,
+            Source = source,
+            Content = file.Body,
+            Summary = null,
+            NodeId = file.NodeId,
+            Disciplines = [],
+            Tags = file.Tags ?? [],
+            Importance = 0.5,
+            Stage = MemoryStage.ShortTerm,
+            CreatedAt = file.CreatedAt
+        };
+    }
+
+    private static string? ResolveAgenticOsPathForMemory(string storePath)
+    {
+        if (string.IsNullOrWhiteSpace(storePath))
+            return null;
+
+        // storePath 可能是 .agentic-os/memory/ → 上一级
+        var parent = Path.GetDirectoryName(storePath);
+        if (parent != null)
+        {
+            var memoryDir = Path.Combine(parent, FileProtocolPaths.MemoryDir);
+            if (Directory.Exists(memoryDir))
+                return parent;
+        }
+
+        // storePath 本身是 .agentic-os/
+        var directMemory = Path.Combine(storePath, FileProtocolPaths.MemoryDir);
+        if (Directory.Exists(directMemory))
+            return storePath;
+
+        return null;
+    }
+
+    private List<string> LoadAllIdsFromSqlite()
+    {
+        var ids = new List<string>();
+        using var cmd = _db!.CreateCommand();
+        cmd.CommandText = "SELECT id FROM memory_entries";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            ids.Add(reader.GetString(0));
+        return ids;
     }
 
     public void Dispose()

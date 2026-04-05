@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -33,8 +35,26 @@ public sealed class RuntimeLlmPurposeBindings
     public string? Review { get; set; }
 }
 
+public static class RuntimeLlmConfigPaths
+{
+    public const string OverridePathEnvironmentVariable = "DNA_LLM_CONFIG_PATH";
+    private const string DirectoryName = ".agentic-os";
+    private const string FileName = "llm.json";
+
+    public static string ResolveGlobalFilePath()
+    {
+        var overridePath = Environment.GetEnvironmentVariable(OverridePathEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(overridePath))
+            return Path.GetFullPath(overridePath);
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(userProfile, DirectoryName, FileName);
+    }
+}
+
 public static class RuntimeLlmConfigStore
 {
+    private static readonly ConcurrentDictionary<string, object> PathLocks = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -46,32 +66,43 @@ public static class RuntimeLlmConfigStore
     public static RuntimeLlmConfigDocument LoadOrCreate(string filePath)
     {
         var normalizedPath = NormalizePath(filePath);
-        if (!File.Exists(normalizedPath))
+        lock (GetPathLock(normalizedPath))
         {
-            var empty = CreateDefault();
-            Save(normalizedPath, empty);
-            return empty;
-        }
+            if (!File.Exists(normalizedPath))
+            {
+                var empty = CreateDefault();
+                SaveInternal(normalizedPath, empty);
+                return empty;
+            }
 
-        try
-        {
-            var json = File.ReadAllText(normalizedPath);
-            return Normalize(JsonSerializer.Deserialize<RuntimeLlmConfigDocument>(json, JsonOptions));
-        }
-        catch
-        {
-            var fallback = CreateDefault();
-            Save(normalizedPath, fallback);
-            return fallback;
+            try
+            {
+                var json = ReadAllTextWithRetry(normalizedPath);
+                return Normalize(JsonSerializer.Deserialize<RuntimeLlmConfigDocument>(json, JsonOptions));
+            }
+            catch
+            {
+                var fallback = CreateDefault();
+                SaveInternal(normalizedPath, fallback);
+                return fallback;
+            }
         }
     }
 
     public static RuntimeLlmConfigDocument Save(string filePath, RuntimeLlmConfigDocument? document)
     {
         var normalizedPath = NormalizePath(filePath);
+        lock (GetPathLock(normalizedPath))
+        {
+            return SaveInternal(normalizedPath, document);
+        }
+    }
+
+    private static RuntimeLlmConfigDocument SaveInternal(string normalizedPath, RuntimeLlmConfigDocument? document)
+    {
         var normalizedDocument = Normalize(document);
         Directory.CreateDirectory(Path.GetDirectoryName(normalizedPath)!);
-        File.WriteAllText(normalizedPath, JsonSerializer.Serialize(normalizedDocument, JsonOptions));
+        WriteAllTextWithRetry(normalizedPath, JsonSerializer.Serialize(normalizedDocument, JsonOptions));
         return normalizedDocument;
     }
 
@@ -131,6 +162,45 @@ public static class RuntimeLlmConfigStore
             throw new ArgumentException("filePath is required.", nameof(filePath));
 
         return Path.GetFullPath(filePath);
+    }
+
+    private static object GetPathLock(string normalizedPath)
+        => PathLocks.GetOrAdd(normalizedPath, static _ => new object());
+
+    private static string ReadAllTextWithRetry(string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                return reader.ReadToEnd();
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(40 * (attempt + 1));
+            }
+        }
+    }
+
+    private static void WriteAllTextWithRetry(string path, string content)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(content);
+                writer.Flush();
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                Thread.Sleep(40 * (attempt + 1));
+            }
+        }
     }
 
     private static string NormalizeLower(string? value, string fallback)

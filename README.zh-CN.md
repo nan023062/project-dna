@@ -1,221 +1,259 @@
-# Project DNA
+# Agentic OS
 
-**AI Agent 的项目认知引擎。**
+**面向 AI Agent 的本地项目知识运行时。**
 
-Project DNA 让 Agent 具备项目级认知能力：理解结构、依赖、约束、历史决策和经验教训，而不是只会改当前文件。
+Agentic OS 让 Agent 具备项目级认知能力：理解结构、依赖、约束、设计决策与经验沉淀，而不只是修改当前文件。
 
 [English](README.md)
 
-## 当前形态
+## 当前产品形态
 
-Project DNA 现在采用 **Server + Client 桌面宿主** 的拆分方式：
+当前仓库只保留并描述 **单 App 方案**：
 
-- `Server` 是共享知识服务，负责知识图谱、记忆、治理能力以及管理台。
-- `Client` 是 **单进程、单窗口** 的桌面宿主，负责加载项目、预览图谱和知识，并向 IDE Agent 暴露本地 MCP。
-- 本地 `5052` 只是 `Client` 进程内嵌的 API / MCP 接入面，不是第二个产品，也不是独立浏览器工作台。
+- 单进程
+- 单窗口
+- 单心智
+- 单生命周期
+
+桌面 App 进程内仍会嵌入本地运行时，默认监听：
 
 ```text
-Cursor / Codex / 其他 IDE Agent
-                |
-                | MCP
-                v
-Project DNA Client 桌面宿主（单窗口）
-                |
-                | 进程内嵌本地 API / MCP :5052
-                |
-                +------> 桌面交互界面
-                |
-                +------> REST 到 Server
-                           |
-                           v
-Project DNA Server (:5051)
-  - 知识图谱
-  - 记忆存储
-  - 治理能力
-  - Server 管理台（wwwroot）
+http://127.0.0.1:5052
 ```
 
-## 当前 MVP 口径
+但这条本地 HTTP 表面主要用于：
 
-当前 MVP 先聚焦 **单人本地管理员闭环**：
+- MCP
+- CLI
+- 兼容层
 
-- `Server` 管理台作为主要管理入口
-- `Client` 桌面宿主作为主要本地工作入口
-- 权限控制当前以 **Server 白名单 + 角色展示** 为主
-- `Client` 当前主要提供正式知识预览、图谱预览和本地 MCP 接入
-- 正式知识直写目前只对 `admin` 开放
-- 团队协作版的评审流、JWT 等能力仍保留在仓库设计中，但不是当前 MVP 的主运行路径
+桌面内部的长期目标是优先通过进程内服务访问 `Dna.Workbench` 与未来的 `Dna.Agent`，而不是把本地 HTTP 当作内部主调用链。
+
+## 当前与目标架构
+
+### 当前实现
+
+```text
+App
+  ->
+Dna.Workbench
+  ->
+Dna.Knowledge
+  ->
+Dna.Core
+```
+
+### 目标架构
+
+```text
+App
+  ->
+Dna.Agent
+  ->
+Dna.Workbench
+  ->
+Dna.Knowledge
+  ->
+Dna.Core
+```
+
+说明：
+
+- `Dna.Agent`
+  - 负责内置 Agent 的需求规划、编排、执行、模型调用与工具调用策略
+- `Dna.Workbench`
+  - 负责为内置 Agent、外置 Agent、CLI、桌面宿主提供统一项目能力与任务桥接能力
+- `Dna.Knowledge`
+  - 负责 Workspace / TopoGraph / Memory / Governance
+
+## 运行拓扑
+
+```text
+用户
+  |
+  +--> Agentic OS App 桌面宿主（单窗口）
+         - 项目加载
+         - 工作区浏览
+         - 知识图谱预览
+         - 模块知识编辑
+         - 记忆查看
+         - 内置 chat / 未来内置 agent
+         - 外置 Agent 接入
+         - 进程内本地运行时 :5052
+                |
+                +--> MCP
+                +--> agentic-os cli
+                +--> 兼容 API
+```
+
+## Workbench 与 Agent 的分工
+
+这是当前最重要的架构边界：
+
+- `Dna.Agent`
+  - 负责“怎么做”
+  - 包括任务规划、步骤推进、执行循环、模型交互、工具选择
+- `Dna.Workbench`
+  - 负责“在这个项目里能做什么”
+  - 包括工作区、知识图谱、模块知识、记忆、任务上下文、模块锁、运行时观测等统一能力
+
+因此：
+
+- 内置 Agent 通过 `Dna.Agent -> Dna.Workbench` 工作
+- 外置 Agent 通过 `MCP / CLI / HTTP Adapter -> Dna.Workbench` 工作
+
+外置 Agent 自身已有编排能力，不需要依赖 `Dna.Agent` 才能工作；它们真正需要的是 `Dna.Workbench` 提供的项目能力面。
+
+## 标准任务闭环
+
+所有 Agent 在最终架构中都应遵守同一条闭环：
+
+1. 先请求 `Dna.Workbench` 基于 `TopoGraph + MCDP` 拆解需求涉及的模块和依赖链
+2. Agent 根据拆解结果创建多个单模块 task
+3. 对某个 task 调用 `startTask`
+4. 获得该模块的精准隔离上下文
+5. 在这个上下文内执行分析、修改、查询与工具调用
+6. 调用 `endTask` 回写任务结果、关键决策、经验教训与阻塞项
+7. 再串行或并行推进剩余任务链
+
+最核心的约束是：
+
+- 一个 task 只能绑定一个目标模块
+- 一个 task 只能看到一个封闭操作空间
+- 必须 `startTask`
+- 必须 `endTask`
+
+这里还要明确一点：
+
+- `Workbench` 不负责决定任务顺序
+- `Workbench` 不负责并发调度
+- `Workbench` 只通过模块锁阻止多个 Agent 同时修改同一目标模块
+- 这样可以减少并行开发时的冲突和合并风险
+
+## 治理闭环
+
+除普通需求闭环外，`Workbench` 还支持治理闭环：
+
+1. Agent 发起全局或指定模块的治理请求
+2. `Workbench` 返回对应范围的模块树上下文
+3. Agent 基于该上下文拆解治理顺序和多个治理型单模块 task
+4. 再通过同一套 `startTask / endTask` 生命周期完成治理
+
+这意味着：
+
+- 治理不是直接批处理黑盒
+- 仍然要落回单模块 task
+- 仍然要遵守模块互斥和上下文隔离
 
 ## 快速开始
 
-### 1. 编译
+### 1. 构建
 
 ```bash
-cd src
-dotnet build
+dotnet build src/App/App.csproj
 ```
 
-### 2. 启动 Server
+### 2. 启动桌面 App
 
-`--db` 为必填，指向知识库目录，内部使用 SQLite 存储。
+开发模式：
 
 ```bash
-# 当前目录作为知识库目录
-cd /path/to/knowledge-store
-dna --db
-
-# 或显式指定目录
-dna --db /path/to/knowledge-store
+dotnet run --no-launch-profile --project src/App
 ```
 
-默认端口：`5051`
-
-### 3. 启动 Client 桌面宿主
+发布产物：
 
 ```bash
-dotnet run --no-launch-profile --project src/Client
+publish/agentic-os.exe
 ```
 
-当前 Client 行为：
+### 3. 准备项目目录
 
-- 打开一个桌面主窗口
-- 选择一个包含 `.project.dna/project.json` 的项目目录
-- 在项目加载成功后，于同一进程内启动 `http://127.0.0.1:5052`
-- 让“窗口生命周期”和“本地 MCP/API 生命周期”保持一致
+桌面 App 可以直接加载任意项目目录。
 
-`.project.dna/project.json` 示例：
+说明：
 
-```json
-{
-  "projectName": "agentic-os",
-  "serverBaseUrl": "http://127.0.0.1:5051"
-}
-```
-
-客户端项目日志写入 `.project.dna/logs/`。
-客户端工作区状态写入 `.project.dna/client-workspaces.json`。
-客户端本地 agent shell 状态写入 `.project.dna/agent-shell/agent-shell-state.json`。
+- 如果目录下已经存在 `.agentic-os/`，App 会直接复用
+- 如果目录下还没有 `.agentic-os/`，App 会在首次加载时自动创建
+- 只有在桌面 App 成功加载项目后，本地 `5052` 运行时才真正对外可用
 
 ### 4. 接入 Cursor / Codex
 
-先完成下面三步：
-
-1. 启动 `Server`
-2. 启动桌面 `Client`
-3. 在桌面窗口中加载目标项目
-
-然后把 IDE 的 MCP 配置指向：
+桌面 App 加载项目后，把 IDE 的 MCP 配置指向：
 
 ```json
 {
   "mcpServers": {
-    "project-dna": {
+    "agentic-os": {
       "url": "http://localhost:5052/mcp"
     }
   }
 }
 ```
 
-说明：
+## 项目级状态目录
 
-- 只有在桌面 `Client` 成功加载项目后，`5052` 才会在线。
-- IDE 连接的是桌面 `Client`，不是直接连接 `Server`。
+当前 App 主要把项目知识与本地运行时相关文件放在 `.agentic-os/` 下：
 
-## 运行入口
+- `knowledge/`
+  - 知识图谱真相源
+- `memory/`
+  - 长期记忆
+- `session/`
+  - 短期工作记忆
+- `logs/`
+  - App 日志
 
-### Server 管理台
+## App 本地运行时表面
 
-浏览器打开 `http://localhost:5051`
+当前嵌入的本地运行时仍暴露：
 
-当前重点界面：
+- `/mcp`
+- `/api/status`
+- `/api/topology`
+- `/api/connection/access`
+- `/api/memory/*`
+- `/api/app/status`
+- `/api/app/workspaces/*`
+- `/api/app/tooling/*`
+- `/agent/*`
 
-- 服务概览
-- 连接权限 / 白名单管理
-- 审核队列基础页
-- 图谱与记忆管理
+其中：
 
-### Client 桌面宿主
-
-当前 `Client` 只保留一个对用户可见的桌面运行形态。
-
-当前能力包括：
-
-- 项目选择与最近项目列表
-- 服务状态与连接权限概览
-- 图谱预览
-- 正式知识预览
-- 本地 MCP 接入中心
-- 一键安装 Cursor / Codex 接入配置
-
-当前实现中 **不再提供独立的 Client 浏览器工作台**。
+- `/mcp`
+  - 面向 IDE Agent
+- `/api/*`
+  - 当前兼容层与本地工具表面
+- `/agent/*`
+  - 仍属过渡接口，后续应由 `Dna.Agent` 收口
 
 ## CLI
 
-当前保留的是 `Server` 侧运维 / 查询 CLI：
+当前桌面 App 自带本地 CLI 入口：
 
 ```bash
-dna cli status
-dna cli validate
-dna cli search combat
-dna cli recall "有哪些约束"
-dna cli stats
+agentic-os cli status
+agentic-os cli topology
+agentic-os cli search render
+agentic-os cli recall "有哪些约束"
+agentic-os cli memories
+agentic-os cli tools
 ```
 
-## Client 本地运行面
+默认本地运行时地址：
 
-桌面 `Client` 进程内嵌的本地运行面当前包括：
+```text
+http://127.0.0.1:5052
+```
 
-- MCP 入口：`/mcp`
-- 桌面宿主配套接口：`/api/client/status`、`/api/client/workspaces/*`、`/api/client/tooling/*`
-- 上游查询 / 代理接口：`/api/status`、`/api/topology`、`/api/connection/access`、`/api/memory/*`
-- 本地轻量 Agent Shell：`/agent/*`
+## 架构文档
 
-这些接口是为了支撑桌面宿主与 IDE 接入，不代表存在第二套独立 Client Web 产品。
+详见：
 
-## MCP 工具
+- [src/Dna.Agent/ARCHITECTURE.md](src/Dna.Agent/ARCHITECTURE.md)
+- [src/Dna.Workbench/ARCHITECTURE.md](src/Dna.Workbench/ARCHITECTURE.md)
+- [src/Dna.Knowledge/ARCHITECTURE.md](src/Dna.Knowledge/ARCHITECTURE.md)
 
-### 图谱工具
-
-| 工具 | 说明 |
-|------|------|
-| `get_topology` | 查看完整知识图谱 |
-| `get_context` | 获取模块上下文、约束、依赖与经验 |
-| `search_modules` | 按关键字搜索节点 |
-| `get_dependency_order` | 多模块修改时的依赖排序 |
-| `register_module` | 注册知识节点 |
-| `register_crosswork` | 声明跨团队协作 |
-| `validate_architecture` | 进行架构健康检查 |
-
-### 记忆工具
-
-| 工具 | 说明 |
-|------|------|
-| `remember` | 写入知识 |
-| `recall` | 语义检索知识 |
-| `batch_remember` | 批量写入 |
-| `query_memories` | 结构化查询 |
-| `get_memory` | 按 ID 获取记忆 |
-| `get_memory_stats` | 获取知识库统计 |
-| `verify_memory` | 确认知识是否仍有效 |
-| `update_memory` | 更新记忆 |
-| `delete_memory` | 删除记忆 |
-| `condense_module_knowledge` | 将单模块知识压缩到 `NodeKnowledge` |
-| `condense_all_module_knowledge` | 全量知识压缩 |
-
-此外，`Client` 也提供 `GET /api/client/mcp/tools`，供桌面 UI 和自动化读取完整 MCP 工具清单。
-
-## 架构说明
-
-- `Server` 是知识图谱和记忆的唯一权威存储
-- `Server` 不直接访问项目源码
-- `Client` 是本地桌面宿主与 MCP 网关
-- 团队版权限与审核链路后续会继续推进，但当前 MVP 以“单人本地管理员优先”收口
-
-详细可见：
-
-- [docs/architecture/project-dna-design.md](docs/architecture/project-dna-design.md)
-- [docs/architecture/project-dna-transport-auth-decision.md](docs/architecture/project-dna-transport-auth-decision.md)
-
-## 许可协议
+## 许可证
 
 [Apache 2.0](LICENSE)

@@ -1,10 +1,16 @@
+using Dna.Knowledge.FileProtocol;
+using Dna.Knowledge.TopoGraph;
+using Dna.Knowledge.TopoGraph.Contracts;
+using Dna.Knowledge.TopoGraph.Internal.Builders;
+using Dna.Knowledge.Workspace;
+using Dna.Memory.Store;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Dna.Knowledge;
 
 /// <summary>
-/// 知识图谱 DI 注册 — 三引擎架构，共享底层 MemoryStore。
+/// 知识底座 DI 注册，组装四层模块并共享底层存储实例。
 /// </summary>
 public static class KnowledgeGraphExtensions
 {
@@ -12,33 +18,57 @@ public static class KnowledgeGraphExtensions
     {
         services.AddSingleton(sp => new DnaServiceHolder(sp));
 
-        services.AddSingleton<GraphEngine>(sp =>
+        services.AddSingleton<WorkspaceEngine>(sp => sp.GetRequiredService<DnaServiceHolder>().Workspace);
+        services.AddSingleton<IWorkspaceEngine>(sp => sp.GetRequiredService<WorkspaceEngine>());
+
+        services.AddSingleton<MemoryStore>(sp => sp.GetRequiredService<DnaServiceHolder>().Store);
+        services.AddSingleton<TopoGraphStore>(sp => sp.GetRequiredService<DnaServiceHolder>().TopoGraphStore);
+        services.AddSingleton<ITopoGraphStore>(sp => sp.GetRequiredService<TopoGraphStore>());
+        services.AddSingleton<ITopoGraphContextProvider>(sp => new MemoryTopoGraphContextProvider(sp.GetRequiredService<MemoryStore>()));
+        services.AddSingleton<FileBasedDefinitionStore>();
+        services.AddSingleton<ITopoGraphDefinitionStore>(sp => sp.GetRequiredService<FileBasedDefinitionStore>());
+        services.AddSingleton<TopologyModelBuilder>();
+        services.AddSingleton<ITopoGraphFacade>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
+            var definitionStore = sp.GetRequiredService<ITopoGraphDefinitionStore>();
+            var builder = sp.GetRequiredService<TopologyModelBuilder>();
+            return new TopoGraphFacade(definitionStore, builder);
+        });
+
+        services.AddSingleton<TopoGraphApplicationService>(sp =>
+        {
+            var store = sp.GetRequiredService<ITopoGraphStore>();
+            var facade = sp.GetRequiredService<ITopoGraphFacade>();
+            var contextProvider = sp.GetRequiredService<ITopoGraphContextProvider>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            var engine = new GraphEngine(holder, loggerFactory.CreateLogger<GraphEngine>());
+            var service = new TopoGraphApplicationService(
+                store,
+                facade,
+                contextProvider,
+                loggerFactory.CreateLogger<TopoGraphApplicationService>());
             var adapter = sp.GetService<IProjectAdapter>();
             if (adapter != null)
-                engine.SetAdapter(adapter);
-            return engine;
+                service.SetAdapter(adapter);
+            return service;
         });
-        services.AddSingleton<IGraphEngine>(sp => sp.GetRequiredService<GraphEngine>());
-
+        services.AddSingleton<ITopoGraphApplicationService>(sp => sp.GetRequiredService<TopoGraphApplicationService>());
         services.AddSingleton<IMemoryEngine>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
+            var store = sp.GetRequiredService<MemoryStore>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new MemoryEngine(holder, loggerFactory.CreateLogger<MemoryEngine>());
+            return new MemoryEngine(store, loggerFactory.CreateLogger<MemoryEngine>());
         });
 
         services.AddSingleton<IGovernanceEngine>(sp =>
         {
-            var holder = sp.GetRequiredService<DnaServiceHolder>();
-            var graph = sp.GetRequiredService<GraphEngine>();
+            var memoryStore = sp.GetRequiredService<MemoryStore>();
+            var topoGraphStore = sp.GetRequiredService<ITopoGraphStore>();
+            var topology = sp.GetRequiredService<ITopoGraphApplicationService>();
             var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new GovernanceEngine(holder, graph, loggerFactory);
+            return new GovernanceEngine(memoryStore, topoGraphStore, topology, loggerFactory);
         });
 
+        // 新系统：文件协议 → TopoGraphFacade
         return services;
     }
 }
