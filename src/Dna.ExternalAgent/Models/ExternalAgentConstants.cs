@@ -58,6 +58,12 @@ public static class ExternalAgentConstants
         public const string Remember = "memory.remember";
         public const string Recall = "memory.recall";
         public const string GetRuntimeProjection = "runtime.get_projection";
+        public const string ResolveRequirementSupport = "tasks.resolve_requirement_support";
+        public const string StartTask = "tasks.start_task";
+        public const string EndTask = "tasks.end_task";
+        public const string ListActiveTasks = "tasks.list_active_tasks";
+        public const string ListCompletedTasks = "tasks.list_completed_tasks";
+        public const string ResolveGovernance = "governance.resolve_governance";
     }
 
     public static class DefaultWorkflowRules

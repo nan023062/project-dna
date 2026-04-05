@@ -1,21 +1,22 @@
 using System.ComponentModel;
 using System.Text.Json;
-using Dna.Workbench.Contracts;
-using Dna.Workbench.Governance;
-using Dna.Workbench.Tasks;
 using Dna.Knowledge;
 using Dna.Knowledge.Workspace.Models;
 using Dna.Memory.Models;
+using Dna.Workbench.Contracts;
+using Dna.Workbench.Governance;
+using Dna.Workbench.Tasks;
+using Dna.Workbench.Tooling;
 using ModelContextProtocol.Server;
 
-namespace Dna.App.Interfaces.Mcp;
+namespace Dna.ExternalAgent.Interfaces.Mcp;
 
 [McpServerToolType]
-public sealed class WorkbenchTools(IWorkbenchFacade workbench)
+public sealed class ExternalAgentWorkbenchTools(IWorkbenchFacade workbench)
 {
     private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
 
-    [McpServerTool, Description("Return the current topology snapshot for the active workspace.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.GetTopology, ReadOnly = true), Description("Return the current topology snapshot for the active workspace.")]
     public Task<string> get_topology()
     {
         try
@@ -29,7 +30,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Return the workspace directory snapshot for the active workspace.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.GetWorkspaceSnapshot, ReadOnly = true), Description("Return the workspace directory snapshot for the active workspace.")]
     public Task<string> get_workspace_snapshot(
         [Description("Optional workspace-relative path.")] string? relativePath = null)
     {
@@ -44,7 +45,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Return knowledge for a topology module.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.GetModuleKnowledge, ReadOnly = true), Description("Return knowledge for a topology module.")]
     public Task<string> get_module_knowledge(
         [Description("Module node id or module name.")] string nodeIdOrName)
     {
@@ -61,7 +62,44 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Create a new memory entry.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.SaveModuleKnowledge), Description("Persist knowledge for a topology module.")]
+    public Task<string> save_module_knowledge(
+        [Description("Module node id or module name.")] string nodeIdOrName,
+        [Description("Identity summary for the module.")] string? identity = null,
+        [Description("Facts, comma separated.")] string? facts = null,
+        [Description("Active task IDs, comma separated.")] string? activeTasks = null,
+        [Description("Total memory count.")] int totalMemoryCount = 0,
+        [Description("Identity memory ID.")] string? identityMemoryId = null,
+        [Description("Upgrade trail memory ID.")] string? upgradeTrailMemoryId = null,
+        [Description("Related memory IDs, comma separated.")] string? memoryIds = null)
+    {
+        try
+        {
+            var command = new TopologyModuleKnowledgeUpsertCommand
+            {
+                NodeIdOrName = nodeIdOrName,
+                Knowledge = new NodeKnowledge
+                {
+                    Identity = identity,
+                    Facts = SplitCsv(facts),
+                    ActiveTasks = SplitCsv(activeTasks),
+                    TotalMemoryCount = totalMemoryCount,
+                    IdentityMemoryId = identityMemoryId,
+                    UpgradeTrailMemoryId = upgradeTrailMemoryId,
+                    MemoryIds = SplitCsv(memoryIds)
+                }
+            };
+
+            var result = workbench.Knowledge.SaveModuleKnowledge(command);
+            return Task.FromResult(JsonSerializer.Serialize(result, PrettyJson));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult($"Error: {ex.Message}");
+        }
+    }
+
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.Remember), Description("Create a new memory entry.")]
     public async Task<string> remember(
         [Description("Memory content.")] string content,
         [Description("Memory type (Structural/Semantic/Episodic/Working/Procedural).")] string type,
@@ -79,14 +117,14 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         {
             if (!Enum.TryParse<MemoryType>(type, true, out var memoryType))
                 return $"Error: invalid memory type '{type}'.";
-            if (!Enum.TryParse<Dna.Knowledge.NodeType>(nodeType, true, out var parsedNodeType))
+            if (!Enum.TryParse<NodeType>(nodeType, true, out var parsedNodeType))
                 return $"Error: invalid node type '{nodeType}'.";
             MemoryStage? parsedStage = null;
             if (!string.IsNullOrWhiteSpace(stage))
             {
-                if (!Enum.TryParse<MemoryStage>(stage, true, out var s))
+                if (!Enum.TryParse<MemoryStage>(stage, true, out var parsed))
                     return $"Error: invalid memory stage '{stage}'.";
-                parsedStage = s;
+                parsedStage = parsed;
             }
 
             var request = new RememberRequest
@@ -114,7 +152,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Recall memory entries semantically.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.Recall, ReadOnly = true), Description("Recall memory entries semantically.")]
     public async Task<string> recall(
         [Description("Natural language question.")] string question,
         [Description("Optional discipline filter, comma separated.")] string? disciplines = null,
@@ -128,7 +166,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         try
         {
             var parsedNodeTypes = SplitCsv(nodeTypes)
-                .Select(v => Enum.TryParse<Dna.Knowledge.NodeType>(v, true, out var parsed) ? (Dna.Knowledge.NodeType?)parsed : null)
+                .Select(v => Enum.TryParse<NodeType>(v, true, out var parsed) ? (NodeType?)parsed : null)
                 .Where(v => v.HasValue)
                 .Select(v => v!.Value)
                 .ToList();
@@ -154,7 +192,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Return the current runtime projection snapshot.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.GetRuntimeProjection, ReadOnly = true), Description("Return the current runtime projection snapshot.")]
     public Task<string> get_runtime_projection()
     {
         try
@@ -168,7 +206,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Resolve requirement text into module candidates.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.ResolveRequirementSupport, ReadOnly = true), Description("Resolve requirement text into module candidates.")]
     public async Task<string> resolve_requirement_support(
         [Description("Requirement text or hint.")] string requirementText,
         [Description("Max candidates to return.")] int maxCandidates = 10)
@@ -189,7 +227,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Start a module task and acquire a lock.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.StartTask), Description("Start a module task and acquire a lock.")]
     public async Task<string> start_task(
         [Description("Target module ID or name.")] string moduleIdOrName,
         [Description("Agent identifier.")] string agentId,
@@ -219,7 +257,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("End a module task and release the lock.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.EndTask), Description("End a module task and release the lock.")]
     public async Task<string> end_task(
         [Description("Task ID.")] string taskId,
         [Description("Task outcome (Success, Failed, Blocked).")] string outcome,
@@ -251,7 +289,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("List currently active tasks.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.ListActiveTasks, ReadOnly = true), Description("List currently active tasks.")]
     public async Task<string> list_active_tasks()
     {
         try
@@ -265,7 +303,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("List recently completed tasks.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.ListCompletedTasks, ReadOnly = true), Description("List recently completed tasks.")]
     public async Task<string> list_completed_tasks(
         [Description("Max tasks to return.")] int limit = 50)
     {
@@ -280,7 +318,7 @@ public sealed class WorkbenchTools(IWorkbenchFacade workbench)
         }
     }
 
-    [McpServerTool, Description("Resolve governance scope and return context.")]
+    [McpServerTool(Name = WorkbenchToolConstants.ToolNames.ResolveGovernance, ReadOnly = true), Description("Resolve governance scope and return context.")]
     public async Task<string> resolve_governance(
         [Description("Governance cadence (HighFrequency, LowFrequency).")] string cadence = "HighFrequency",
         [Description("Governance scope kind (ActiveChanges, Module, Subtree, Global).")] string scope = "ActiveChanges",

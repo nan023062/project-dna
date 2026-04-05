@@ -1,13 +1,12 @@
 using System.Text;
 using Dna.ExternalAgent.Contracts;
 using Dna.ExternalAgent.Models;
-using Dna.Workbench.Contracts;
 
 namespace Dna.ExternalAgent.Services;
 
 internal sealed class ExternalAgentIntegrationService(
     IExternalAgentAdapterCatalog adapterCatalog,
-    IWorkbenchToolService workbenchTools) : IExternalAgentIntegrationService
+    IExternalAgentToolCatalogService toolCatalog) : IExternalAgentIntegrationService
 {
     public IReadOnlyList<ExternalAgentAdapterDescriptor> ListAdapters()
         => adapterCatalog.ListAdapters();
@@ -20,7 +19,7 @@ internal sealed class ExternalAgentIntegrationService(
             ?? throw new InvalidOperationException($"Unsupported external agent product: {request.ProductId}");
 
         var requiredToolNames = CreateRequiredToolNames();
-        var requiredTools = workbenchTools.ListTools()
+        var requiredTools = toolCatalog.ListTools()
             .Where(tool => requiredToolNames.Contains(tool.Name, StringComparer.OrdinalIgnoreCase))
             .ToList();
 
@@ -60,7 +59,13 @@ internal sealed class ExternalAgentIntegrationService(
             ExternalAgentConstants.DefaultToolNames.SaveModuleKnowledge,
             ExternalAgentConstants.DefaultToolNames.Remember,
             ExternalAgentConstants.DefaultToolNames.Recall,
-            ExternalAgentConstants.DefaultToolNames.GetRuntimeProjection
+            ExternalAgentConstants.DefaultToolNames.GetRuntimeProjection,
+            ExternalAgentConstants.DefaultToolNames.ResolveRequirementSupport,
+            ExternalAgentConstants.DefaultToolNames.StartTask,
+            ExternalAgentConstants.DefaultToolNames.EndTask,
+            ExternalAgentConstants.DefaultToolNames.ListActiveTasks,
+            ExternalAgentConstants.DefaultToolNames.ListCompletedTasks,
+            ExternalAgentConstants.DefaultToolNames.ResolveGovernance
         ];
     }
 

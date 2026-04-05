@@ -2,6 +2,7 @@ using Dna.App.Interfaces.Api;
 using Dna.App.Services;
 using Dna.App.Services.Tooling;
 using Dna.Core.Config;
+using Dna.ExternalAgent.DependencyInjection;
 using Dna.Knowledge;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Metadata;
@@ -31,7 +32,7 @@ public class AppEndpointRouteSmokeTests
         builder.Services.AddSingleton<AppProjectLlmConfigService>();
         builder.Services.AddSingleton<DnaServerApi>();
         builder.Services.AddSingleton<AppFolderPickerService>();
-        builder.Services.AddAppToolingServices();
+        builder.Services.AddExternalAgent();
         var app = builder.Build();
 
         app.MapAppLocalKnowledgeEndpoints();

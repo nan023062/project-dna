@@ -1,4 +1,5 @@
-using Dna.App.Services.Tooling;
+using Dna.ExternalAgent.Contracts;
+using Dna.ExternalAgent.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -15,13 +16,13 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         var tooling = CreateToolingService();
 
         var report = tooling.InstallTarget("codex", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: true);
-        var status = tooling.GetStatus("codex", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os");
+        var status = tooling.GetTargetStatus("codex", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os");
 
-        Assert.Empty(report.Warnings);
+        Assert.Contains(report.Warnings, warning => warning.Contains("严格拓扑模式", StringComparison.Ordinal));
         Assert.Equal(3, report.WrittenFiles.Count);
-        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "mcp.json")));
-        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "prompts", "agentic-os-mcp-hook.md")));
-        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "agents", "agentic-os-mcp-hooks.md")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "config.toml")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "prompts", "agentic-os-topology.md")));
+        Assert.True(File.Exists(Path.Combine(_workspaceRoot, ".codex", "agents", "agentic-os-topology.md")));
         Assert.True(status.McpConfigured);
         Assert.True(status.Installed);
     }
@@ -33,8 +34,8 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         var tooling = CreateToolingService();
 
         var firstReport = tooling.InstallTarget("cursor", _workspaceRoot, "http://localhost:5052/mcp", "agentic-os", replaceExisting: true);
-        var promptPath = firstReport.Paths.PromptFile;
-        var agentPath = firstReport.Paths.AgentFile;
+        var promptPath = Path.Combine(_workspaceRoot, ".cursor", "rules", "agentic-os-topology.mdc");
+        var agentPath = Path.Combine(_workspaceRoot, ".cursor", "agents", "agentic-os-topology.md");
         File.WriteAllText(promptPath, "custom prompt");
         File.WriteAllText(agentPath, "custom agent");
 
@@ -46,12 +47,13 @@ public sealed class AppIdeToolingServiceTests : IDisposable
         Assert.Equal("custom agent", File.ReadAllText(agentPath));
     }
 
-    private static AppIdeToolingService CreateToolingService()
+    private static IExternalAgentToolingService CreateToolingService()
     {
         return new ServiceCollection()
-            .AddAppToolingServices()
+            .AddLogging()
+            .AddExternalAgent()
             .BuildServiceProvider()
-            .GetRequiredService<AppIdeToolingService>();
+            .GetRequiredService<IExternalAgentToolingService>();
     }
 
     public void Dispose()

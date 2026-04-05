@@ -1,4 +1,4 @@
-using Dna.App.Interfaces.Cli;
+using Dna.ExternalAgent.Cli;
 using Xunit;
 
 namespace App.Tests;
@@ -33,9 +33,9 @@ public sealed class AppLaunchModeTests
     }
 
     [Fact]
-    public void AppCliSettings_ShouldHonorExplicitUrlOverride()
+    public void ExternalAgentCliSettings_ShouldHonorExplicitUrlOverride()
     {
-        var settings = AppCliSettings.Parse(["--url", "http://localhost:6060/", "status"]);
+        var settings = ExternalAgentCliSettings.Parse(["--url", "http://localhost:6060/", "status"]);
 
         Assert.Equal("http://localhost:6060", settings.BaseUrl);
         Assert.Equal(["status"], settings.Args);

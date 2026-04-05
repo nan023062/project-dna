@@ -1,7 +1,7 @@
 # Dna.ExternalAgent
 
-> 状态：第一阶段初始化骨架
-> 最后更新：2026-04-04
+> 状态：第一阶段已落地（MCP / CLI / 安装器已迁入）
+> 最后更新：2026-04-05
 > 适用范围：`src/Dna.ExternalAgent`
 
 ## 模块定位
@@ -94,7 +94,10 @@ Agentic OS 不需要重新实现它们的编排器。
 - `knowledge.*`
 - `memory.*`
 - `runtime.*`
-- `tooling.*`
+- `tasks.*`
+- `governance.*`
+
+其中安装、状态查询和产品配置分发不通过 MCP tool 暴露，而是由 `Dna.ExternalAgent` 提供宿主 API / CLI 入口。
 
 ### 4. 统一交付物
 
@@ -160,21 +163,23 @@ Agentic OS 不需要重新实现它们的编排器。
 
 ## 当前实现边界
 
-当前这一阶段只做：
+当前这一阶段已经完成：
 
 - 产品适配抽象
 - 默认产品目录
 - 统一拓扑策略模型
 - 统一接入包生成服务
+- 项目级文件安装器
+- 外置 Agent MCP 工具实现与目录
+- 外置 Agent CLI 入口
+- App 到 `Dna.ExternalAgent` 的宿主接线
 - 文档与类图
 
 当前暂不做：
 
-- 真正的文件安装器迁移
-- 真正的 MCP 工具调用迁移
 - Claude Code 正式 plugin manifest schema
 - 各产品的运行态回流接入
-- 正式的 `resolveRequirement / startTask / endTask` 接口实现
+- 更细粒度的产品差异化交互层（如 Claude Code 正式插件安装、Copilot 更丰富的 agent mode 模板等）
 
 ## 核心接口
 
@@ -184,6 +189,22 @@ Agentic OS 不需要重新实现它们的编排器。
   - 适配器目录
 - `IExternalAgentIntegrationService`
   - 面向上层的统一接入包生成服务
+- `IExternalAgentToolingService`
+  - 面向宿主与 API 的目标状态查询 / 安装入口
+- `IExternalAgentToolCatalogService`
+  - 面向工具目录与接入包生成的 MCP 工具清单服务
+
+## 当前完成度判断
+
+从产品设计和系统完整性角度看，`Dna.ExternalAgent` 现在已经不再只是“适配骨架”，而是具备了支撑后续上层开发的最小完整闭环：
+
+- `App` 只负责宿主启动、HTTP/MCP 路由挂载与 UI 入口。
+- 面向外部 Agent 的 `CLI`、`MCP tools`、`tool catalog`、`安装器`、`适配器目录` 已收口到 `Dna.ExternalAgent`。
+- 外部产品接入所需的统一入口已经固定为：
+  - MCP 工具暴露
+  - 目标状态查询 / 安装 API
+  - 产品级接入包生成
+- 上层系统后续可以在不依赖 `App` 内部实现细节的前提下，继续扩展新的 adapter、插件安装器和产品策略。
 
 ## 当前结论
 

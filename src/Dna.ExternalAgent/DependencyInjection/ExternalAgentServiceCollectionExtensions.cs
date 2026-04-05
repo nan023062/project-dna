@@ -14,7 +14,10 @@ public static class ExternalAgentServiceCollectionExtensions
         services.AddSingleton<IExternalAgentAdapter, CodexExternalAgentAdapter>();
         services.AddSingleton<IExternalAgentAdapter, CopilotExternalAgentAdapter>();
         services.AddSingleton<IExternalAgentAdapterCatalog, ExternalAgentAdapterCatalog>();
+        services.AddSingleton<IExternalAgentToolCatalogService, ExternalAgentToolCatalogService>();
+        services.AddSingleton<ExternalAgentFileManager>();
         services.AddSingleton<IExternalAgentIntegrationService, ExternalAgentIntegrationService>();
+        services.AddSingleton<IExternalAgentToolingService, ExternalAgentToolingService>();
         return services;
     }
 }

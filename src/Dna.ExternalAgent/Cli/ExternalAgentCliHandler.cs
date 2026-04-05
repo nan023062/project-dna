@@ -1,10 +1,9 @@
 using System.Text;
 using System.Text.Json;
-using Dna.App.Services;
 
-namespace Dna.App.Interfaces.Cli;
+namespace Dna.ExternalAgent.Cli;
 
-internal static class AppCliHandler
+public static class ExternalAgentCliHandler
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -13,7 +12,7 @@ internal static class AppCliHandler
         Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         Console.InputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-        var settings = AppCliSettings.Parse(args);
+        var settings = ExternalAgentCliSettings.Parse(args);
         var command = settings.Args.Count > 0 ? settings.Args[0].ToLowerInvariant() : "help";
 
         try
@@ -22,6 +21,8 @@ internal static class AppCliHandler
             {
                 "status" => await RunStatusAsync(settings),
                 "tools" or "mcp" => await RunToolsAsync(settings),
+                "targets" or "adapters" => await RunTargetsAsync(settings),
+                "install" => await RunInstallAsync(settings),
                 "help" or "--help" or "-h" => RunHelp(settings.BaseUrl),
                 _ => RunUnknown(command, settings.BaseUrl)
             };
@@ -39,7 +40,7 @@ internal static class AppCliHandler
         }
     }
 
-    private static async Task<int> RunStatusAsync(AppCliSettings settings)
+    private static async Task<int> RunStatusAsync(ExternalAgentCliSettings settings)
     {
         var runtime = await GetJsonAsync(settings.BaseUrl, "/api/status");
         var app = await GetJsonAsync(settings.BaseUrl, "/api/app/status");
@@ -68,7 +69,7 @@ internal static class AppCliHandler
         return 0;
     }
 
-    private static async Task<int> RunToolsAsync(AppCliSettings settings)
+    private static async Task<int> RunToolsAsync(ExternalAgentCliSettings settings)
     {
         var json = await GetJsonAsync(settings.BaseUrl, "/api/app/mcp/tools");
         WriteHeader("MCP Tools");
@@ -90,17 +91,106 @@ internal static class AppCliHandler
         return 0;
     }
 
+    private static async Task<int> RunTargetsAsync(ExternalAgentCliSettings settings)
+    {
+        var json = await GetJsonAsync(settings.BaseUrl, "/api/app/tooling/list");
+        WriteHeader("External Agent Targets");
+
+        if (!json.TryGetProperty("targets", out var targets) || targets.ValueKind != JsonValueKind.Array)
+        {
+            Console.WriteLine("  No targets returned.");
+            return 0;
+        }
+
+        foreach (var target in targets.EnumerateArray())
+        {
+            var productId = GetString(target, "productId", "-");
+            var displayName = GetString(target, "displayName", productId);
+            var installed = target.TryGetProperty("installed", out var installedElement) &&
+                            installedElement.ValueKind == JsonValueKind.True;
+            var installMode = GetString(target, "installMode", "-");
+            Console.WriteLine($"  - {displayName} ({productId}) [{installMode}] {(installed ? "installed" : "not installed")}");
+        }
+
+        return 0;
+    }
+
+    private static async Task<int> RunInstallAsync(ExternalAgentCliSettings settings)
+    {
+        if (settings.Args.Count < 2)
+        {
+            WriteError("Missing install target.");
+            Console.WriteLine("  Run `agentic-os cli help` to see install usage.");
+            return 1;
+        }
+
+        var target = settings.Args[1];
+        string? workspaceRoot = null;
+        string? serverName = null;
+        var replaceExisting = true;
+
+        for (var i = 2; i < settings.Args.Count; i++)
+        {
+            if (IsArg(settings.Args[i], "--workspace") && i + 1 < settings.Args.Count)
+            {
+                workspaceRoot = settings.Args[++i];
+                continue;
+            }
+
+            if (IsArg(settings.Args[i], "--server-name") && i + 1 < settings.Args.Count)
+            {
+                serverName = settings.Args[++i];
+                continue;
+            }
+
+            if (IsArg(settings.Args[i], "--replace-existing") && i + 1 < settings.Args.Count)
+            {
+                replaceExisting = bool.TryParse(settings.Args[++i], out var parsed) ? parsed : replaceExisting;
+            }
+        }
+
+        var result = await PostJsonAsync(settings.BaseUrl, "/api/app/tooling/install", new
+        {
+            target,
+            workspaceRoot,
+            serverName,
+            replaceExisting
+        });
+
+        WriteHeader("Install Report");
+        Console.WriteLine($"  Target:           {target}");
+        Console.WriteLine($"  Workspace root:   {GetString(result, "workspaceRoot", "-")}");
+        Console.WriteLine($"  MCP endpoint:     {GetString(result, "mcpEndpoint", $"{settings.BaseUrl}/mcp")}");
+        Console.WriteLine($"  Replace existing: {replaceExisting}");
+
+        if (result.TryGetProperty("reports", out var reports) && reports.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var report in reports.EnumerateArray())
+            {
+                var productId = GetString(report, "productId", "-");
+                Console.WriteLine($"  - {productId}: written={CountArray(report, "writtenFiles")}, skipped={CountArray(report, "skippedFiles")}, warnings={CountArray(report, "warnings")}");
+            }
+        }
+
+        return 0;
+    }
+
     private static int RunHelp(string baseUrl)
     {
         Console.WriteLine();
-        Console.WriteLine("Agentic OS App CLI");
+        Console.WriteLine("Agentic OS External Agent CLI");
         Console.WriteLine();
-        Console.WriteLine($"Usage: agentic-os cli [--url {AppRuntimeConstants.ApiBaseUrl}] <command> [args...]");
+        Console.WriteLine($"Usage: agentic-os cli [--url {ExternalAgentRuntimeDefaults.ApiBaseUrl}] <command> [args...]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  status            Show runtime, project, and storage status");
-        Console.WriteLine("  tools             Show MCP tool list");
-        Console.WriteLine("  help              Show help");
+        Console.WriteLine("  status                              Show runtime, project, and storage status");
+        Console.WriteLine("  tools                               Show MCP tool list");
+        Console.WriteLine("  targets                             Show external agent targets and install state");
+        Console.WriteLine("  install <target> [--workspace DIR]  Install project-level external agent package");
+        Console.WriteLine("  help                                Show help");
+        Console.WriteLine();
+        Console.WriteLine("Install targets:");
+        Console.WriteLine("  all, cursor, codex, claude-code, copilot");
         Console.WriteLine();
         Console.WriteLine($"Default URL: {baseUrl}");
         Console.WriteLine("Environment: DNA_CLIENT_URL or DNA_URL");
@@ -174,32 +264,14 @@ internal static class AppCliHandler
         return int.TryParse(value.ToString(), out number) ? number : 0;
     }
 
-    private static void PrintArray(string label, JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Array)
-            return;
+    private static int CountArray(JsonElement element, string propertyName)
+        => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Array
+            ? value.GetArrayLength()
+            : 0;
 
-        var items = value.EnumerateArray()
-            .Select(item => item.ValueKind == JsonValueKind.String ? item.GetString() : item.ToString())
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .ToList();
-
-        if (items.Count == 0)
-            return;
-
-        Console.WriteLine($"  {label}:");
-        foreach (var item in items)
-            Console.WriteLine($"    - {item}");
-    }
-
-    private static List<string> SplitModules(IEnumerable<string> args)
-    {
-        return args
-            .SelectMany(arg => arg.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
+    private static bool IsArg(string? value, params string[] candidates)
+        => value != null &&
+           Array.Exists(candidates, candidate => string.Equals(value, candidate, StringComparison.OrdinalIgnoreCase));
 
     private static void WriteHeader(string title)
     {
@@ -216,37 +288,44 @@ internal static class AppCliHandler
     }
 }
 
-internal sealed class AppCliSettings
+internal sealed class ExternalAgentCliSettings
 {
-    public string BaseUrl { get; init; } = AppRuntimeConstants.ApiBaseUrl;
+    public string BaseUrl { get; init; } = ExternalAgentRuntimeDefaults.ApiBaseUrl;
     public IReadOnlyList<string> Args { get; init; } = [];
 
-    public static AppCliSettings Parse(string[] args)
+    public static ExternalAgentCliSettings Parse(string[] args)
     {
         var envUrl = Environment.GetEnvironmentVariable("DNA_CLIENT_URL");
         if (string.IsNullOrWhiteSpace(envUrl))
             envUrl = Environment.GetEnvironmentVariable("DNA_URL");
 
         var baseUrl = string.IsNullOrWhiteSpace(envUrl)
-            ? AppRuntimeConstants.ApiBaseUrl
-            : AppBootstrap.NormalizeUrl(envUrl);
+            ? ExternalAgentRuntimeDefaults.ApiBaseUrl
+            : ExternalAgentRuntimeDefaults.NormalizeUrl(envUrl);
 
         var filtered = new List<string>();
         for (var i = 0; i < args.Length; i++)
         {
             if (string.Equals(args[i], "--url", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
-                baseUrl = AppBootstrap.NormalizeUrl(args[++i]);
+                baseUrl = ExternalAgentRuntimeDefaults.NormalizeUrl(args[++i]);
                 continue;
             }
 
             filtered.Add(args[i]);
         }
 
-        return new AppCliSettings
+        return new ExternalAgentCliSettings
         {
             BaseUrl = baseUrl,
             Args = filtered
         };
     }
+}
+
+internal static class ExternalAgentRuntimeDefaults
+{
+    public const string ApiBaseUrl = "http://127.0.0.1:5052";
+
+    public static string NormalizeUrl(string raw) => raw.Trim().TrimEnd('/');
 }

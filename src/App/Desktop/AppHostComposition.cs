@@ -5,6 +5,7 @@ using Dna.App.Services.Tooling;
 using Dna.Agent.Contracts;
 using Dna.Agent.DependencyInjection;
 using Dna.Core.Config;
+using Dna.ExternalAgent;
 using Dna.ExternalAgent.DependencyInjection;
 using Dna.Knowledge;
 using Dna.Workbench.DependencyInjection;
@@ -47,13 +48,12 @@ internal static class AppHostComposition
             app.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddAppToolingServices();
         services.AddSingleton<AppFolderPickerService>();
 
         services.AddMcpServer(opts =>
         {
             opts.ServerInfo = new() { Name = "agentic-os-app", Version = "1.0.0" };
-        }).WithHttpTransport().WithToolsFromAssembly();
+        }).WithHttpTransport().WithToolsFromAssembly(typeof(AssemblyMarker).Assembly);
     }
 
     public static void ConfigureWebApp(WebApplication web)

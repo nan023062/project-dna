@@ -1,7 +1,7 @@
 using Avalonia;
 using Dna.App.Desktop;
-using Dna.App.Interfaces.Cli;
 using Dna.Core.Runtime;
+using Dna.ExternalAgent.Cli;
 
 return await ProgramEntry.RunAsync(args);
 
@@ -12,7 +12,7 @@ internal static class ProgramEntry
     {
         var launch = AppLaunchModeParser.Parse(args);
         if (launch.Kind == AppLaunchModeKind.Cli)
-            return AppCliHandler.RunAsync(launch.Args);
+            return ExternalAgentCliHandler.RunAsync(launch.Args);
 
         DesktopConsoleWindow.SuppressIfStandalone();
         return Task.FromResult(RunDesktop(launch.Args));
